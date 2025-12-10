@@ -1,946 +1,735 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Jonathan Valencia | Creator Growth & Live Commerce</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta
-    name="description"
-    content="Creator growth and live commerce operator helping marketplaces and brands scale livestream revenue across TikTok Shop, Whatnot, and eBay Live."
-  />
-  <style>
-    :root {
-      --bg: #05060a;
-      --bg-alt: #0c0f16;
-      --card: #101320;
-      --accent: #f97316;
-      --accent-soft: rgba(249, 115, 22, 0.1);
-      --text-main: #f9fafb;
-      --text-muted: #9ca3af;
-      --border-subtle: #1f2933;
-      --pill: #111827;
-      --radius-lg: 18px;
-      --radius-xl: 24px;
-      --shadow-soft: 0 18px 45px rgba(0, 0, 0, 0.6);
-      --shadow-subtle: 0 10px 30px rgba(0, 0, 0, 0.4);
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Jonathan Valencia – Creator Growth & Live Commerce Operator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #0c0c0c;
+    --muted: #666666;
+    --border: #e5e5e5;
+    --accent: #333333;
+    --card: #ffffff;
+    --shadow: 0 10px 25px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    scroll-behavior: smooth;
+  }
+  a { color: inherit; }
+  img { max-width: 100%; height: auto; }
+
+  nav {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    z-index: 20;
+  }
+  .nav-inner {
+    max-width: 1100px;
+    margin: auto;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .nav-left {
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .nav-links {
+    display: flex;
+    gap: 18px;
+    font-size: 14px;
+  }
+  .nav-links a {
+    text-decoration: none;
+    color: var(--text);
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+  .nav-links a:hover { opacity: 1; }
+
+  header.hero {
+    padding: 90px 20px 70px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-inner {
+    max-width: 1100px;
+    margin: auto;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 40px;
+    align-items: center;
+  }
+  .hero h1 { font-size: 44px; font-weight: 700; margin-bottom: 10px; }
+  .hero-sub { font-size: 17px; color: var(--muted); margin-bottom: 14px; }
+  .hero-tags {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .hero-buttons {
+    margin-top: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    padding: 12px 22px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .btn-secondary {
+    background: #fff;
+    color: var(--accent);
+    padding: 12px 22px;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .hero-side {
+    border-left: 1px solid var(--border);
+    padding-left: 24px;
+  }
+  .hero-side h3 { font-size: 18px; margin-top: 0; margin-bottom: 10px; }
+  .hero-side p { font-size: 14px; color: var(--muted); margin: 4px 0; }
+
+  /* SECTION LAYOUT + DIVIDERS */
+  section {
+    padding: 80px 20px;
+    border-top: 1px solid var(--border);
+  }
+  section:first-of-type {
+    border-top: none;
+  }
+
+  h2 { text-align: center; font-size: 30px; margin-bottom: 6px; }
+  .section-subtitle {
+    text-align: center;
+    color: var(--muted);
+    margin-bottom: 35px;
+    font-size: 15px;
+  }
+
+  .metrics-grid {
+    max-width: 1100px;
+    margin: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 22px;
+  }
+  .metric-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 26px;
+    text-align: center;
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    transition: 0.25s ease;
+  }
+  .metric-box:hover { transform: translateY(-3px); }
+  .metric-number { font-size: 32px; font-weight: 700; margin-bottom: 4px; }
+  .metric-label { font-size: 14px; color: var(--muted); }
+
+  .services-grid {
+    max-width: 1100px;
+    margin: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 22px;
+  }
+  .service-card {
+    background: var(--card);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 24px 22px;
+  }
+  .service-title { font-weight: 600; margin-bottom: 6px; }
+  .service-tagline { font-size: 14px; color: var(--muted); margin-bottom: 10px; }
+  .service-list { margin: 10px 0 10px 16px; font-size: 14px; color: var(--muted); }
+  .service-footnote {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-top: 8px;
+  }
+
+  .case-study {
+    max-width: 1000px;
+    margin: 30px auto;
+    background: var(--card);
+    padding: 26px 24px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .case-study h3 { font-size: 20px; margin-bottom: 6px; }
+  .case-body {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+  .case-list { margin-left: 18px; color: var(--muted); font-size: 14px; }
+  .screenshots { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: flex-start; }
+  .screenshots img {
+    width: 250px;
+    border-radius: 12px;
+    margin: 8px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+
+  .revenue-wrapper {
+    max-width: 700px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 30px;
+    align-items: center;
+  }
+  .revenue-chart {
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 22px 20px;
+    background: #fff;
+  }
+  .revenue-stack { display: flex; flex-direction: column; gap: 8px; }
+  .rev-block {
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--border);
+  }
+  .rev-block.website { background: #f5f5f5; }
+  .rev-block.tiktok { background: #fafafa; }
+  .rev-block.off { background: #ffffff; }
+  .rev-label { font-weight: 600; }
+  .rev-bar {
+    flex: 1;
+    height: 4px;
+    margin: 0 10px;
+    border-radius: 999px;
+    background: #ddd;
+    position: relative;
+    overflow: hidden;
+  }
+  .rev-bar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+    background: var(--accent);
+  }
+  .revenue-text { font-size: 14px; color: var(--muted); }
+
+  .testimonials-grid {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 22px;
+  }
+  .testimonial-card {
+    background: #111;
+    color: #f8f8f8;
+    border-radius: 16px;
+    padding: 20px 18px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .testimonial-quote { font-size: 14px; line-height: 1.7; }
+  .testimonial-name {
+    margin-top: 16px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    opacity: 0.8;
+  }
+  .testimonial-card::before {
+    content: "“";
+    position: absolute;
+    font-size: 54px;
+    top: -10px;
+    left: 12px;
+    opacity: 0.15;
+  }
+
+  #contact p { text-align: center; font-size: 15px; color: var(--muted); }
+
+  footer {
+    text-align: center;
+    padding: 40px 20px 30px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  #lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 999;
+    display: none;
+    justify-content: center;
+    align-items: center;
+  }
+  #lightbox img {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 12px;
+  }
+
+  /* For Marketplaces & Hiring Teams block */
+  .marketplaces-box {
+    max-width: 800px;
+    margin: 0 auto;
+    background: var(--card);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 26px 24px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .marketplaces-box ul {
+    margin-left: 18px;
+  }
+
+  /* --------- RESPONSIVE TWEAKS --------- */
+
+  @media (max-width: 900px) {
+    .hero-inner { 
+      grid-template-columns: 1fr; 
+      text-align: center; 
+    }
+    .hero-side {
+      border-left: none;
+      border-top: 1px solid var(--border);
+      padding-left: 0;
+      padding-top: 24px;
+      text-align: left;
+    }
+    .hero-buttons { justify-content: center; }
+  }
+
+  @media (max-width: 800px) {
+    .revenue-wrapper { grid-template-columns: 1fr; gap: 24px; }
+  }
+
+  @media (max-width: 600px) {
+    .nav-inner { padding: 10px 14px; }
+    .nav-left { font-size: 14px; }
+    .nav-links {
+      gap: 10px;
+      font-size: 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    header.hero {
+      padding: 70px 16px 50px;
+    }
+    .hero h1 { font-size: 32px; }
+    .hero-sub { font-size: 15px; }
+
+    section { padding: 60px 16px; }
+    h2 { font-size: 24px; }
+    .section-subtitle { font-size: 14px; }
+
+    .metric-box,
+    .service-card,
+    .case-study {
+      padding: 20px 18px;
     }
 
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #0b1120, #020617 48%, #000 100%);
-      color: var(--text-main);
-      line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    .page {
-      max-width: 1040px;
-      margin: 0 auto;
-      padding: 32px 20px 60px;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 32px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-mark {
-      width: 40px;
-      height: 40px;
-      border-radius: 999px;
-      background: radial-gradient(circle at 30% 20%, #f97316, #c2410c 45%, #020617);
-      display: flex;
-      align-items: center;
+    .screenshots {
       justify-content: center;
-      color: #fff;
-      font-weight: 700;
-      box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.5),
-        0 16px 35px rgba(15, 23, 42, 0.9);
-      font-size: 18px;
     }
-
-    .brand-text h1 {
-      font-size: 17px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .brand-text p {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    nav {
-      display: flex;
-      gap: 14px;
-      font-size: 13px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    nav a {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(31, 41, 55, 0.7);
-      color: var(--text-muted);
-      transition: all 0.18s ease;
-      white-space: nowrap;
-    }
-
-    nav a:hover {
-      color: var(--text-main);
-      border-color: rgba(249, 115, 22, 0.7);
-      box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.4);
-    }
-
-    main {
-      display: flex;
-      flex-direction: column;
-      gap: 32px;
-    }
-
-    /* Hero */
-
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr);
-      gap: 28px;
-      align-items: center;
-    }
-
-    @media (max-width: 800px) {
-      .hero {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .hero-left {
-      padding: 22px 22px 20px;
-      border-radius: var(--radius-xl);
-      background: radial-gradient(circle at top left, #111827, #020617 68%);
-      box-shadow: var(--shadow-soft);
-      border: 1px solid rgba(148, 163, 184, 0.17);
-    }
-
-    .hero-kicker {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(55, 65, 81, 0.9);
-      color: var(--text-muted);
-      margin-bottom: 12px;
-    }
-
-    .hero-kicker-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: radial-gradient(circle at 30% 20%, #22c55e, #15803d);
-      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.5),
-        0 0 16px rgba(34, 197, 94, 0.65);
-    }
-
-    .hero-title {
-      font-size: 28px;
-      line-height: 1.25;
-      margin-bottom: 10px;
-    }
-
-    .hero-subtitle {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 18px;
-      max-width: 620px;
-    }
-
-    .hero-subtitle strong {
-      color: #e5e7eb;
-      font-weight: 600;
-    }
-
-    .hero-metrics {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-
-    .hero-pill {
-      padding: 5px 10px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(55, 65, 81, 0.9);
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .hero-pill span {
-      color: #e5e7eb;
-      font-weight: 600;
-    }
-
-    .hero-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .btn-primary {
-      padding: 8px 14px;
-      border-radius: 999px;
-      border: none;
-      background: linear-gradient(135deg, #f97316, #ea580c);
-      color: #0b1120;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 15px 35px rgba(249, 115, 22, 0.6);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      text-decoration: none;
-    }
-
-    .btn-primary:hover {
-      filter: brightness(1.05);
-      transform: translateY(-0.5px);
-    }
-
-    .btn-ghost {
-      padding: 8px 12px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.6);
-      background: rgba(15, 23, 42, 0.9);
-      color: var(--text-main);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      text-decoration: none;
-    }
-
-    .btn-ghost:hover {
-      border-color: rgba(249, 115, 22, 0.7);
-    }
-
-    .hero-footnote {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .hero-right {
-      padding: 18px 18px 16px;
-      border-radius: var(--radius-xl);
-      background: radial-gradient(circle at top right, #111827, #020617 70%);
-      box-shadow: var(--shadow-subtle);
-      border: 1px solid rgba(148, 163, 184, 0.15);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .hero-right h2 {
-      font-size: 14px;
-      margin-bottom: 2px;
-    }
-
-    .hero-right p {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .specialties-list {
-      margin-top: 6px;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
-    }
-
-    @media (max-width: 640px) {
-      .specialties-list {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .specialty-pill {
-      padding: 6px 9px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(31, 41, 55, 0.9);
-      font-size: 11px;
-      color: var(--text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* Section styles */
-
-    section {
-      border-radius: var(--radius-xl);
-      background: rgba(5, 6, 10, 0.8);
-      border: 1px solid rgba(31, 41, 55, 0.9);
-      padding: 20px 18px 18px;
-      box-shadow: var(--shadow-subtle);
-    }
-
-    section + section {
-      margin-top: 6px;
-    }
-
-    .section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .section-title {
-      font-size: 15px;
-      font-weight: 600;
-    }
-
-    .section-subtitle {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* Metrics */
-
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    @media (max-width: 900px) {
-      .metrics-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 520px) {
-      .metrics-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .metric-card {
-      padding: 10px 10px 9px;
-      border-radius: var(--radius-lg);
-      background: radial-gradient(circle at top, #020617, #020617 50%, #020617);
-      border: 1px solid rgba(31, 41, 55, 0.9);
-    }
-
-    .metric-value {
-      font-size: 16px;
-      font-weight: 650;
-      margin-bottom: 4px;
-    }
-
-    .metric-label {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    /* Services / Work With Me */
-
-    .services-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    @media (max-width: 960px) {
-      .services-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 640px) {
-      .services-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .service-card {
-      padding: 12px 11px 10px;
-      border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, #020617, #020617);
-      border: 1px solid rgba(31, 41, 55, 0.9);
-    }
-
-    .service-title {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 3px;
-    }
-
-    .service-ideal {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-    }
-
-    .service-list {
-      list-style: none;
-      font-size: 11px;
-      color: var(--text-muted);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .service-list li::before {
-      content: "• ";
-      color: var(--accent);
-    }
-
-    /* Portfolio */
-
-    .portfolio-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    @media (max-width: 900px) {
-      .portfolio-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .case-card {
-      padding: 11px 11px 9px;
-      border-radius: var(--radius-lg);
-      background: radial-gradient(circle at top left, #020617, #020617 65%);
-      border: 1px solid rgba(31, 41, 55, 0.9);
-    }
-
-    .case-tag {
-      display: inline-flex;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-muted);
-      margin-bottom: 5px;
-    }
-
-    .case-title {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 5px;
-    }
-
-    .case-text {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 7px;
-    }
-
-    .case-list {
-      list-style: none;
-      font-size: 11px;
-      color: var(--text-muted);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .case-list li::before {
-      content: "• ";
-      color: var(--accent);
-    }
-
-    /* For marketplaces / hiring teams */
-
-    .two-col {
-      display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr);
-      gap: 12px;
-    }
-
-    @media (max-width: 840px) {
-      .two-col {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .bullet-list {
-      list-style: none;
-      font-size: 11px;
-      color: var(--text-muted);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .bullet-list li::before {
-      content: "• ";
-      color: var(--accent);
-    }
-
-    /* Testimonials */
-
-    .testimonials-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    @media (max-width: 980px) {
-      .testimonials-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 640px) {
-      .testimonials-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .testimonial-card {
-      padding: 11px 11px 10px;
-      border-radius: var(--radius-lg);
-      background: #020617;
-      border: 1px solid rgba(31, 41, 55, 0.9);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .testimonial-quote {
-      margin-bottom: 6px;
-    }
-
-    .testimonial-name {
-      font-size: 11px;
-      color: #e5e7eb;
-      font-weight: 500;
-    }
-
-    .testimonial-role {
-      font-size: 10px;
-      color: var(--text-muted);
-    }
-
-    /* Contact */
-
-    .contact-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .contact-info {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .contact-info a {
-      color: #e5e7eb;
-    }
-
-    .footer-note {
-      margin-top: 6px;
-      font-size: 10px;
-      color: var(--text-muted);
-    }
-  </style>
+    .screenshots img {
+      width: 100%;
+      max-width: 340px;
+      margin: 8px auto;
+      display: block;
+    }
+  }
+</style>
 </head>
 <body>
-  <div class="page">
-    <header>
-      <div class="brand">
-        <div class="brand-mark">JV</div>
-        <div class="brand-text">
-          <h1>Jonathan Valencia</h1>
-          <p>Creator growth and live commerce</p>
+<nav>
+  <div class="nav-inner">
+    <div class="nav-left">JV</div>
+    <div class="nav-links">
+      <a href="#metrics">Metrics</a>
+      <a href="#services">Work With Me</a>
+      <a href="#cases">Portfolio</a>
+      <a href="#testimonials">Testimonials</a>
+      <a href="#contact">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="about">
+  <div class="hero-inner">
+    <div>
+      <div class="hero-tags">Creator Growth • Live Commerce • Marketplaces</div>
+      <h1>Creator Growth &amp; Live Commerce Operator for Marketplaces &amp; Brands</h1>
+      <p class="hero-sub">
+        I help creators, sellers, and marketplaces like Whatnot scale livestream revenue through
+        data-driven show strategy, seller coaching, and social media growth.
+      </p>
+      <p class="hero-sub">
+        Over the last three years, I’ve supported <strong>$10M+ in multi-channel revenue</strong>, built
+        <strong>150K+ followers</strong> and <strong>3M+ views</strong>, and helped run hundreds of livestreams
+        across TikTok Shop, Whatnot, and eBay Live.
+      </p>
+      <div class="hero-buttons">
+        <a href="#cases"><button class="btn-primary">View Case Studies</button></a>
+        <a href="#services"><button class="btn-secondary">Work With Me</button></a>
+        <a href="files/Jonathan_Valencia_Resume.pdf" target="_blank" rel="noopener">
+          <button class="btn-secondary">Download Resume (PDF)</button>
+        </a>
+      </div>
+    </div>
+    <div class="hero-side">
+      <h3>What I Specialize In</h3>
+      <p>• Creator growth &amp; social optimization</p>
+      <p>• Livestream performance &amp; break structure</p>
+      <p>• TikTok Shop product card optimization</p>
+      <p>• Multi-channel sales &amp; retention systems</p>
+      <p>• Onboarding &amp; coaching new sellers</p>
+      <p>• CRM workflows (Salesforce, HubSpot, Airtable)</p>
+    </div>
+  </div>
+</header>
+
+<section id="metrics">
+  <h2>Key Metrics</h2>
+  <p class="section-subtitle">
+    Rounded, recruiter- and marketplace-friendly impact across TikTok Shop, Whatnot, eBay Live, and DTC.
+  </p>
+  <div class="metrics-grid">
+    <div class="metric-box">
+      <div class="metric-number" data-target="10" data-prefix="$" data-suffix="M+">0</div>
+      <div class="metric-label">Total Multi-Channel Revenue Supported</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-number" data-target="3.26" data-prefix="$" data-suffix="M+">0</div>
+      <div class="metric-label">TikTok Shop GMV</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-number" data-target="38" data-prefix="" data-suffix="K+">0</div>
+      <div class="metric-label">TikTok Shop Orders</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-number" data-target="7.9" data-prefix="" data-suffix="K+">0</div>
+      <div class="metric-label">Whatnot Orders</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-number" data-target="150" data-prefix="" data-suffix="K+">0</div>
+      <div class="metric-label">Followers Built Across Accounts</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-number" data-target="3" data-prefix="" data-suffix="M+">0</div>
+      <div class="metric-label">Total Video Views</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-number">$500–$3K</div>
+      <div class="metric-label">Average Livestream Profit Supported</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-number" data-target="285" data-prefix="~$" data-suffix="K">0</div>
+      <div class="metric-label">Peak Monthly Revenue</div>
+    </div>
+  </div>
+</section>
+
+<section id="services">
+  <h2>Work With Me</h2>
+  <p class="section-subtitle">
+    I partner with marketplaces, creator-led brands, and e-commerce teams to turn livestreams into a repeatable
+    revenue channel. I combine hands-on hosting experience with sales ops and CRM workflows to help sellers
+    not just go live—but grow.
+  </p>
+  <div class="services-grid">
+    <div class="service-card">
+      <div class="service-title">Live Commerce Optimization</div>
+      <div class="service-tagline">Turn your livestreams into predictable, high-converting shows.</div>
+      <ul class="service-list">
+        <li>Show structure, pacing, and segment design</li>
+        <li>Break strategy &amp; product sequencing</li>
+        <li>Offer design, urgency, and objection handling in real time</li>
+        <li>Viewer funnel from hook → value → purchase → repeat</li>
+      </ul>
+      <div class="service-footnote">Ideal for: TikTok Shop, Whatnot &amp; eBay Live teams</div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-title">Creator Growth &amp; Social Strategy</div>
+      <div class="service-tagline">Grow your audience and turn views into buyers.</div>
+      <ul class="service-list">
+        <li>TikTok &amp; Whatnot account audits</li>
+        <li>Content pillars and hook templates</li>
+        <li>Retention and watch-time optimization</li>
+        <li>Simple posting calendars aligned with live selling</li>
+      </ul>
+      <div class="service-footnote">Ideal for: creators &amp; creator-led brands</div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-title">Multi-Channel Revenue Systems</div>
+      <div class="service-tagline">Align TikTok Shop, Whatnot, eBay Live, and DTC into a single engine.</div>
+      <ul class="service-list">
+        <li>Ops workflows for packing and fulfillment</li>
+        <li>CRM setup (Salesforce, HubSpot, Airtable) and simple pipelines</li>
+        <li>Basic GMV and repeat-rate reporting</li>
+        <li>Playbooks for scaling roles and handoffs</li>
+      </ul>
+      <div class="service-footnote">Ideal for: scaling e-commerce operations</div>
+    </div>
+  </div>
+</section>
+
+<section id="cases">
+  <h2>Portfolio &amp; Case Studies</h2>
+  <p class="section-subtitle">
+    A snapshot of the systems, growth, and revenue I’ve helped build. Names can be anonymized on request for private brand engagements.
+  </p>
+
+  <div class="case-study">
+    <h3>TikTok Growth &amp; Live Selling (ValenciaBreaks)</h3>
+    <p class="case-body">
+      From new accounts to a combined 150K+ followers and 3M+ views by treating every clip and live as part of a single growth engine.
+    </p>
+    <ul class="case-list">
+      <li>Implemented hooks, storytelling, and retention edits that 2–5x’d average performance</li>
+      <li>Built content calendars aligned with live show cadence and drop schedules</li>
+      <li>Turned organic content into a steady source of new buyers for live shows</li>
+    </ul>
+    <div class="screenshots">
+      <img src="pandabuy_growth_compare_outline.png" alt="TikTok growth comparison 1">
+      <img src="waxnpacks_growth_compare_outline_account2.png" alt="TikTok growth comparison 2">
+      <img src="waxnpacks_growth_compare_outline.png" alt="TikTok growth comparison 3">
+    </div>
+  </div>
+
+  <div class="case-study">
+    <h3>TikTok Shop Seller Optimization</h3>
+    <p class="case-body">
+      Restructured the seller funnel to improve conversion and increase GMV through better on-stream packaging and off-stream systems.
+    </p>
+    <ul class="case-list">
+      <li>Optimized product cards, titles, thumbnails, and pricing</li>
+      <li>Refined break structure and on-stream messaging to improve add-to-cart and purchase</li>
+      <li>Contributed to 38K+ TikTok Shop orders, Gold Star Seller rank, and a strong 4.7★ store rating</li>
+    </ul>
+    <div class="screenshots">
+      <img src="analytics_before.jpg" alt="TikTok Shop analytics before optimization">
+      <img src="analytics_after.jpg" alt="TikTok Shop analytics after optimization">
+    </div>
+  </div>
+
+  <div class="case-study">
+    <h3>Whatnot &amp; Multi-Platform Livestream Performance</h3>
+    <p class="case-body">
+      Supported high-volume shows on Whatnot and eBay Live with strong repeat purchase behavior and tight operations.
+    </p>
+    <ul class="case-list">
+      <li>Managed listings, stream pacing, and live chat communication</li>
+      <li>Trained team members on show setup, closing techniques, and customer care</li>
+      <li>Helped drive 7.9K+ Whatnot orders at a 4.9★ seller rating, plus additional sales on eBay Live</li>
+    </ul>
+    <div class="screenshots">
+      <img src="whatnot-waxnpacks-profile.jpg"
+           alt="WaxNPacks Whatnot shop profile showing 4.9 rating, 938 reviews, 7.8K sold, &lt;1d avg ship time">
+      <img src="ebay-waxnpacks-profile.jpg"
+           alt="Wax N Packs eBay profile showing 100% positive feedback, 2.1K items sold, and Top Rated Seller badge">
+    </div>
+  </div>
+</section>
+
+<section id="revenue">
+  <h2>Revenue &amp; Operations Snapshot</h2>
+  <p class="section-subtitle">High-level view of the multi-channel revenue I helped support.</p>
+  <div class="revenue-wrapper">
+    <div class="revenue-chart">
+      <h3 style="margin-top:0;font-size:18px;margin-bottom:10px;">Multi-Channel Revenue Mix (Approx.)</h3>
+      <div class="revenue-stack">
+        <div class="rev-block website">
+          <span class="rev-label">Website / DTC</span>
+          <div class="rev-bar">
+            <div class="rev-bar-fill" style="width:50%;"></div>
+          </div>
+          <span>~50%</span>
+        </div>
+        <div class="rev-block tiktok">
+          <span class="rev-label">TikTok Shop</span>
+          <div class="rev-bar">
+            <div class="rev-bar-fill" style="width:30%;"></div>
+          </div>
+          <span>~30%</span>
+        </div>
+        <div class="rev-block off">
+          <span class="rev-label">Off-Platform (Payments)</span>
+          <div class="rev-bar">
+            <div class="rev-bar-fill" style="width:20%;"></div>
+          </div>
+          <span>~20%</span>
         </div>
       </div>
-      <nav>
-        <a href="#metrics">Metrics</a>
-        <a href="#services">Work With Me</a>
-        <a href="#portfolio">Portfolio</a>
-        <a href="#testimonials">Testimonials</a>
-        <a href="#contact">Contact</a>
-      </nav>
-    </header>
-
-    <main>
-      <!-- Hero -->
-      <section class="hero" aria-label="Hero">
-        <div class="hero-left">
-          <div class="hero-kicker">
-            <div class="hero-kicker-dot"></div>
-            <span>Creator growth • Live commerce • Marketplaces</span>
-          </div>
-          <h2 class="hero-title">
-            Creator growth and live commerce operator for marketplaces and brands
-          </h2>
-          <p class="hero-subtitle">
-            I help creators, sellers, and marketplaces like Whatnot scale livestream
-            revenue through show strategy, seller coaching, and social media growth.
-            Over the last three years, I have supported
-            <strong>$10M+ in multi channel revenue</strong>, built
-            <strong>150K+ followers</strong> and <strong>3M+ views</strong>, and
-            helped run hundreds of livestreams across TikTok Shop, Whatnot, and
-            eBay Live.
-          </p>
-
-          <div class="hero-metrics">
-            <div class="hero-pill"><span>$10M+</span> revenue supported</div>
-            <div class="hero-pill"><span>150K+</span> followers built</div>
-            <div class="hero-pill"><span>3M+</span> video views</div>
-            <div class="hero-pill"><span>$500–$3K</span> average daily profit supported</div>
-          </div>
-
-          <div class="hero-actions">
-            <a href="#portfolio" class="btn-primary">
-              View case studies
-            </a>
-            <a href="Jonathan-Valencia-Resume.pdf" class="btn-ghost">
-              Download resume (PDF)
-            </a>
-          </div>
-
-          <p class="hero-footnote">
-            Open to roles in live commerce, seller growth, community and creator
-            roles, and e-commerce operations.
-          </p>
-        </div>
-
-        <aside class="hero-right">
-          <h2>What I specialize in</h2>
-          <p>
-            Hands-on livestream operations combined with sales, CRM, and simple
-            systems that help shows scale without losing the community feel.
-          </p>
-          <div class="specialties-list">
-            <div class="specialty-pill">Creator growth and social optimization</div>
-            <div class="specialty-pill">Livestream performance and break structure</div>
-            <div class="specialty-pill">TikTok Shop product card optimization</div>
-            <div class="specialty-pill">Multi channel sales and retention systems</div>
-            <div class="specialty-pill">Onboarding and coaching new sellers</div>
-            <div class="specialty-pill">CRM workflows (Salesforce, HubSpot, Airtable)</div>
-          </div>
-        </aside>
-      </section>
-
-      <!-- Metrics -->
-      <section id="metrics" aria-labelledby="metrics-heading">
-        <div class="section-header">
-          <div class="section-title" id="metrics-heading">Key metrics</div>
-          <div class="section-subtitle">
-            Rounded impact across TikTok Shop, Whatnot, eBay Live, and DTC.
-          </div>
-        </div>
-
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">$10M+</div>
-            <div class="metric-label">Total multi channel revenue supported</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">$3.26M+</div>
-            <div class="metric-label">TikTok Shop gross merchandise value</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">38K+</div>
-            <div class="metric-label">TikTok Shop orders</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">7.90K+</div>
-            <div class="metric-label">Whatnot orders</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">150K+</div>
-            <div class="metric-label">Followers built across accounts</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">3M+</div>
-            <div class="metric-label">Total video views</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">$500–$3K</div>
-            <div class="metric-label">Average daily livestream profit supported</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">~$285K</div>
-            <div class="metric-label">Peak monthly revenue</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Work With Me -->
-      <section id="services" aria-labelledby="services-heading">
-        <div class="section-header">
-          <div class="section-title" id="services-heading">Work with me</div>
-          <div class="section-subtitle">
-            I help turn livestreams into a repeatable revenue channel.
-          </div>
-        </div>
-
-        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
-          I partner with marketplaces, creator led brands, and e-commerce teams to
-          make live selling more predictable. I combine hosting experience with
-          sales operations and simple systems so shows can grow without chaos.
-        </p>
-
-        <div class="services-grid">
-          <div class="service-card">
-            <div class="service-title">Live commerce optimization</div>
-            <div class="service-ideal">Ideal for TikTok Shop, Whatnot, eBay Live teams</div>
-            <ul class="service-list">
-              <li>Show structure, pacing, and segment design</li>
-              <li>Break strategy and product sequencing</li>
-              <li>On stream offer design and objection handling</li>
-              <li>Viewer funnel from hook to purchase and repeat</li>
-            </ul>
-          </div>
-
-          <div class="service-card">
-            <div class="service-title">Creator growth and social strategy</div>
-            <div class="service-ideal">Ideal for creators and creator led brands</div>
-            <ul class="service-list">
-              <li>TikTok and Whatnot account audits</li>
-              <li>Content pillars and hook templates</li>
-              <li>Retention and watch time optimization</li>
-              <li>Posting calendars aligned to live selling</li>
-            </ul>
-          </div>
-
-          <div class="service-card">
-            <div class="service-title">Multi channel revenue systems</div>
-            <div class="service-ideal">Ideal for scaling e-commerce operations</div>
-            <ul class="service-list">
-              <li>Ops workflows for packing and fulfillment</li>
-              <li>CRM setup in Salesforce, HubSpot, and Airtable</li>
-              <li>Basic GMV and repeat rate reporting</li>
-              <li>Playbooks for roles, handoffs, and scaling</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- Portfolio / Case Studies -->
-      <section id="portfolio" aria-labelledby="portfolio-heading">
-        <div class="section-header">
-          <div class="section-title" id="portfolio-heading">Portfolio and case studies</div>
-          <div class="section-subtitle">
-            Names can be anonymized on request for private brand engagements.
-          </div>
-        </div>
-
-        <div class="portfolio-grid">
-          <div class="case-card">
-            <div class="case-tag">TikTok growth and live selling</div>
-            <div class="case-title">ValenciaBreaks accounts and livestreams</div>
-            <p class="case-text">
-              From new accounts to a combined 150K+ followers and 3M+ views by
-              treating every clip and live as part of a single growth engine.
-            </p>
-            <ul class="case-list">
-              <li>Implemented hooks, storytelling, and retention edits that often 2–5x average performance</li>
-              <li>Built content calendars aligned with live show cadence and drop schedules</li>
-              <li>Turned organic content into a steady source of new buyers for live shows</li>
-            </ul>
-          </div>
-
-          <div class="case-card">
-            <div class="case-tag">TikTok Shop seller optimization</div>
-            <div class="case-title">Product cards, packaging, and systems</div>
-            <p class="case-text">
-              Restructured the seller funnel to improve conversion through better
-              on stream packaging and off stream systems.
-            </p>
-            <ul class="case-list">
-              <li>Optimized product cards, titles, thumbnails, and pricing for live selling</li>
-              <li>Refined break structure and messaging to improve add to cart and purchase</li>
-              <li>Contributed to 38K+ TikTok Shop orders, Gold Star Seller rank, and a strong 4.7★ rating</li>
-            </ul>
-          </div>
-
-          <div class="case-card">
-            <div class="case-tag">Whatnot and multi platform</div>
-            <div class="case-title">High volume shows and repeat buyers</div>
-            <p class="case-text">
-              Supported high volume shows on Whatnot and eBay Live with strong
-              repeat purchase behavior and tight operations.
-            </p>
-            <ul class="case-list">
-              <li>Managed listings, stream pacing, and live chat communication</li>
-              <li>Trained team members on show setup, closing techniques, and customer care</li>
-              <li>Helped drive 7.9K+ Whatnot orders at a 4.9★ seller rating, plus eBay Live sales</li>
-            </ul>
-          </div>
-
-          <div class="case-card">
-            <div class="case-tag">Revenue and operations</div>
-            <div class="case-title">Multi channel revenue snapshot</div>
-            <p class="case-text">
-              High level view of the revenue mix I helped support over roughly
-              three years.
-            </p>
-            <ul class="case-list">
-              <li>Website and DTC store: ~50% of total revenue</li>
-              <li>TikTok Shop livestreams: ~30% of total revenue</li>
-              <li>Off platform payment channels: ~20% of total revenue</li>
-              <li>Work covered livestream execution, content strategy, packaging, and basic CRM tracking</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- For Marketplaces & Hiring Teams -->
-      <section aria-labelledby="marketplaces-heading">
-        <div class="section-header">
-          <div class="section-title" id="marketplaces-heading">
-            For marketplaces and hiring teams
-          </div>
-          <div class="section-subtitle">
-            What I bring if you are building or scaling live commerce.
-          </div>
-        </div>
-
-        <div class="two-col">
-          <div>
-            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
-              If you run a live commerce marketplace or a seller growth team, you need
-              operators who can think about both the show and the system. I am
-              comfortable in fast moving environments where coaching, iteration, and
-              metrics matter.
-            </p>
-            <ul class="bullet-list">
-              <li>Hands on experience hosting and running hundreds of livestreams</li>
-              <li>A track record of $10M+ in multi channel revenue supported</li>
-              <li>Ability to acquire, onboard, and coach sellers using simple frameworks</li>
-              <li>Comfortable in Salesforce, HubSpot, Airtable, and spreadsheet based reporting</li>
-            </ul>
-          </div>
-          <div>
-            <ul class="bullet-list">
-              <li>Understand how to translate attention and watch time into sales and repeat buyers</li>
-              <li>Can build light weight systems (content calendars, FAQ flows, sentiment dashboards) without heavy overhead</li>
-              <li>Enjoy working closely with creators and sellers and making feedback loops fast</li>
-              <li>Comfortable collaborating with product, ops, and marketing on experiments and new formats</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- Testimonials -->
-      <section id="testimonials" aria-labelledby="testimonials-heading">
-        <div class="section-header">
-          <div class="section-title" id="testimonials-heading">Testimonials</div>
-          <div class="section-subtitle">
-            How people describe working with me on live commerce and growth.
-          </div>
-        </div>
-
-        <div class="testimonials-grid">
-          <div class="testimonial-card">
-            <div class="testimonial-quote">
-              “Jonathan understands how to translate attention into revenue. He is
-              hands on with streams, content, and operations, which makes him rare in
-              creator commerce.”
-            </div>
-            <div class="testimonial-name">Live commerce partner</div>
-            <div class="testimonial-role">Collectibles</div>
-          </div>
-
-          <div class="testimonial-card">
-            <div class="testimonial-quote">
-              “He does not just run shows, he builds systems. From break strategy to
-              packaging workflows, he made our operation feel organized, repeatable,
-              and ready to scale.”
-            </div>
-            <div class="testimonial-name">E-commerce operator</div>
-            <div class="testimonial-role">Multi channel</div>
-          </div>
-
-          <div class="testimonial-card">
-            <div class="testimonial-quote">
-              “Jonathan has a good instinct for what viewers respond to and how to
-              keep them engaged. His feedback on hooks, pacing, and offers
-              consistently moved the needle.”
-            </div>
-            <div class="testimonial-name">Creator</div>
-            <div class="testimonial-role">TikTok and Whatnot</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Contact -->
-      <section id="contact" aria-labelledby="contact-heading">
-        <div class="section-header">
-          <div class="section-title" id="contact-heading">Contact</div>
-          <div class="section-subtitle">
-            Open to roles and collaborations in live commerce and creator growth.
-          </div>
-        </div>
-
-        <div class="contact-grid">
-          <div class="contact-info">
-            <div>Email: <a href="mailto:valenciabreaksllc@outlook.com">valenciabreaksllc@outlook.com</a></div>
-            <div>
-              LinkedIn:
-              <a href="https://www.linkedin.com/in/valenciajonathan" target="_blank" rel="noreferrer">
-                linkedin.com/in/valenciajonathan
-              </a>
-            </div>
-            <div>
-              Portfolio:
-              <a href="https://valenciabreaksllc.com" target="_blank" rel="noreferrer">
-                valenciabreaksllc.com
-              </a>
-            </div>
-          </div>
-
-          <div>
-            <a href="mailto:valenciabreaksllc@outlook.com" class="btn-primary">
-              Reach out by email
-            </a>
-          </div>
-        </div>
-
-        <p class="footer-note">
-          © 2025 ValenciaBreaks LLC — Designed for recruiters, founders, and hiring teams.
-        </p>
-      </section>
-    </main>
+    </div>
+    <div class="revenue-text">
+      <p>
+        Over roughly three years, I contributed heavily to a multi-channel operation that supported
+        <strong>$10M+ in total revenue</strong> across:
+      </p>
+      <p>• Website / DTC store<br>
+         • TikTok Shop livestreams<br>
+         • Whatnot auctions<br>
+         • Off-platform payment channels</p>
+      <p>
+        My work touched livestream execution, content strategy, customer communication, packaging,
+        and basic CRM tracking—helping keep shows running smoothly while revenue scaled.
+      </p>
+    </div>
   </div>
+</section>
+
+<section id="marketplaces">
+  <h2>For Marketplaces &amp; Hiring Teams</h2>
+  <div class="marketplaces-box">
+    <p>
+      If you’re building or scaling a live commerce marketplace, I can bring:
+    </p>
+    <ul>
+      <li>Hands-on experience hosting and running hundreds of livestreams</li>
+      <li>A track record of $10M+ in multi-channel revenue supported</li>
+      <li>The ability to acquire, onboard, and coach sellers using proven frameworks</li>
+      <li>CRM-driven visibility into which sellers, shows, and segments are working—and why</li>
+    </ul>
+  </div>
+</section>
+
+<section id="testimonials">
+  <h2>Testimonials</h2>
+  <p class="section-subtitle">How people describe working with me on live commerce and growth.</p>
+  <div class="testimonials-grid">
+    <div class="testimonial-card">
+      <div class="testimonial-quote">
+        “Jonathan understands how to translate attention into revenue. He’s hands-on with streams,
+        content, and operations, which makes him rare in creator commerce.”
+      </div>
+      <div class="testimonial-name">
+        Live Commerce Partner • Collectibles
+      </div>
+    </div>
+    <div class="testimonial-card">
+      <div class="testimonial-quote">
+        “He doesn’t just run shows—he builds systems. From break strategy to packaging workflows,
+        he made our operation feel organized, repeatable, and scalable.”
+      </div>
+      <div class="testimonial-name">
+        E-Commerce Operator • Multi-Channel
+      </div>
+    </div>
+    <div class="testimonial-card">
+      <div class="testimonial-quote">
+        “Jonathan has a great instinct for what viewers respond to and how to keep them engaged.
+        His feedback on hooks, pacing, and offers consistently moved the needle.”
+      </div>
+      <div class="testimonial-name">
+        Creator • TikTok &amp; Whatnot
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contact">
+  <h2>Contact</h2>
+  <p class="section-subtitle">
+    Open to roles in live commerce, seller growth, inside sales / account executive roles at marketplaces, and e-commerce operations.
+  </p>
+  <p>Email: <a href="mailto:valenciabreaksllc@outlook.com">valenciabreaksllc@outlook.com</a></p>
+  <p>LinkedIn: <a href="https://linkedin.com/in/valenciajonathan" target="_blank">linkedin.com/in/valenciajonathan</a></p>
+</section>
+
+<footer>
+  © 2025 ValenciaBreaks LLC — Designed for recruiters, founders, and hiring teams.
+</footer>
+
+<div id="lightbox"><img src=""></div>
+
+<script>
+  const lightbox = document.getElementById("lightbox");
+  const lightboxImg = lightbox.querySelector("img");
+  document.querySelectorAll(".screenshots img").forEach(img => {
+    img.addEventListener("click", () => {
+      lightboxImg.src = img.src;
+      lightbox.style.display = "flex";
+    });
+  });
+  lightbox.addEventListener("click", () => {
+    lightbox.style.display = "none";
+  });
+
+  const metricNumbers = document.querySelectorAll(".metric-number[data-target]");
+  let metricsAnimated = false;
+  function animateMetrics() {
+    if (metricsAnimated) return;
+    const metricsSection = document.getElementById("metrics");
+    const rect = metricsSection.getBoundingClientRect();
+    if (rect.top < window.innerHeight - 100) {
+      metricsAnimated = true;
+      metricNumbers.forEach(el => {
+        const target = parseFloat(el.getAttribute("data-target"));
+        const prefix = el.getAttribute("data-prefix") || "";
+        const suffix = el.getAttribute("data-suffix") || "";
+        const duration = 1200;
+        const startTime = performance.now();
+        function update(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const decimals = (target % 1 === 0) ? 0 : 2;
+          const value = (target * progress).toFixed(decimals);
+          el.textContent = prefix + value + suffix;
+          if (progress < 1) requestAnimationFrame(update);
+        }
+        requestAnimationFrame(update);
+      });
+    }
+  }
+  window.addEventListener("scroll", animateMetrics);
+  window.addEventListener("load", animateMetrics);
+</script>
 </body>
 </html>
