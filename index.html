@@ -120,8 +120,8 @@
   <div class="lock-card">
     <h1>Jonny Ops Sheet</h1>
     <p>Private Inventory / Operations Coordinator page.</p>
-    <input id="passwordInput" type="password" placeholder="Password" onkeydown="if(event.key==='Enter') unlock()">
-    <button class="btn btn-dark" style="width:100%" onclick="unlock()">Unlock</button>
+    <input id="passwordInput" type="password" placeholder="Password" onkeydown="if(event.key==='Enter'){ document.getElementById('unlockButton').click(); }">
+    <button id="unlockButton" class="btn btn-dark" style="width:100%" onclick="const p=document.getElementById('passwordInput').value.trim(); if(p==='opcomics'){ document.getElementById('lockScreen').style.display='none'; sessionStorage.setItem('opsUnlocked','1'); document.getElementById('passwordError').textContent=''; } else { document.getElementById('passwordError').textContent='Wrong password.'; document.getElementById('passwordInput').value=''; document.getElementById('passwordInput').focus(); }">Unlock</button>
     <div id="passwordError" style="color:#9c0006;font-size:13px;font-weight:700;margin-top:10px;"></div>
   </div>
 </div>
