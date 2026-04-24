@@ -31,11 +31,21 @@
   button,input,select,textarea { font-family:inherit; }
 
   .lock-screen {
-    position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;
-    background:#eee; padding:20px;
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#eee;
+    padding:20px;
   }
   .lock-card {
-    width:min(100%,420px); background:#fff; border:1px solid var(--line); padding:34px; box-shadow:0 8px 30px rgba(0,0,0,.08);
+    width:min(100%,420px);
+    background:#fff;
+    border:1px solid var(--line);
+    padding:34px;
+    box-shadow:0 8px 30px rgba(0,0,0,.08);
   }
   .lock-card h1 { margin:0 0 6px; font-size:28px; }
   .lock-card p { margin:0 0 20px; color:var(--muted); font-size:14px; }
@@ -92,7 +102,7 @@
   .bottom-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; min-width:900px; }
   .panel { border:1px solid var(--line); background:#fff; }
   .panel h2 { margin:0; background:#333; color:#fff; padding:9px; text-align:center; font-size:14px; }
-  .panel-body { padding:10px; }
+  .panel-body { padding:10px; overflow-x:auto; }
   textarea { width:100%; min-height:210px; border:1px solid #bbb; padding:10px; resize:vertical; font-size:13px; line-height:1.5; }
 
   .log-table { min-width:900px; }
@@ -222,21 +232,60 @@ const sections = [
 ];
 
 function unlock(){
-  const v = document.getElementById('passwordInput').value;
-  if(v === PASSWORD){ sessionStorage.setItem('opsUnlocked','1'); document.getElementById('lockScreen').classList.add('hidden'); }
-  else { document.getElementById('passwordError').textContent = 'Wrong password.'; document.getElementById('passwordInput').value=''; }
+  const v = document.getElementById('passwordInput').value.trim();
+  if(v === PASSWORD){
+    sessionStorage.setItem('opsUnlocked','1');
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('passwordError').textContent = '';
+  } else {
+    document.getElementById('passwordError').textContent = 'Wrong password.';
+    document.getElementById('passwordInput').value='';
+    document.getElementById('passwordInput').focus();
+  }
 }
-function lock(){ sessionStorage.removeItem('opsUnlocked'); document.getElementById('lockScreen').classList.remove('hidden'); }
-window.addEventListener('load',()=>{ if(sessionStorage.getItem('opsUnlocked')==='1') document.getElementById('lockScreen').classList.add('hidden'); });
+
+function lock(){
+  sessionStorage.removeItem('opsUnlocked');
+  document.getElementById('lockScreen').style.display = 'flex';
+  setTimeout(() => document.getElementById('passwordInput').focus(), 50);
+}
+
+window.addEventListener('load',()=>{
+  if(sessionStorage.getItem('opsUnlocked')==='1') {
+    document.getElementById('lockScreen').style.display = 'none';
+  } else {
+    document.getElementById('lockScreen').style.display = 'flex';
+    document.getElementById('passwordInput').focus();
+  }
+});
+
+function clone(obj){
+  return JSON.parse(JSON.stringify(obj));
+}
 
 function freshData(){
   return {
-    weekOf:"", weekStatus:"In Progress", biggestFix:"", mainIssue:"", processImprovement:"",
-    days: Object.fromEntries(days.map(day=>[day,{ date:"", currentTask:"", pending:"0", sections: structuredClone(sections)}])),
-    replacements: [], issues: []
+    weekOf:"",
+    weekStatus:"In Progress",
+    biggestFix:"",
+    mainIssue:"",
+    processImprovement:"",
+    days: Object.fromEntries(days.map(day=>[day,{ date:"", pending:"0", sections: clone(sections)}])),
+    replacements: [],
+    issues: []
   };
 }
-let data = JSON.parse(localStorage.getItem('simpleOpsSheet') || 'null') || freshData();
+
+let data = loadData();
+
+function loadData(){
+  try {
+    const saved = localStorage.getItem('simpleOpsSheet');
+    return saved ? JSON.parse(saved) : freshData();
+  } catch(e) {
+    return freshData();
+  }
+}
 
 function save(){
   data.weekOf = document.getElementById('weekOf')?.value || data.weekOf;
@@ -256,6 +305,7 @@ function statusClass(s){
   if(s==='Follow Up') return 'follow';
   return 'notstarted';
 }
+
 function acctClass(a){ return 'account-' + String(a||'all').toLowerCase(); }
 function esc(s){ return String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
 function id(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
@@ -283,6 +333,7 @@ function renderWeek(){
     </div>`;
   }).join('');
 }
+
 function rowHtml(day,si,ri,r){
   return `<tr>
     <td><input value="${esc(r[0])}" onchange="updateDay('${day}',${si},${ri},0,this.value)"></td>
@@ -293,13 +344,41 @@ function rowHtml(day,si,ri,r){
     <td class="notes"><input value="${esc(r[5])}" onchange="updateDay('${day}',${si},${ri},5,this.value)"></td>
   </tr>`;
 }
-function updateDay(day,si,ri,ci,val){ data.days[day].sections[si].rows[ri][ci]=val; save(); }
-function addDayRow(day,si){ data.days[day].sections[si].rows.push(['','All','','Not Started','','']); renderWeek(); save(); }
 
-function addReplacement(){ data.replacements.push({id:id(), date:'', account:'VR', order:'', issue:'', root:'Unknown', value:'', status:'Needs Review', notes:''}); renderLogs(); save(); }
-function addIssue(){ data.issues.push({id:id(), date:'', account:'VR', issue:'', action:'', type:'General', status:'Follow Up', notes:''}); renderLogs(); save(); }
-function delLog(type,rowId){ data[type]=data[type].filter(x=>x.id!==rowId); renderLogs(); save(); }
-function updateLog(type,rowId,key,val){ const row=data[type].find(x=>x.id===rowId); if(row) row[key]=val; save(); }
+function updateDay(day,si,ri,ci,val){
+  data.days[day].sections[si].rows[ri][ci]=val;
+  save();
+}
+
+function addDayRow(day,si){
+  data.days[day].sections[si].rows.push(['','All','','Not Started','','']);
+  renderWeek();
+  save();
+}
+
+function addReplacement(){
+  data.replacements.push({id:id(), date:'', account:'VR', order:'', issue:'', root:'Unknown', value:'', status:'Needs Review', notes:''});
+  renderLogs();
+  save();
+}
+
+function addIssue(){
+  data.issues.push({id:id(), date:'', account:'VR', issue:'', action:'', type:'General', status:'Follow Up', notes:''});
+  renderLogs();
+  save();
+}
+
+function delLog(type,rowId){
+  data[type]=data[type].filter(x=>x.id!==rowId);
+  renderLogs();
+  save();
+}
+
+function updateLog(type,rowId,key,val){
+  const row=data[type].find(x=>x.id===rowId);
+  if(row) row[key]=val;
+  save();
+}
 
 function renderLogs(){
   document.getElementById('replacementRows').innerHTML = data.replacements.map(r=>`<tr>
@@ -335,8 +414,18 @@ function renderMetrics(){
     if(r[3]==='Follow Up') follow++;
     if(String(r[0]).toLowerCase().includes('inventory') && r[3] !== 'Completed' && r[3] !== 'Not Started') inv++;
   })));
-  data.issues.forEach(r=>{ if(r.status==='Completed') completed++; if(r.status==='Needs Review') review++; if(r.status==='In Progress') progress++; if(r.status==='Follow Up') follow++; if(r.type==='Inventory') inv++; });
-  data.replacements.forEach(r=>{ if(r.status==='Needs Review') review++; if(r.status==='In Progress') progress++; if(r.status==='Follow Up') follow++; });
+  data.issues.forEach(r=>{
+    if(r.status==='Completed') completed++;
+    if(r.status==='Needs Review') review++;
+    if(r.status==='In Progress') progress++;
+    if(r.status==='Follow Up') follow++;
+    if(r.type==='Inventory') inv++;
+  });
+  data.replacements.forEach(r=>{
+    if(r.status==='Needs Review') review++;
+    if(r.status==='In Progress') progress++;
+    if(r.status==='Follow Up') follow++;
+  });
   document.getElementById('mCompleted').textContent=completed;
   document.getElementById('mReview').textContent=review;
   document.getElementById('mProgress').textContent=progress;
@@ -344,16 +433,25 @@ function renderMetrics(){
   document.getElementById('mReplacements').textContent=data.replacements.length;
   document.getElementById('mInventory').textContent=inv;
 }
+
 function renderRecap(){
-  const done=[]; const open=[];
+  const done=[];
+  const open=[];
+
   days.forEach(day=>data.days[day].sections.forEach(sec=>sec.rows.forEach(r=>{
     if(r[2] || r[0]) {
       const line = `${day} - ${r[0]} / ${r[1]}: ${r[2] || '(no details)'} ${r[5] ? '- '+r[5] : ''}`;
-      if(r[3]==='Completed') done.push(line); else if(r[3] !== 'Not Started') open.push(`${line} [${r[3]}]`);
+      if(r[3]==='Completed') {
+        done.push(line);
+      } else if(r[3] !== 'Not Started') {
+        open.push(`${line} [${r[3]}]`);
+      }
     }
   })));
+
   const reps = data.replacements.map(r=>`${r.account} order ${r.order||'N/A'}: ${r.issue||'replacement'} | ${r.root} | $${r.value||0} | ${r.status}`);
   const issues = data.issues.map(r=>`${r.account}: ${r.issue||'issue'} | action: ${r.action||'pending'} | ${r.status}`);
+
   document.getElementById('recapBox').value = `Weekly / Daily Ops Recap
 
 Week Of: ${data.weekOf || ''}
@@ -384,9 +482,27 @@ Main Issue Going Into Next Week:
 Process Improvement:
 - ${data.processImprovement || ''}`;
 }
-function copyRecap(){ renderRecap(); navigator.clipboard.writeText(document.getElementById('recapBox').value).then(()=>alert('Recap copied.')); }
-function exportBackup(){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})); a.download='jonny-ops-sheet-backup.json'; a.click(); }
-function resetAll(){ if(confirm('Reset everything on this page? Export a backup first if needed.')){ data=freshData(); localStorage.setItem('simpleOpsSheet',JSON.stringify(data)); renderAll(); } }
+
+function copyRecap(){
+  renderRecap();
+  navigator.clipboard.writeText(document.getElementById('recapBox').value).then(()=>alert('Recap copied.'));
+}
+
+function exportBackup(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download='jonny-ops-sheet-backup.json';
+  a.click();
+}
+
+function resetAll(){
+  if(confirm('Reset everything on this page? Export a backup first if needed.')){
+    data=freshData();
+    localStorage.setItem('simpleOpsSheet',JSON.stringify(data));
+    renderAll();
+  }
+}
+
 function renderWeeklyInputs(){
   document.getElementById('weekOf').value=data.weekOf||'';
   document.getElementById('weekStatus').value=data.weekStatus||'In Progress';
@@ -394,7 +510,15 @@ function renderWeeklyInputs(){
   document.getElementById('mainIssue').value=data.mainIssue||'';
   document.getElementById('processImprovement').value=data.processImprovement||'';
 }
-function renderAll(){ renderWeek(); renderLogs(); renderWeeklyInputs(); renderMetrics(); renderRecap(); }
+
+function renderAll(){
+  renderWeek();
+  renderLogs();
+  renderWeeklyInputs();
+  renderMetrics();
+  renderRecap();
+}
+
 renderAll();
 </script>
 </body>
