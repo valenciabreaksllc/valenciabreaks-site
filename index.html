@@ -3,1308 +3,399 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Jonny's Ops Command Center</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<title>Jonny Ops Sheet</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f7fb;
-    --panel: #ffffff;
-    --panel-soft: #f9fafb;
-    --text: #101828;
-    --muted: #667085;
-    --border: #e4e7ec;
-    --dark: #111827;
-    --dark-2: #1f2937;
-    --accent: #2f2f2f;
-    --green: #067647;
-    --green-bg: #ecfdf3;
-    --yellow: #b54708;
-    --yellow-bg: #fffaeb;
-    --red: #b42318;
-    --red-bg: #fef3f2;
-    --blue: #175cd3;
-    --blue-bg: #eff8ff;
-    --purple: #6941c6;
-    --purple-bg: #f4f3ff;
-    --shadow: 0 18px 40px rgba(16, 24, 40, 0.08);
-    --radius: 18px;
+    --bg:#f3f3f3;
+    --page:#fff;
+    --text:#111;
+    --muted:#666;
+    --line:#d9d9d9;
+    --dark:#333;
+    --soft:#f8f8f8;
+    --green:#c6efce;
+    --green-text:#006100;
+    --yellow:#fff2cc;
+    --yellow-text:#7f6000;
+    --red:#ffc7ce;
+    --red-text:#9c0006;
+    --blue:#cfe2f3;
+    --blue-text:#073763;
+    --orange:#fce4d6;
+    --orange-text:#c65911;
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); }
+  button,input,select,textarea { font-family:inherit; }
 
-  body {
-    margin: 0;
-    font-family: 'Inter', sans-serif;
-    background: var(--bg);
-    color: var(--text);
+  .lock-screen {
+    position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;
+    background:#eee; padding:20px;
   }
-
-  button, input, select, textarea {
-    font-family: inherit;
+  .lock-card {
+    width:min(100%,420px); background:#fff; border:1px solid var(--line); padding:34px; box-shadow:0 8px 30px rgba(0,0,0,.08);
   }
+  .lock-card h1 { margin:0 0 6px; font-size:28px; }
+  .lock-card p { margin:0 0 20px; color:var(--muted); font-size:14px; }
+  .lock-card input { width:100%; padding:14px; border:1px solid #bbb; font-size:15px; margin-bottom:10px; }
+  .hidden { display:none!important; }
 
-  a { color: inherit; }
+  .topbar { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+  .topbar-inner { max-width:1500px; margin:auto; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+  .title { font-weight:800; letter-spacing:.02em; }
+  .subtitle { font-size:12px; color:var(--muted); margin-top:2px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn { border:1px solid #999; background:#fff; padding:9px 13px; cursor:pointer; font-size:13px; font-weight:700; }
+  .btn-dark { background:#111; color:#fff; border-color:#111; }
+  .btn:hover { opacity:.86; }
 
-  nav {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: rgba(255,255,255,0.92);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border);
-  }
+  .wrap { max-width:1500px; margin:0 auto; padding:18px; }
+  .sheet { background:var(--page); border:1px solid var(--line); padding:14px; overflow-x:auto; }
 
-  .nav-inner {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
+  .summary-row { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:14px; min-width:900px; }
+  .summary-box { border:1px solid var(--line); background:#fff; padding:10px; text-align:center; }
+  .summary-label { font-size:11px; font-weight:800; color:#555; text-transform:uppercase; }
+  .summary-value { font-size:26px; font-weight:800; margin-top:4px; }
 
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
+  .week-grid { display:grid; grid-template-columns:repeat(5, minmax(280px,1fr)); gap:14px; min-width:1450px; }
+  .day-card { border:1px solid var(--line); background:#fff; }
+  .day-header { background:var(--dark); color:#fff; text-align:center; padding:9px; font-weight:800; letter-spacing:.04em; }
+  .day-meta { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid var(--line); }
+  .day-meta div { padding:8px; border-right:1px solid var(--line); font-size:12px; }
+  .day-meta div:last-child { border-right:none; }
+  .day-meta strong { display:block; font-size:11px; color:#555; text-transform:uppercase; margin-bottom:4px; }
+  .day-meta input { width:100%; border:1px solid #ccc; padding:6px; font-size:12px; }
 
-  .brand-mark {
-    width: 34px;
-    height: 34px;
-    border-radius: 11px;
-    background: var(--dark);
-    color: #fff;
-    display: grid;
-    place-items: center;
-    font-size: 13px;
-    box-shadow: var(--shadow);
-  }
+  .section-title { background:#444; color:#fff; padding:7px 8px; font-weight:800; text-align:center; font-size:12px; margin-top:10px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th,td { border:1px solid var(--line); padding:6px; vertical-align:middle; }
+  th { background:#eee; font-size:11px; }
+  td input, td select { width:100%; border:0; background:transparent; font-size:12px; padding:3px; outline:none; }
+  td input:focus, td select:focus { background:#fff8dc; outline:1px solid #d6b656; }
+  .tiny { width:48px; text-align:center; }
+  .notes { min-width:95px; }
 
-  .nav-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
+  .status { font-weight:700; border-radius:0; padding:4px; }
+  .status.completed { background:var(--green); color:var(--green-text); }
+  .status.progress { background:var(--orange); color:var(--orange-text); }
+  .status.review { background:var(--red); color:var(--red-text); }
+  .status.follow { background:var(--blue); color:var(--blue-text); }
+  .status.notstarted { background:#eee; color:#555; }
 
-  .btn {
-    border: 1px solid var(--border);
-    background: #fff;
-    color: var(--text);
-    padding: 10px 14px;
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 700;
-    transition: 0.18s ease;
-  }
+  .account-vr { background:#fff2cc!important; color:#7f6000; font-weight:800; text-align:center; }
+  .account-ps { background:#f4cccc!important; color:#990000; font-weight:800; text-align:center; }
+  .account-ck { background:#cfe2f3!important; color:#073763; font-weight:800; text-align:center; }
+  .account-all { background:#d9ead3!important; color:#274e13; font-weight:800; text-align:center; }
 
-  .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(16,24,40,0.08); }
-  .btn-primary { background: var(--dark); border-color: var(--dark); color: #fff; }
-  .btn-danger { background: var(--red-bg); border-color: #fecdca; color: var(--red); }
+  .bottom-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; min-width:900px; }
+  .panel { border:1px solid var(--line); background:#fff; }
+  .panel h2 { margin:0; background:#333; color:#fff; padding:9px; text-align:center; font-size:14px; }
+  .panel-body { padding:10px; }
+  textarea { width:100%; min-height:210px; border:1px solid #bbb; padding:10px; resize:vertical; font-size:13px; line-height:1.5; }
 
-  .wrap {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 24px 20px 60px;
-  }
+  .log-table { min-width:900px; }
+  .delete { color:#900; cursor:pointer; font-weight:800; text-align:center; }
+  .add-row { margin:8px 0 0; width:100%; }
 
-  .hero {
-    background: linear-gradient(135deg, #101828 0%, #1f2937 55%, #30343f 100%);
-    color: #fff;
-    border-radius: 28px;
-    padding: 30px;
-    box-shadow: var(--shadow);
-    display: grid;
-    grid-template-columns: 1.35fr 0.65fr;
-    gap: 24px;
-    align-items: stretch;
-  }
-
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255,255,255,0.10);
-    border: 1px solid rgba(255,255,255,0.16);
-    padding: 8px 12px;
-    border-radius: 999px;
-    color: #d0d5dd;
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  h1 {
-    margin: 18px 0 8px;
-    font-size: clamp(30px, 4vw, 52px);
-    line-height: 1.02;
-    letter-spacing: -0.05em;
-  }
-
-  .hero p {
-    color: #d0d5dd;
-    font-size: 15px;
-    line-height: 1.7;
-    max-width: 780px;
-  }
-
-  .hero-side {
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 22px;
-    padding: 20px;
-  }
-
-  .hero-side h3 { margin: 0 0 12px; }
-  .hero-side .mini { color: #d0d5dd; font-size: 13px; line-height: 1.6; margin: 8px 0; }
-
-  .tabs {
-    margin-top: 20px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 8px;
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
-  }
-
-  .tab {
-    border: none;
-    background: transparent;
-    padding: 11px 15px;
-    border-radius: 14px;
-    color: var(--muted);
-    font-weight: 800;
-    font-size: 13px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .tab.active {
-    background: var(--dark);
-    color: #fff;
-  }
-
-  .metrics-grid {
-    margin-top: 20px;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 14px;
-  }
-
-  .metric {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px;
-    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
-  }
-
-  .metric-label {
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .metric-number {
-    font-size: 32px;
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    margin-top: 8px;
-  }
-
-  .grid-2 {
-    margin-top: 20px;
-    display: grid;
-    grid-template-columns: 1.4fr 0.8fr;
-    gap: 18px;
-  }
-
-  .grid-3 {
-    margin-top: 20px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-  }
-
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
-    overflow: hidden;
-  }
-
-  .panel-head {
-    padding: 18px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .panel-title { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
-  .panel-sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-  .panel-body { padding: 18px; }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-  }
-
-  .form-grid.three { grid-template-columns: repeat(3, 1fr); }
-  .form-grid.two { grid-template-columns: repeat(2, 1fr); }
-  .form-grid .wide { grid-column: 1 / -1; }
-
-  label {
-    display: block;
-    font-size: 12px;
-    font-weight: 800;
-    color: var(--muted);
-    margin-bottom: 6px;
-  }
-
-  input, select, textarea {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: #fff;
-    padding: 10px 12px;
-    color: var(--text);
-    outline: none;
-    font-size: 14px;
-  }
-
-  input:focus, select:focus, textarea:focus {
-    border-color: #98a2b3;
-    box-shadow: 0 0 0 4px rgba(152, 162, 179, 0.18);
-  }
-
-  textarea { min-height: 100px; resize: vertical; line-height: 1.55; }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  th, td {
-    padding: 12px;
-    border-bottom: 1px solid var(--border);
-    text-align: left;
-    vertical-align: top;
-  }
-
-  th {
-    background: var(--panel-soft);
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 11px;
-    font-weight: 800;
-  }
-
-  tr:last-child td { border-bottom: none; }
-  .table-wrap { overflow-x: auto; }
-
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 9px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    border: 1px solid transparent;
-    white-space: nowrap;
-  }
-
-  .done { background: var(--green-bg); color: var(--green); border-color: #abefc6; }
-  .progress { background: var(--yellow-bg); color: var(--yellow); border-color: #fedf89; }
-  .blocked { background: var(--red-bg); color: var(--red); border-color: #fecdca; }
-  .follow { background: var(--blue-bg); color: var(--blue); border-color: #b2ddff; }
-  .review { background: var(--purple-bg); color: var(--purple); border-color: #d9d6fe; }
-  .neutral { background: #f2f4f7; color: #475467; border-color: #e4e7ec; }
-
-  .action-btn {
-    border: 1px solid var(--border);
-    background: #fff;
-    padding: 7px 10px;
-    border-radius: 10px;
-    font-weight: 800;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .action-btn:hover { background: var(--panel-soft); }
-
-  .quick-card {
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 15px;
-    background: var(--panel-soft);
-    margin-bottom: 12px;
-  }
-
-  .quick-card strong { display: block; margin-bottom: 6px; }
-  .quick-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
-
-  .recap-box {
-    width: 100%;
-    min-height: 430px;
-    border-radius: 16px;
-    padding: 16px;
-    background: #0b1220;
-    color: #e5e7eb;
-    font-family: Consolas, Monaco, monospace;
-    line-height: 1.55;
-    border: none;
-  }
-
-  .section { display: none; }
-  .section.active { display: block; }
-
-  .empty-state {
-    padding: 24px;
-    color: var(--muted);
-    text-align: center;
-    background: var(--panel-soft);
-    border-radius: 14px;
-  }
-
-  .footer-note {
-    margin-top: 20px;
-    color: var(--muted);
-    font-size: 12px;
-    text-align: center;
-  }
-
-  .password-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    background: linear-gradient(135deg, #101828 0%, #1f2937 55%, #30343f 100%);
-  }
-
-  .password-screen.hidden {
-    display: none;
-  }
-
-  .password-card {
-    width: min(100%, 420px);
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 26px;
-    box-shadow: var(--shadow);
-    padding: 28px;
-    text-align: center;
-  }
-
-  .password-card h1 {
-    margin: 0 0 8px;
-    color: var(--text);
-    font-size: 28px;
-    letter-spacing: -0.04em;
-  }
-
-  .password-card p {
-    margin: 0 0 18px;
-    color: var(--muted);
-    font-size: 14px;
-    line-height: 1.6;
-  }
-
-  .password-error {
-    min-height: 18px;
-    margin-top: 12px;
-    color: var(--red);
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .small { font-size: 12px; color: var(--muted); }
-
-  @media (max-width: 1050px) {
-    .hero, .grid-2 { grid-template-columns: 1fr; }
-    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-    .grid-3 { grid-template-columns: 1fr; }
-  }
-
-  @media (max-width: 700px) {
-    .nav-inner { align-items: flex-start; flex-direction: column; }
-    .hero { padding: 22px; }
-    .metrics-grid { grid-template-columns: 1fr; }
-    .form-grid, .form-grid.three, .form-grid.two { grid-template-columns: 1fr; }
-    th, td { padding: 10px; }
+  @media (max-width:800px) {
+    .topbar-inner { align-items:flex-start; flex-direction:column; }
+    .wrap { padding:10px; }
   }
 </style>
 </head>
 <body>
-<div id="passwordScreen" class="password-screen">
-  <div class="password-card">
-    <div class="brand-mark" style="margin:0 auto 14px;">JV</div>
-    <h1>Ops Command Center</h1>
-    <p>This page is private. Enter your password to continue.</p>
-    <input id="passwordInput" type="password" placeholder="Enter password" onkeydown="handlePasswordKey(event)" />
-    <button class="btn btn-primary" onclick="checkPassword()" style="width:100%; margin-top:12px;">Unlock Dashboard</button>
-    <div id="passwordError" class="password-error"></div>
+<div id="lockScreen" class="lock-screen">
+  <div class="lock-card">
+    <h1>Jonny Ops Sheet</h1>
+    <p>Private Inventory / Operations Coordinator page.</p>
+    <input id="passwordInput" type="password" placeholder="Password" onkeydown="if(event.key==='Enter') unlock()">
+    <button class="btn btn-dark" style="width:100%" onclick="unlock()">Unlock</button>
+    <div id="passwordError" style="color:#9c0006;font-size:13px;font-weight:700;margin-top:10px;"></div>
   </div>
 </div>
 
-<nav>
-  <div class="nav-inner">
-    <div class="brand">
-      <div class="brand-mark">JV</div>
-      <div>
-        <div>Ops Command Center</div>
-        <div class="small">Inventory • CS • Replacements • Recaps</div>
-      </div>
-    </div>
-    <div class="nav-actions">
-      <button class="btn" onclick="copyRecap()">Copy Daily Recap</button>
-      <button class="btn" onclick="exportData()">Export Backup</button>
-      <button class="btn btn-danger" onclick="resetToday()">Reset Today</button>
-      <button class="btn" onclick="lockDashboard()">Lock</button>
-    </div>
-  </div>
-</nav>
-
-<main class="wrap">
-  <header class="hero">
+<div class="topbar">
+  <div class="topbar-inner">
     <div>
-      <div class="eyebrow">Role System • Built for Jonny</div>
-      <h1>Inventory & Operations Coordinator Dashboard</h1>
-      <p>
-        One page to run the day: customer service sweeps, surprise sets, inventory exceptions,
-        replacement logs, blockers, completed work, and end-of-day recap. This is your personal
-        control center for consistency, accuracy, loss control, and process improvement.
-      </p>
-      <div class="nav-actions" style="margin-top:18px;">
-        <button class="btn btn-primary" onclick="setTab('today')">Start Today</button>
-        <button class="btn" onclick="setTab('recap')">Generate Recap</button>
+      <div class="title">INVENTORY / OPS COORDINATOR MASTER SHEET</div>
+      <div class="subtitle">Simple weekly command sheet • Monday to Friday • dropdowns, color codes, logs, recap</div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="copyRecap()">Copy Recap</button>
+      <button class="btn" onclick="exportBackup()">Export Backup</button>
+      <button class="btn" onclick="lock()">Lock</button>
+      <button class="btn btn-dark" onclick="resetAll()">Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="sheet">
+    <div class="summary-row">
+      <div class="summary-box"><div class="summary-label">Completed</div><div class="summary-value" id="mCompleted">0</div></div>
+      <div class="summary-box"><div class="summary-label">Needs Review</div><div class="summary-value" id="mReview">0</div></div>
+      <div class="summary-box"><div class="summary-label">In Progress</div><div class="summary-value" id="mProgress">0</div></div>
+      <div class="summary-box"><div class="summary-label">Follow-Ups</div><div class="summary-value" id="mFollow">0</div></div>
+      <div class="summary-box"><div class="summary-label">Replacements</div><div class="summary-value" id="mReplacements">0</div></div>
+      <div class="summary-box"><div class="summary-label">Inventory Issues</div><div class="summary-value" id="mInventory">0</div></div>
+    </div>
+
+    <div class="week-grid" id="weekGrid"></div>
+
+    <div class="bottom-grid">
+      <div class="panel">
+        <h2>Replacement / Loss Log</h2>
+        <div class="panel-body">
+          <table class="log-table">
+            <thead><tr><th>Date</th><th>Account</th><th>Order</th><th>Issue</th><th>Root Cause</th><th>$</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="replacementRows"></tbody>
+          </table>
+          <button class="btn add-row" onclick="addReplacement()">+ Add Replacement</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Issues Caught + Resolved</h2>
+        <div class="panel-body">
+          <table class="log-table">
+            <thead><tr><th>Date</th><th>Account</th><th>Issue</th><th>Action Taken</th><th>Type</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="issueRows"></tbody>
+          </table>
+          <button class="btn add-row" onclick="addIssue()">+ Add Issue</button>
+        </div>
       </div>
     </div>
-    <aside class="hero-side">
-      <h3>Daily Operating Loop</h3>
-      <p class="mini">1. Morning CS sweep across all accounts</p>
-      <p class="mini">2. Surprise sets / live prep</p>
-      <p class="mini">3. Admin logging + replacements</p>
-      <p class="mini">4. Inventory exceptions Tue/Wed/Thu</p>
-      <p class="mini">5. Final CS sweep + daily recap</p>
-    </aside>
-  </header>
 
-  <section class="metrics-grid" aria-label="Dashboard Metrics">
-    <div class="metric">
-      <div class="metric-label">Tasks Completed</div>
-      <div class="metric-number" id="metricTasks">0/0</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Open Issues</div>
-      <div class="metric-number" id="metricIssues">0</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Replacements Logged</div>
-      <div class="metric-number" id="metricReplacements">0</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Inventory Variances</div>
-      <div class="metric-number" id="metricVariances">0</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Blocked / Follow Up</div>
-      <div class="metric-number" id="metricBlocked">0</div>
-    </div>
-  </section>
-
-  <div class="tabs">
-    <button class="tab active" data-tab="today" onclick="setTab('today')">Today</button>
-    <button class="tab" data-tab="cs" onclick="setTab('cs')">CS / Issues</button>
-    <button class="tab" data-tab="inventory" onclick="setTab('inventory')">Inventory</button>
-    <button class="tab" data-tab="replacements" onclick="setTab('replacements')">Replacements</button>
-    <button class="tab" data-tab="sets" onclick="setTab('sets')">Surprise Sets</button>
-    <button class="tab" data-tab="weekly" onclick="setTab('weekly')">Weekly Review</button>
-    <button class="tab" data-tab="recap" onclick="setTab('recap')">Daily Recap</button>
-  </div>
-
-  <section id="today" class="section active">
-    <div class="grid-2">
+    <div class="bottom-grid">
       <div class="panel">
-        <div class="panel-head">
-          <div>
-            <h2 class="panel-title">Today's Workflow</h2>
-            <p class="panel-sub">Track the actual day without jumping between a million tabs.</p>
-          </div>
-          <button class="btn btn-primary" onclick="addTask()">Add Task</button>
-        </div>
+        <h2>Weekly Ops Review</h2>
         <div class="panel-body">
-          <div class="form-grid">
-            <div>
-              <label>Area</label>
-              <select id="taskArea">
-                <option>Customer Service</option>
-                <option>Surprise Sets</option>
-                <option>Inventory</option>
-                <option>Admin</option>
-                <option>Studio Readiness</option>
-                <option>TikTok Shop</option>
-              </select>
-            </div>
-            <div>
-              <label>Account</label>
-              <select id="taskAccount">
-                <option>All</option>
-                <option>VR</option>
-                <option>PS</option>
-                <option>CK</option>
-                <option>TT-01</option>
-                <option>TT-02</option>
-                <option>TT-03</option>
-                <option>TT-04</option>
-              </select>
-            </div>
-            <div>
-              <label>Target Time</label>
-              <input id="taskTarget" placeholder="Example: 10:30 AM" />
-            </div>
-            <div>
-              <label>Status</label>
-              <select id="taskStatus">
-                <option>Not Started</option>
-                <option>In Progress</option>
-                <option>Completed</option>
-                <option>Follow Up</option>
-                <option>Blocked</option>
-              </select>
-            </div>
-            <div class="wide">
-              <label>Task</label>
-              <input id="taskText" placeholder="Example: Morning sweep across VR / PS / CK" />
-            </div>
-            <div class="wide">
-              <label>Notes</label>
-              <input id="taskNotes" placeholder="Anything important, blocker, or result" />
-            </div>
-          </div>
-        </div>
-        <div class="table-wrap">
           <table>
-            <thead>
-              <tr><th>Area</th><th>Account</th><th>Task</th><th>Target</th><th>Status</th><th>Notes</th><th></th></tr>
-            </thead>
-            <tbody id="taskRows"></tbody>
+            <tbody>
+              <tr><th>Week Of</th><td><input id="weekOf" onchange="save()"></td><th>Status</th><td><select id="weekStatus" onchange="save()"><option>In Progress</option><option>On Track</option><option>Needs Attention</option><option>Complete</option></select></td></tr>
+              <tr><th>Biggest Fix This Week</th><td colspan="3"><input id="biggestFix" onchange="save()"></td></tr>
+              <tr><th>Main Issue Going Into Next Week</th><td colspan="3"><input id="mainIssue" onchange="save()"></td></tr>
+              <tr><th>Process Improvement</th><td colspan="3"><input id="processImprovement" onchange="save()" placeholder="Example: SetSheet reduced surprise set prep time"></td></tr>
+            </tbody>
           </table>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head">
-          <div>
-            <h2 class="panel-title">Focus Queue</h2>
-            <p class="panel-sub">What needs attention before the day ends.</p>
-          </div>
-        </div>
-        <div class="panel-body" id="focusQueue"></div>
-      </div>
-    </div>
-  </section>
-
-  <section id="cs" class="section">
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <h2 class="panel-title">Customer Service / Issues Tracker</h2>
-          <p class="panel-sub">Track what was resolved, what needs follow-up, and what could affect customer experience or TikTok score.</p>
-        </div>
-        <button class="btn btn-primary" onclick="addIssue()">Add Issue</button>
-      </div>
-      <div class="panel-body">
-        <div class="form-grid">
-          <div>
-            <label>Account</label>
-            <select id="issueAccount"><option>VR</option><option>PS</option><option>CK</option></select>
-          </div>
-          <div>
-            <label>Channel</label>
-            <select id="issueChannel"><option>Shop Chat</option><option>Email</option><option>TikTok DM</option><option>Instagram DM</option><option>Gmail</option><option>Other</option></select>
-          </div>
-          <div>
-            <label>Customer / User</label>
-            <input id="issueCustomer" placeholder="Username, email, or order customer" />
-          </div>
-          <div>
-            <label>Risk</label>
-            <select id="issueRisk"><option>Low</option><option>Medium</option><option>High</option></select>
-          </div>
-          <div>
-            <label>Status</label>
-            <select id="issueStatus"><option>Follow Up</option><option>In Progress</option><option>Completed</option><option>Blocked</option><option>Needs Review</option></select>
-          </div>
-          <div>
-            <label>Issue Type</label>
-            <select id="issueType"><option>Missing Package</option><option>Wrong Item</option><option>Damaged Item</option><option>Refund / Return</option><option>Order Update</option><option>Replacement</option><option>Other</option></select>
-          </div>
-          <div class="wide">
-            <label>Issue</label>
-            <input id="issueText" placeholder="What happened?" />
-          </div>
-          <div class="wide">
-            <label>Next Action / Result</label>
-            <input id="issueNext" placeholder="What needs to happen next or how was it resolved?" />
-          </div>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Account</th><th>Channel</th><th>Customer</th><th>Type</th><th>Issue</th><th>Status</th><th>Risk</th><th>Next Action</th><th></th></tr>
-          </thead>
-          <tbody id="issueRows"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section id="inventory" class="section">
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <h2 class="panel-title">Inventory Exception Tracker</h2>
-          <p class="panel-sub">Do not drown in counts. Track the items that need action: variance, mismatch, restock, possible loss, or naming issue.</p>
-        </div>
-        <button class="btn btn-primary" onclick="addInventory()">Add Item</button>
-      </div>
-      <div class="panel-body">
-        <div class="form-grid">
-          <div>
-            <label>Studio / Account</label>
-            <select id="invStudio"><option>TT-01</option><option>TT-02</option><option>TT-03</option><option>TT-04</option><option>VR</option><option>PS</option><option>CK</option></select>
-          </div>
-          <div>
-            <label>Shopify Qty</label>
-            <input id="invShopify" type="number" placeholder="0" />
-          </div>
-          <div>
-            <label>Physical Qty</label>
-            <input id="invPhysical" type="number" placeholder="0" />
-          </div>
-          <div>
-            <label>Action Needed</label>
-            <select id="invAction"><option>No Action</option><option>Update Shopify</option><option>Investigate</option><option>Restock Studio</option><option>Possible Loss</option><option>Duplicate / Naming Issue</option><option>Replacement Related</option></select>
-          </div>
-          <div class="wide">
-            <label>Product</label>
-            <input id="invProduct" placeholder="Product name" />
-          </div>
-          <div class="wide">
-            <label>Notes</label>
-            <input id="invNotes" placeholder="What did you find? What needs to be fixed?" />
-          </div>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Studio</th><th>Product</th><th>Shopify</th><th>Physical</th><th>Variance</th><th>Action</th><th>Notes</th><th></th></tr>
-          </thead>
-          <tbody id="inventoryRows"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section id="replacements" class="section">
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <h2 class="panel-title">Replacement + Loss Control Log</h2>
-          <p class="panel-sub">Log every replacement with root cause so you can prove loss prevention and find repeat issues.</p>
-        </div>
-        <button class="btn btn-primary" onclick="addReplacement()">Add Replacement</button>
-      </div>
-      <div class="panel-body">
-        <div class="form-grid">
-          <div>
-            <label>Date</label>
-            <input id="repDate" type="date" />
-          </div>
-          <div>
-            <label>Account</label>
-            <select id="repAccount"><option>VR</option><option>PS</option><option>CK</option></select>
-          </div>
-          <div>
-            <label>Order #</label>
-            <input id="repOrder" placeholder="Order number" />
-          </div>
-          <div>
-            <label>Market Value</label>
-            <input id="repValue" type="number" placeholder="0" />
-          </div>
-          <div>
-            <label>Status</label>
-            <select id="repStatus"><option>Logged</option><option>Needs Review</option><option>Completed</option><option>Blocked</option></select>
-          </div>
-          <div>
-            <label>Root Cause</label>
-            <select id="repRoot"><option>Packing Error</option><option>Inventory Error</option><option>Shipping Issue</option><option>Wrong Item</option><option>Missing Item</option><option>Damaged Item</option><option>Customer Error</option><option>Unknown</option></select>
-          </div>
-          <div class="wide">
-            <label>Reason / Items</label>
-            <input id="repReason" placeholder="What is being replaced and why?" />
-          </div>
-          <div class="wide">
-            <label>Notes</label>
-            <input id="repNotes" placeholder="Evidence, follow-up, or action taken" />
-          </div>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Date</th><th>Account</th><th>Order</th><th>Reason</th><th>Root Cause</th><th>Value</th><th>Status</th><th>Notes</th><th></th></tr>
-          </thead>
-          <tbody id="replacementRows"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section id="sets" class="section">
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <h2 class="panel-title">Surprise Set Prep Log</h2>
-          <p class="panel-sub">Use this to prove what was built, uploaded, blocked, or needs review. Your SetSheet tool can stay separate for now.</p>
-        </div>
-        <button class="btn btn-primary" onclick="addSet()">Add Set</button>
-      </div>
-      <div class="panel-body">
-        <div class="form-grid">
-          <div>
-            <label>Date</label>
-            <input id="setDate" type="date" />
-          </div>
-          <div>
-            <label>Account</label>
-            <select id="setAccount"><option>VR</option><option>PS</option><option>CK</option></select>
-          </div>
-          <div>
-            <label>Stream / Host</label>
-            <input id="setStream" placeholder="Example: 5PM stream" />
-          </div>
-          <div>
-            <label>Status</label>
-            <select id="setStatus"><option>Completed</option><option>In Progress</option><option>Follow Up</option><option>Blocked</option></select>
-          </div>
-          <div>
-            <label>Total Products</label>
-            <input id="setProducts" type="number" placeholder="0" />
-          </div>
-          <div>
-            <label>Unknown Items</label>
-            <input id="setUnknown" type="number" placeholder="0" />
-          </div>
-          <div class="wide">
-            <label>Notes</label>
-            <input id="setNotes" placeholder="Uploaded? Any blockers? Any product issues?" />
-          </div>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Date</th><th>Account</th><th>Stream</th><th>Products</th><th>Unknown</th><th>Status</th><th>Notes</th><th></th></tr>
-          </thead>
-          <tbody id="setRows"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <section id="weekly" class="section">
-    <div class="grid-3">
-      <div class="panel">
-        <div class="panel-head"><div><h2 class="panel-title">Consistency</h2><p class="panel-sub">What got done without gaps.</p></div></div>
+        <h2>Auto Daily / Weekly Recap</h2>
         <div class="panel-body">
-          <div class="quick-card"><strong>Daily Tasks Completed</strong><p id="weeklyTasks">0 completed tasks logged.</p></div>
-          <div class="quick-card"><strong>Surprise Sets</strong><p id="weeklySets">0 surprise set records logged.</p></div>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><div><h2 class="panel-title">Accuracy</h2><p class="panel-sub">Inventory exceptions and corrections.</p></div></div>
-        <div class="panel-body">
-          <div class="quick-card"><strong>Inventory Variances</strong><p id="weeklyInventory">0 variances logged.</p></div>
-          <div class="quick-card"><strong>Open Actions</strong><p id="weeklyOpen">0 open blockers/follow-ups.</p></div>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><div><h2 class="panel-title">Loss Control</h2><p class="panel-sub">Replacement volume, dollar impact, and root causes.</p></div></div>
-        <div class="panel-body">
-          <div class="quick-card"><strong>Replacements</strong><p id="weeklyReps">0 replacements logged.</p></div>
-          <div class="quick-card"><strong>Estimated Value</strong><p id="weeklyValue">$0 estimated replacement value.</p></div>
+          <textarea id="recapBox" readonly></textarea>
         </div>
       </div>
     </div>
-  </section>
-
-  <section id="recap" class="section">
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-head">
-          <div>
-            <h2 class="panel-title">Auto Daily Recap</h2>
-            <p class="panel-sub">Generated from what you logged today. Copy it at the end of your shift.</p>
-          </div>
-          <button class="btn btn-primary" onclick="copyRecap()">Copy</button>
-        </div>
-        <div class="panel-body">
-          <textarea id="recapText" class="recap-box" readonly></textarea>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><div><h2 class="panel-title">Performance Proof</h2><p class="panel-sub">Keep this in mind for reviews and raise path.</p></div></div>
-        <div class="panel-body">
-          <div class="quick-card"><strong>Process Improvement</strong><p>Built a one-page command center to reduce tab switching and centralize daily ops.</p></div>
-          <div class="quick-card"><strong>Loss Control</strong><p>Replacement logs track root cause, order, value, and follow-up status.</p></div>
-          <div class="quick-card"><strong>Inventory Accuracy</strong><p>Inventory tracker focuses on exceptions, variances, and actions needed.</p></div>
-          <div class="quick-card"><strong>Ownership</strong><p>Daily recap creates a clean paper trail of completed work, blockers, and wins.</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <p class="footer-note">Saved locally in this browser using localStorage. Later, this can connect to Google Sheets, Shopify exports, or a database.</p>
-</main>
+  </div>
+</div>
 
 <script>
-  const DASHBOARD_PASSWORD = "opcomics";
+const PASSWORD = "opcomics";
+const days = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+const statuses = ["Not Started","In Progress","Needs Review","Follow Up","Completed"];
+const accounts = ["All","VR","PS","CK"];
+const sections = [
+  { key:"priority", title:"Today's Priorities", rows:[
+    ["Customer Service","All","start with all accounts","Not Started","10:30 AM",""],
+    ["Surprise Sets","All","build / upload surprise sets","Not Started","12:00 PM",""],
+    ["Inventory","All","compare physical to Shopify","Not Started","4:30 PM",""],
+    ["Admin","All","update sheet / recap","Not Started","5:15 PM",""]
+  ]},
+  { key:"cs", title:"CS / Immediate Follow-Up", rows:[
+    ["Shop Chat","CK","","Not Started","",""],
+    ["TT DM","CK","","Not Started","",""],
+    ["VR Email","VR","","Not Started","",""],
+    ["Shop Chat","PS","","Not Started","",""]
+  ]},
+  { key:"live", title:"Live Prep / Surprise Sets / Inventory", rows:[
+    ["Schedule Live","All","schedule upcoming streams","Not Started","",""],
+    ["Surprise Sets","All","build sets / upload file","Not Started","",""],
+    ["Inventory","All","studio check / discrepancy","Not Started","",""]
+  ]},
+  { key:"done", title:"Completed / Resolved Today", rows:[
+    ["","All","","Not Started","",""]
+  ]}
+];
 
-  function checkPassword() {
-    const input = document.getElementById("passwordInput");
-    const error = document.getElementById("passwordError");
-    if (input.value === DASHBOARD_PASSWORD) {
-      sessionStorage.setItem("opsDashboardUnlocked", "true");
-      document.getElementById("passwordScreen").classList.add("hidden");
-      input.value = "";
-      error.textContent = "";
-    } else {
-      error.textContent = "Wrong password. Try again.";
-      input.value = "";
-      input.focus();
-    }
-  }
+function unlock(){
+  const v = document.getElementById('passwordInput').value;
+  if(v === PASSWORD){ sessionStorage.setItem('opsUnlocked','1'); document.getElementById('lockScreen').classList.add('hidden'); }
+  else { document.getElementById('passwordError').textContent = 'Wrong password.'; document.getElementById('passwordInput').value=''; }
+}
+function lock(){ sessionStorage.removeItem('opsUnlocked'); document.getElementById('lockScreen').classList.remove('hidden'); }
+window.addEventListener('load',()=>{ if(sessionStorage.getItem('opsUnlocked')==='1') document.getElementById('lockScreen').classList.add('hidden'); });
 
-  function handlePasswordKey(event) {
-    if (event.key === "Enter") checkPassword();
-  }
-
-  function lockDashboard() {
-    sessionStorage.removeItem("opsDashboardUnlocked");
-    document.getElementById("passwordScreen").classList.remove("hidden");
-    setTimeout(() => document.getElementById("passwordInput").focus(), 50);
-  }
-
-  window.addEventListener("load", () => {
-    if (sessionStorage.getItem("opsDashboardUnlocked") === "true") {
-      document.getElementById("passwordScreen").classList.add("hidden");
-    } else {
-      document.getElementById("passwordInput").focus();
-    }
-  });
-
-  const todayISO = new Date().toISOString().slice(0, 10);
-
-  const defaultData = {
-    tasks: [
-      { id: cryptoId(), area: "Customer Service", account: "All", task: "Morning sweep across VR / PS / CK", target: "10:30 AM", status: "Not Started", notes: "Shop chat, email, DMs, TikTok issues" },
-      { id: cryptoId(), area: "Surprise Sets", account: "All", task: "Build / upload surprise sets", target: "12:00 PM", status: "Not Started", notes: "Use SetSheet workflow" },
-      { id: cryptoId(), area: "Admin", account: "All", task: "Update logs, replacements, and notes", target: "1:00 PM", status: "Not Started", notes: "Keep records clean" },
-      { id: cryptoId(), area: "Customer Service", account: "All", task: "Final CS sweep", target: "4:45 PM", status: "Not Started", notes: "Make sure nothing urgent is sitting" },
-      { id: cryptoId(), area: "Admin", account: "All", task: "End-of-day recap", target: "5:15 PM", status: "Not Started", notes: "Copy recap before ending shift" }
-    ],
-    issues: [],
-    inventory: [],
-    replacements: [],
-    sets: []
+function freshData(){
+  return {
+    weekOf:"", weekStatus:"In Progress", biggestFix:"", mainIssue:"", processImprovement:"",
+    days: Object.fromEntries(days.map(day=>[day,{ date:"", currentTask:"", pending:"0", sections: structuredClone(sections)}])),
+    replacements: [], issues: []
   };
+}
+let data = JSON.parse(localStorage.getItem('simpleOpsSheet') || 'null') || freshData();
 
-  let data = loadData();
+function save(){
+  data.weekOf = document.getElementById('weekOf')?.value || data.weekOf;
+  data.weekStatus = document.getElementById('weekStatus')?.value || data.weekStatus;
+  data.biggestFix = document.getElementById('biggestFix')?.value || data.biggestFix;
+  data.mainIssue = document.getElementById('mainIssue')?.value || data.mainIssue;
+  data.processImprovement = document.getElementById('processImprovement')?.value || data.processImprovement;
+  localStorage.setItem('simpleOpsSheet', JSON.stringify(data));
+  renderMetrics();
+  renderRecap();
+}
 
-  function cryptoId() {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return String(Date.now()) + Math.random().toString(16).slice(2);
-  }
+function statusClass(s){
+  if(s==='Completed') return 'completed';
+  if(s==='In Progress') return 'progress';
+  if(s==='Needs Review') return 'review';
+  if(s==='Follow Up') return 'follow';
+  return 'notstarted';
+}
+function acctClass(a){ return 'account-' + String(a||'all').toLowerCase(); }
+function esc(s){ return String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
+function id(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
 
-  function loadData() {
-    const saved = localStorage.getItem("jonnyOpsCommandCenter");
-    if (!saved) return structuredClone(defaultData);
-    try {
-      const parsed = JSON.parse(saved);
-      return { ...structuredClone(defaultData), ...parsed };
-    } catch (e) {
-      return structuredClone(defaultData);
+function renderWeek(){
+  const grid = document.getElementById('weekGrid');
+  grid.innerHTML = days.map(day=>{
+    const d = data.days[day];
+    return `<div class="day-card">
+      <div class="day-header">${day.toUpperCase()}</div>
+      <div class="day-meta">
+        <div><strong>Date</strong><input value="${esc(d.date)}" onchange="data.days['${day}'].date=this.value;save()"></div>
+        <div><strong>Pending Follow-Up</strong><input value="${esc(d.pending)}" onchange="data.days['${day}'].pending=this.value;save()"></div>
+      </div>
+      ${d.sections.map((sec,si)=>`
+        <div class="section-title">${sec.title}</div>
+        <table>
+          <thead><tr><th>Item</th><th>Acct</th><th>Details</th><th>Status</th><th>Target</th><th>Notes</th></tr></thead>
+          <tbody>
+            ${sec.rows.map((r,ri)=>rowHtml(day,si,ri,r)).join('')}
+          </tbody>
+        </table>
+        <button class="btn add-row" onclick="addDayRow('${day}',${si})">+ Add Row</button>
+      `).join('')}
+    </div>`;
+  }).join('');
+}
+function rowHtml(day,si,ri,r){
+  return `<tr>
+    <td><input value="${esc(r[0])}" onchange="updateDay('${day}',${si},${ri},0,this.value)"></td>
+    <td><select class="${acctClass(r[1])}" onchange="this.className=acctClass(this.value);updateDay('${day}',${si},${ri},1,this.value)">${accounts.map(a=>`<option ${r[1]===a?'selected':''}>${a}</option>`).join('')}</select></td>
+    <td><input value="${esc(r[2])}" onchange="updateDay('${day}',${si},${ri},2,this.value)"></td>
+    <td><select class="status ${statusClass(r[3])}" onchange="this.className='status '+statusClass(this.value);updateDay('${day}',${si},${ri},3,this.value)">${statuses.map(s=>`<option ${r[3]===s?'selected':''}>${s}</option>`).join('')}</select></td>
+    <td class="tiny"><input value="${esc(r[4])}" onchange="updateDay('${day}',${si},${ri},4,this.value)"></td>
+    <td class="notes"><input value="${esc(r[5])}" onchange="updateDay('${day}',${si},${ri},5,this.value)"></td>
+  </tr>`;
+}
+function updateDay(day,si,ri,ci,val){ data.days[day].sections[si].rows[ri][ci]=val; save(); }
+function addDayRow(day,si){ data.days[day].sections[si].rows.push(['','All','','Not Started','','']); renderWeek(); save(); }
+
+function addReplacement(){ data.replacements.push({id:id(), date:'', account:'VR', order:'', issue:'', root:'Unknown', value:'', status:'Needs Review', notes:''}); renderLogs(); save(); }
+function addIssue(){ data.issues.push({id:id(), date:'', account:'VR', issue:'', action:'', type:'General', status:'Follow Up', notes:''}); renderLogs(); save(); }
+function delLog(type,rowId){ data[type]=data[type].filter(x=>x.id!==rowId); renderLogs(); save(); }
+function updateLog(type,rowId,key,val){ const row=data[type].find(x=>x.id===rowId); if(row) row[key]=val; save(); }
+
+function renderLogs(){
+  document.getElementById('replacementRows').innerHTML = data.replacements.map(r=>`<tr>
+    <td><input value="${esc(r.date)}" onchange="updateLog('replacements','${r.id}','date',this.value)"></td>
+    <td><select class="${acctClass(r.account)}" onchange="this.className=acctClass(this.value);updateLog('replacements','${r.id}','account',this.value)">${['VR','PS','CK'].map(a=>`<option ${r.account===a?'selected':''}>${a}</option>`).join('')}</select></td>
+    <td><input value="${esc(r.order)}" onchange="updateLog('replacements','${r.id}','order',this.value)"></td>
+    <td><input value="${esc(r.issue)}" onchange="updateLog('replacements','${r.id}','issue',this.value)"></td>
+    <td><select onchange="updateLog('replacements','${r.id}','root',this.value)">${['Packing Error','Inventory Error','Shipping Issue','Wrong Item','Missing Item','Damaged Item','Unknown'].map(x=>`<option ${r.root===x?'selected':''}>${x}</option>`).join('')}</select></td>
+    <td><input value="${esc(r.value)}" onchange="updateLog('replacements','${r.id}','value',this.value)"></td>
+    <td><select class="status ${statusClass(r.status)}" onchange="this.className='status '+statusClass(this.value);updateLog('replacements','${r.id}','status',this.value)">${statuses.map(s=>`<option ${r.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+    <td><input value="${esc(r.notes)}" onchange="updateLog('replacements','${r.id}','notes',this.value)"></td>
+    <td class="delete" onclick="delLog('replacements','${r.id}')">x</td>
+  </tr>`).join('');
+
+  document.getElementById('issueRows').innerHTML = data.issues.map(r=>`<tr>
+    <td><input value="${esc(r.date)}" onchange="updateLog('issues','${r.id}','date',this.value)"></td>
+    <td><select class="${acctClass(r.account)}" onchange="this.className=acctClass(this.value);updateLog('issues','${r.id}','account',this.value)">${['VR','PS','CK','All'].map(a=>`<option ${r.account===a?'selected':''}>${a}</option>`).join('')}</select></td>
+    <td><input value="${esc(r.issue)}" onchange="updateLog('issues','${r.id}','issue',this.value)"></td>
+    <td><input value="${esc(r.action)}" onchange="updateLog('issues','${r.id}','action',this.value)"></td>
+    <td><select onchange="updateLog('issues','${r.id}','type',this.value)">${['General','CS','Inventory','Replacement','Surprise Set','Studio Readiness','TikTok Risk'].map(x=>`<option ${r.type===x?'selected':''}>${x}</option>`).join('')}</select></td>
+    <td><select class="status ${statusClass(r.status)}" onchange="this.className='status '+statusClass(this.value);updateLog('issues','${r.id}','status',this.value)">${statuses.map(s=>`<option ${r.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+    <td><input value="${esc(r.notes)}" onchange="updateLog('issues','${r.id}','notes',this.value)"></td>
+    <td class="delete" onclick="delLog('issues','${r.id}')">x</td>
+  </tr>`).join('');
+}
+
+function renderMetrics(){
+  let completed=0, review=0, progress=0, follow=0, inv=0;
+  days.forEach(day=>data.days[day].sections.forEach(sec=>sec.rows.forEach(r=>{
+    if(r[3]==='Completed') completed++;
+    if(r[3]==='Needs Review') review++;
+    if(r[3]==='In Progress') progress++;
+    if(r[3]==='Follow Up') follow++;
+    if(String(r[0]).toLowerCase().includes('inventory') && r[3] !== 'Completed' && r[3] !== 'Not Started') inv++;
+  })));
+  data.issues.forEach(r=>{ if(r.status==='Completed') completed++; if(r.status==='Needs Review') review++; if(r.status==='In Progress') progress++; if(r.status==='Follow Up') follow++; if(r.type==='Inventory') inv++; });
+  data.replacements.forEach(r=>{ if(r.status==='Needs Review') review++; if(r.status==='In Progress') progress++; if(r.status==='Follow Up') follow++; });
+  document.getElementById('mCompleted').textContent=completed;
+  document.getElementById('mReview').textContent=review;
+  document.getElementById('mProgress').textContent=progress;
+  document.getElementById('mFollow').textContent=follow;
+  document.getElementById('mReplacements').textContent=data.replacements.length;
+  document.getElementById('mInventory').textContent=inv;
+}
+function renderRecap(){
+  const done=[]; const open=[];
+  days.forEach(day=>data.days[day].sections.forEach(sec=>sec.rows.forEach(r=>{
+    if(r[2] || r[0]) {
+      const line = `${day} - ${r[0]} / ${r[1]}: ${r[2] || '(no details)'} ${r[5] ? '- '+r[5] : ''}`;
+      if(r[3]==='Completed') done.push(line); else if(r[3] !== 'Not Started') open.push(`${line} [${r[3]}]`);
     }
-  }
+  })));
+  const reps = data.replacements.map(r=>`${r.account} order ${r.order||'N/A'}: ${r.issue||'replacement'} | ${r.root} | $${r.value||0} | ${r.status}`);
+  const issues = data.issues.map(r=>`${r.account}: ${r.issue||'issue'} | action: ${r.action||'pending'} | ${r.status}`);
+  document.getElementById('recapBox').value = `Weekly / Daily Ops Recap
 
-  function saveData() {
-    localStorage.setItem("jonnyOpsCommandCenter", JSON.stringify(data));
-    render();
-  }
+Week Of: ${data.weekOf || ''}
+Status: ${data.weekStatus || ''}
 
-  function setTab(tabId) {
-    document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.tab === tabId));
-    document.querySelectorAll(".section").forEach(sec => sec.classList.toggle("active", sec.id === tabId));
-    if (tabId === "recap") updateRecap();
-  }
+Completed:
+${done.slice(0,30).map(x=>'- '+x).join('
+') || '- None yet'}
 
-  function statusClass(status) {
-    if (["Completed", "Logged"].includes(status)) return "done";
-    if (["In Progress", "Not Started"].includes(status)) return "progress";
-    if (["Blocked"].includes(status)) return "blocked";
-    if (["Follow Up"].includes(status)) return "follow";
-    if (["Needs Review"].includes(status)) return "review";
-    return "neutral";
-  }
+Open / Follow-Up:
+${open.slice(0,30).map(x=>'- '+x).join('
+') || '- No active follow-ups'}
 
-  function statusPill(status) {
-    return `<span class="pill ${statusClass(status)}">${escapeHtml(status)}</span>`;
-  }
+Replacements:
+${reps.map(x=>'- '+x).join('
+') || '- None logged'}
 
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+Issues Caught + Resolved:
+${issues.map(x=>'- '+x).join('
+') || '- None logged'}
 
-  function val(id) {
-    return document.getElementById(id).value.trim();
-  }
+Biggest Fix This Week:
+- ${data.biggestFix || ''}
 
-  function clear(ids) {
-    ids.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (el.type === "date") el.value = todayISO;
-      else if (el.tagName === "SELECT") el.selectedIndex = 0;
-      else el.value = "";
-    });
-  }
+Main Issue Going Into Next Week:
+- ${data.mainIssue || ''}
 
-  function addTask() {
-    const task = val("taskText");
-    if (!task) return alert("Add a task first.");
-    data.tasks.unshift({
-      id: cryptoId(),
-      area: val("taskArea"),
-      account: val("taskAccount"),
-      task,
-      target: val("taskTarget") || "",
-      status: val("taskStatus"),
-      notes: val("taskNotes")
-    });
-    clear(["taskText", "taskTarget", "taskNotes"]);
-    saveData();
-  }
-
-  function addIssue() {
-    const issue = val("issueText");
-    if (!issue) return alert("Add the issue first.");
-    data.issues.unshift({
-      id: cryptoId(),
-      account: val("issueAccount"),
-      channel: val("issueChannel"),
-      customer: val("issueCustomer"),
-      type: val("issueType"),
-      issue,
-      status: val("issueStatus"),
-      risk: val("issueRisk"),
-      next: val("issueNext")
-    });
-    clear(["issueCustomer", "issueText", "issueNext"]);
-    saveData();
-  }
-
-  function addInventory() {
-    const product = val("invProduct");
-    if (!product) return alert("Add a product first.");
-    data.inventory.unshift({
-      id: cryptoId(),
-      studio: val("invStudio"),
-      product,
-      shopify: Number(val("invShopify") || 0),
-      physical: Number(val("invPhysical") || 0),
-      action: val("invAction"),
-      notes: val("invNotes")
-    });
-    clear(["invProduct", "invShopify", "invPhysical", "invNotes"]);
-    saveData();
-  }
-
-  function addReplacement() {
-    const reason = val("repReason");
-    if (!reason) return alert("Add the replacement reason/items first.");
-    data.replacements.unshift({
-      id: cryptoId(),
-      date: val("repDate") || todayISO,
-      account: val("repAccount"),
-      order: val("repOrder"),
-      reason,
-      root: val("repRoot"),
-      value: Number(val("repValue") || 0),
-      status: val("repStatus"),
-      notes: val("repNotes")
-    });
-    clear(["repOrder", "repReason", "repValue", "repNotes"]);
-    saveData();
-  }
-
-  function addSet() {
-    const stream = val("setStream");
-    if (!stream) return alert("Add the stream or set name first.");
-    data.sets.unshift({
-      id: cryptoId(),
-      date: val("setDate") || todayISO,
-      account: val("setAccount"),
-      stream,
-      products: Number(val("setProducts") || 0),
-      unknown: Number(val("setUnknown") || 0),
-      status: val("setStatus"),
-      notes: val("setNotes")
-    });
-    clear(["setStream", "setProducts", "setUnknown", "setNotes"]);
-    saveData();
-  }
-
-  function updateItem(collection, id, key, value) {
-    data[collection] = data[collection].map(item => item.id === id ? { ...item, [key]: value } : item);
-    saveData();
-  }
-
-  function deleteItem(collection, id) {
-    if (!confirm("Delete this row?")) return;
-    data[collection] = data[collection].filter(item => item.id !== id);
-    saveData();
-  }
-
-  function renderTasks() {
-    const rows = document.getElementById("taskRows");
-    if (!data.tasks.length) {
-      rows.innerHTML = `<tr><td colspan="7"><div class="empty-state">No tasks yet.</div></td></tr>`;
-      return;
-    }
-    rows.innerHTML = data.tasks.map(t => `
-      <tr>
-        <td>${escapeHtml(t.area)}</td>
-        <td>${escapeHtml(t.account)}</td>
-        <td><strong>${escapeHtml(t.task)}</strong></td>
-        <td>${escapeHtml(t.target)}</td>
-        <td>
-          <select onchange="updateItem('tasks','${t.id}','status',this.value)">
-            ${["Not Started","In Progress","Completed","Follow Up","Blocked"].map(s => `<option ${t.status===s?"selected":""}>${s}</option>`).join("")}
-          </select>
-        </td>
-        <td>${escapeHtml(t.notes)}</td>
-        <td><button class="action-btn" onclick="deleteItem('tasks','${t.id}')">Delete</button></td>
-      </tr>
-    `).join("");
-  }
-
-  function renderIssues() {
-    const rows = document.getElementById("issueRows");
-    if (!data.issues.length) {
-      rows.innerHTML = `<tr><td colspan="9"><div class="empty-state">No CS issues logged yet.</div></td></tr>`;
-      return;
-    }
-    rows.innerHTML = data.issues.map(i => `
-      <tr>
-        <td><strong>${escapeHtml(i.account)}</strong></td>
-        <td>${escapeHtml(i.channel)}</td>
-        <td>${escapeHtml(i.customer)}</td>
-        <td>${escapeHtml(i.type)}</td>
-        <td>${escapeHtml(i.issue)}</td>
-        <td>${statusPill(i.status)}</td>
-        <td>${escapeHtml(i.risk)}</td>
-        <td>${escapeHtml(i.next)}</td>
-        <td><button class="action-btn" onclick="deleteItem('issues','${i.id}')">Delete</button></td>
-      </tr>
-    `).join("");
-  }
-
-  function renderInventory() {
-    const rows = document.getElementById("inventoryRows");
-    if (!data.inventory.length) {
-      rows.innerHTML = `<tr><td colspan="8"><div class="empty-state">No inventory exceptions logged yet.</div></td></tr>`;
-      return;
-    }
-    rows.innerHTML = data.inventory.map(i => {
-      const variance = Number(i.physical) - Number(i.shopify);
-      return `
-        <tr>
-          <td><strong>${escapeHtml(i.studio)}</strong></td>
-          <td>${escapeHtml(i.product)}</td>
-          <td>${escapeHtml(i.shopify)}</td>
-          <td>${escapeHtml(i.physical)}</td>
-          <td><strong>${variance}</strong></td>
-          <td>${statusPill(i.action === "No Action" ? "Completed" : i.action)}</td>
-          <td>${escapeHtml(i.notes)}</td>
-          <td><button class="action-btn" onclick="deleteItem('inventory','${i.id}')">Delete</button></td>
-        </tr>
-      `;
-    }).join("");
-  }
-
-  function renderReplacements() {
-    const rows = document.getElementById("replacementRows");
-    if (!data.replacements.length) {
-      rows.innerHTML = `<tr><td colspan="9"><div class="empty-state">No replacements logged yet.</div></td></tr>`;
-      return;
-    }
-    rows.innerHTML = data.replacements.map(r => `
-      <tr>
-        <td>${escapeHtml(r.date)}</td>
-        <td><strong>${escapeHtml(r.account)}</strong></td>
-        <td>${escapeHtml(r.order)}</td>
-        <td>${escapeHtml(r.reason)}</td>
-        <td>${escapeHtml(r.root)}</td>
-        <td>$${Number(r.value || 0).toFixed(2)}</td>
-        <td>${statusPill(r.status)}</td>
-        <td>${escapeHtml(r.notes)}</td>
-        <td><button class="action-btn" onclick="deleteItem('replacements','${r.id}')">Delete</button></td>
-      </tr>
-    `).join("");
-  }
-
-  function renderSets() {
-    const rows = document.getElementById("setRows");
-    if (!data.sets.length) {
-      rows.innerHTML = `<tr><td colspan="8"><div class="empty-state">No surprise sets logged yet.</div></td></tr>`;
-      return;
-    }
-    rows.innerHTML = data.sets.map(s => `
-      <tr>
-        <td>${escapeHtml(s.date)}</td>
-        <td><strong>${escapeHtml(s.account)}</strong></td>
-        <td>${escapeHtml(s.stream)}</td>
-        <td>${escapeHtml(s.products)}</td>
-        <td>${escapeHtml(s.unknown)}</td>
-        <td>${statusPill(s.status)}</td>
-        <td>${escapeHtml(s.notes)}</td>
-        <td><button class="action-btn" onclick="deleteItem('sets','${s.id}')">Delete</button></td>
-      </tr>
-    `).join("");
-  }
-
-  function updateMetrics() {
-    const completedTasks = data.tasks.filter(t => t.status === "Completed").length;
-    const openIssues = data.issues.filter(i => i.status !== "Completed").length;
-    const variances = data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").length;
-    const blocked = [
-      ...data.tasks.filter(t => ["Blocked", "Follow Up"].includes(t.status)),
-      ...data.issues.filter(i => ["Blocked", "Follow Up", "Needs Review"].includes(i.status)),
-      ...data.replacements.filter(r => ["Blocked", "Needs Review"].includes(r.status)),
-      ...data.sets.filter(s => ["Blocked", "Follow Up"].includes(s.status))
-    ].length;
-
-    document.getElementById("metricTasks").textContent = `${completedTasks}/${data.tasks.length}`;
-    document.getElementById("metricIssues").textContent = openIssues;
-    document.getElementById("metricReplacements").textContent = data.replacements.length;
-    document.getElementById("metricVariances").textContent = variances;
-    document.getElementById("metricBlocked").textContent = blocked;
-
-    document.getElementById("weeklyTasks").textContent = `${completedTasks} completed out of ${data.tasks.length} tasks logged.`;
-    document.getElementById("weeklySets").textContent = `${data.sets.length} surprise set records logged.`;
-    document.getElementById("weeklyInventory").textContent = `${variances} inventory exceptions / variances logged.`;
-    document.getElementById("weeklyOpen").textContent = `${blocked} open blockers, reviews, or follow-ups.`;
-    document.getElementById("weeklyReps").textContent = `${data.replacements.length} replacements logged.`;
-    const totalValue = data.replacements.reduce((sum, r) => sum + Number(r.value || 0), 0);
-    document.getElementById("weeklyValue").textContent = `$${totalValue.toFixed(2)} estimated replacement value.`;
-  }
-
-  function renderFocusQueue() {
-    const focus = document.getElementById("focusQueue");
-    const openTasks = data.tasks.filter(t => t.status !== "Completed").slice(0, 4);
-    const riskyIssues = data.issues.filter(i => i.status !== "Completed").slice(0, 4);
-    const inventoryActions = data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").slice(0, 3);
-
-    const blocks = [];
-    if (openTasks.length) blocks.push(`<div class="quick-card"><strong>Open Tasks</strong><p>${openTasks.map(t => `${escapeHtml(t.area)}: ${escapeHtml(t.task)} (${escapeHtml(t.status)})`).join("<br>")}</p></div>`);
-    if (riskyIssues.length) blocks.push(`<div class="quick-card"><strong>CS Follow-Ups</strong><p>${riskyIssues.map(i => `${escapeHtml(i.account)} ${escapeHtml(i.channel)}: ${escapeHtml(i.customer)} — ${escapeHtml(i.next || i.issue)}`).join("<br>")}</p></div>`);
-    if (inventoryActions.length) blocks.push(`<div class="quick-card"><strong>Inventory Actions</strong><p>${inventoryActions.map(i => `${escapeHtml(i.studio)}: ${escapeHtml(i.product)} — ${escapeHtml(i.action)}`).join("<br>")}</p></div>`);
-
-    blocks.push(`<div class="quick-card"><strong>End-of-Day Reminder</strong><p>Before leaving: final CS sweep, log replacements, update inventory exceptions, copy daily recap.</p></div>`);
-    focus.innerHTML = blocks.join("");
-  }
-
-  function updateRecap() {
-    const completed = data.tasks.filter(t => t.status === "Completed").map(t => `- ${t.area} (${t.account}): ${t.task}`).join("\n") || "- None logged yet";
-    const open = data.tasks.filter(t => t.status !== "Completed").map(t => `- ${t.area} (${t.account}): ${t.task} — ${t.status}`).join("\n") || "- No open tasks";
-    const issues = data.issues.filter(i => i.status !== "Completed").map(i => `- ${i.account} ${i.channel}: ${i.customer || "Customer"} — ${i.issue}; next: ${i.next || "Needs update"}`).join("\n") || "- No open CS issues";
-    const reps = data.replacements.map(r => `- ${r.account} order ${r.order || "N/A"}: ${r.reason} | Root cause: ${r.root} | Value: $${Number(r.value || 0).toFixed(2)} | ${r.status}`).join("\n") || "- No replacements logged";
-    const inv = data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").map(i => `- ${i.studio}: ${i.product} | Shopify ${i.shopify}, Physical ${i.physical}, Variance ${Number(i.physical) - Number(i.shopify)} | Action: ${i.action}`).join("\n") || "- No inventory exceptions logged";
-    const sets = data.sets.map(s => `- ${s.account} ${s.stream}: ${s.products} products, ${s.unknown} unknown items | ${s.status}`).join("\n") || "- No surprise sets logged";
-    const totalValue = data.replacements.reduce((sum, r) => sum + Number(r.value || 0), 0);
-
-    const recap = `Daily Recap — ${new Date().toLocaleDateString()}\n\nCompleted Today:\n${completed}\n\nStill Open / Follow-Up:\n${open}\n\nCustomer Service Issues:\n${issues}\n\nReplacements / Loss Control:\n${reps}\n\nInventory Exceptions:\n${inv}\n\nSurprise Sets:\n${sets}\n\nMetrics:\n- Tasks completed: ${data.tasks.filter(t => t.status === "Completed").length}/${data.tasks.length}\n- Open CS issues: ${data.issues.filter(i => i.status !== "Completed").length}\n- Replacements logged: ${data.replacements.length}\n- Estimated replacement value: $${totalValue.toFixed(2)}\n- Inventory exceptions: ${data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").length}\n\nBiggest Win:\n- Add today's biggest win here.\n\nMain Blocker:\n- Add today's main blocker here.`;
-
-    document.getElementById("recapText").value = recap;
-  }
-
-  function copyRecap() {
-    updateRecap();
-    const text = document.getElementById("recapText").value;
-    navigator.clipboard.writeText(text).then(() => alert("Daily recap copied."));
-  }
-
-  function exportData() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `jonny-ops-backup-${todayISO}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function resetToday() {
-    if (!confirm("This clears today's local dashboard data. Export a backup first if you want to keep it. Continue?")) return;
-    data = structuredClone(defaultData);
-    saveData();
-  }
-
-  function render() {
-    renderTasks();
-    renderIssues();
-    renderInventory();
-    renderReplacements();
-    renderSets();
-    updateMetrics();
-    renderFocusQueue();
-    updateRecap();
-  }
-
-  document.getElementById("repDate").value = todayISO;
-  document.getElementById("setDate").value = todayISO;
-
-  render();
+Process Improvement:
+- ${data.processImprovement || ''}`;
+}
+function copyRecap(){ renderRecap(); navigator.clipboard.writeText(document.getElementById('recapBox').value).then(()=>alert('Recap copied.')); }
+function exportBackup(){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})); a.download='jonny-ops-sheet-backup.json'; a.click(); }
+function resetAll(){ if(confirm('Reset everything on this page? Export a backup first if needed.')){ data=freshData(); localStorage.setItem('simpleOpsSheet',JSON.stringify(data)); renderAll(); } }
+function renderWeeklyInputs(){
+  document.getElementById('weekOf').value=data.weekOf||'';
+  document.getElementById('weekStatus').value=data.weekStatus||'In Progress';
+  document.getElementById('biggestFix').value=data.biggestFix||'';
+  document.getElementById('mainIssue').value=data.mainIssue||'';
+  document.getElementById('processImprovement').value=data.processImprovement||'';
+}
+function renderAll(){ renderWeek(); renderLogs(); renderWeeklyInputs(); renderMetrics(); renderRecap(); }
+renderAll();
 </script>
 </body>
 </html>
