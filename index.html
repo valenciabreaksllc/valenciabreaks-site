@@ -3,733 +3,1214 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Jonathan Valencia – Creator Growth & Live Commerce Operator</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
-<link rel="shortcut icon" href="/favicon.ico">
+<title>Jonny's Ops Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #ffffff;
-    --text: #0c0c0c;
-    --muted: #666666;
-    --border: #e5e5e5;
-    --accent: #333333;
-    --card: #ffffff;
-    --shadow: 0 10px 25px rgba(0,0,0,0.06);
+    --bg: #f6f7fb;
+    --panel: #ffffff;
+    --panel-soft: #f9fafb;
+    --text: #101828;
+    --muted: #667085;
+    --border: #e4e7ec;
+    --dark: #111827;
+    --dark-2: #1f2937;
+    --accent: #2f2f2f;
+    --green: #067647;
+    --green-bg: #ecfdf3;
+    --yellow: #b54708;
+    --yellow-bg: #fffaeb;
+    --red: #b42318;
+    --red-bg: #fef3f2;
+    --blue: #175cd3;
+    --blue-bg: #eff8ff;
+    --purple: #6941c6;
+    --purple-bg: #f4f3ff;
+    --shadow: 0 18px 40px rgba(16, 24, 40, 0.08);
+    --radius: 18px;
   }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
     font-family: 'Inter', sans-serif;
     background: var(--bg);
     color: var(--text);
-    scroll-behavior: smooth;
   }
+
+  button, input, select, textarea {
+    font-family: inherit;
+  }
+
   a { color: inherit; }
-  img { max-width: 100%; height: auto; }
 
   nav {
     position: sticky;
     top: 0;
-    background: #fff;
+    z-index: 50;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
-    z-index: 20;
   }
+
   .nav-inner {
-    max-width: 1100px;
-    margin: auto;
-    padding: 12px 20px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 14px 20px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    gap: 16px;
   }
-  .nav-left {
-    font-weight: 700;
-    font-size: 16px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-  .nav-links {
+
+  .brand {
     display: flex;
-    gap: 18px;
-    font-size: 14px;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
   }
-  .nav-links a {
-    text-decoration: none;
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    background: var(--dark);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 13px;
+    box-shadow: var(--shadow);
+  }
+
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    border: 1px solid var(--border);
+    background: #fff;
     color: var(--text);
-    opacity: 0.7;
+    padding: 10px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    transition: 0.18s ease;
+  }
+
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(16,24,40,0.08); }
+  .btn-primary { background: var(--dark); border-color: var(--dark); color: #fff; }
+  .btn-danger { background: var(--red-bg); border-color: #fecdca; color: var(--red); }
+
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+  }
+
+  .hero {
+    background: linear-gradient(135deg, #101828 0%, #1f2937 55%, #30343f 100%);
+    color: #fff;
+    border-radius: 28px;
+    padding: 30px;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 1.35fr 0.65fr;
+    gap: 24px;
+    align-items: stretch;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.16);
+    padding: 8px 12px;
+    border-radius: 999px;
+    color: #d0d5dd;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  h1 {
+    margin: 18px 0 8px;
+    font-size: clamp(30px, 4vw, 52px);
+    line-height: 1.02;
+    letter-spacing: -0.05em;
+  }
+
+  .hero p {
+    color: #d0d5dd;
+    font-size: 15px;
+    line-height: 1.7;
+    max-width: 780px;
+  }
+
+  .hero-side {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 22px;
+    padding: 20px;
+  }
+
+  .hero-side h3 { margin: 0 0 12px; }
+  .hero-side .mini { color: #d0d5dd; font-size: 13px; line-height: 1.6; margin: 8px 0; }
+
+  .tabs {
+    margin-top: 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 8px;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
+  }
+
+  .tab {
+    border: none;
+    background: transparent;
+    padding: 11px 15px;
+    border-radius: 14px;
+    color: var(--muted);
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
     white-space: nowrap;
   }
-  .nav-links a:hover { opacity: 1; }
 
-  header.hero {
-    padding: 90px 20px 70px;
-    background: #fff;
-    border-bottom: 1px solid var(--border);
-  }
-  .hero-inner {
-    max-width: 1100px;
-    margin: auto;
-    display: grid;
-    grid-template-columns: 1.3fr 1fr;
-    gap: 40px;
-    align-items: center;
-  }
-  .hero h1 { font-size: 44px; font-weight: 700; margin-bottom: 10px; }
-  .hero-sub { font-size: 17px; color: var(--muted); margin-bottom: 14px; }
-  .hero-tags {
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--accent);
-    margin-bottom: 16px;
-  }
-  .hero-buttons {
-    margin-top: 24px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  .btn-primary {
-    background: var(--accent);
+  .tab.active {
+    background: var(--dark);
     color: #fff;
-    padding: 12px 22px;
-    border-radius: 999px;
-    border: none;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .btn-secondary {
-    background: #fff;
-    color: var(--accent);
-    padding: 12px 22px;
-    border-radius: 999px;
-    border: 1px solid var(--accent);
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .hero-side {
-    border-left: 1px solid var(--border);
-    padding-left: 24px;
-  }
-  .hero-side h3 { font-size: 18px; margin-top: 0; margin-bottom: 10px; }
-  .hero-side p { font-size: 14px; color: var(--muted); margin: 4px 0; }
-
-  /* SECTION LAYOUT + DIVIDERS */
-  section {
-    padding: 80px 20px;
-    border-top: 1px solid var(--border);
-  }
-  section:first-of-type {
-    border-top: none;
-  }
-
-  h2 { text-align: center; font-size: 30px; margin-bottom: 6px; }
-  .section-subtitle {
-    text-align: center;
-    color: var(--muted);
-    margin-bottom: 35px;
-    font-size: 15px;
   }
 
   .metrics-grid {
-    max-width: 1100px;
-    margin: auto;
+    margin-top: 20px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 22px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
   }
-  .metric-box {
-    background: var(--card);
-    border: 1px solid var(--border);
-    padding: 26px;
-    text-align: center;
-    border-radius: 14px;
-    box-shadow: var(--shadow);
-    transition: 0.25s ease;
-  }
-  .metric-box:hover { transform: translateY(-3px); }
-  .metric-number { font-size: 32px; font-weight: 700; margin-bottom: 4px; }
-  .metric-label { font-size: 14px; color: var(--muted); }
 
-  .services-grid {
-    max-width: 1100px;
-    margin: auto;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 22px;
-  }
-  .service-card {
-    background: var(--card);
-    border-radius: 16px;
+  .metric {
+    background: var(--panel);
     border: 1px solid var(--border);
-    box-shadow: var(--shadow);
-    padding: 24px 22px;
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
   }
-  .service-title { font-weight: 600; margin-bottom: 6px; }
-  .service-tagline { font-size: 14px; color: var(--muted); margin-bottom: 10px; }
-  .service-list { margin: 10px 0 10px 16px; font-size: 14px; color: var(--muted); }
-  .service-footnote {
+
+  .metric-label {
+    color: var(--muted);
     font-size: 12px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--accent);
+    letter-spacing: 0.06em;
+  }
+
+  .metric-number {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
     margin-top: 8px;
   }
 
-  .case-study {
-    max-width: 1000px;
-    margin: 30px auto;
-    background: var(--card);
-    padding: 26px 24px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
+  .grid-2 {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 1.4fr 0.8fr;
+    gap: 18px;
   }
-  .case-study h3 { font-size: 20px; margin-bottom: 6px; }
-  .case-body {
-    font-size: 14px;
+
+  .grid-3 {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
+    overflow: hidden;
+  }
+
+  .panel-head {
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .panel-title { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+  .panel-sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .panel-body { padding: 18px; }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  .form-grid.three { grid-template-columns: repeat(3, 1fr); }
+  .form-grid.two { grid-template-columns: repeat(2, 1fr); }
+  .form-grid .wide { grid-column: 1 / -1; }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
     color: var(--muted);
-    line-height: 1.6;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
-  .case-list { margin-left: 18px; color: var(--muted); font-size: 14px; }
-  .screenshots { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: flex-start; }
-  .screenshots img {
-    width: 250px;
-    border-radius: 12px;
-    margin: 8px;
+
+  input, select, textarea {
+    width: 100%;
     border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    padding: 10px 12px;
+    color: var(--text);
+    outline: none;
+    font-size: 14px;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: #98a2b3;
+    box-shadow: 0 0 0 4px rgba(152, 162, 179, 0.18);
+  }
+
+  textarea { min-height: 100px; resize: vertical; line-height: 1.55; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th, td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background: var(--panel-soft);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  .table-wrap { overflow-x: auto; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .done { background: var(--green-bg); color: var(--green); border-color: #abefc6; }
+  .progress { background: var(--yellow-bg); color: var(--yellow); border-color: #fedf89; }
+  .blocked { background: var(--red-bg); color: var(--red); border-color: #fecdca; }
+  .follow { background: var(--blue-bg); color: var(--blue); border-color: #b2ddff; }
+  .review { background: var(--purple-bg); color: var(--purple); border-color: #d9d6fe; }
+  .neutral { background: #f2f4f7; color: #475467; border-color: #e4e7ec; }
+
+  .action-btn {
+    border: 1px solid var(--border);
+    background: #fff;
+    padding: 7px 10px;
+    border-radius: 10px;
+    font-weight: 800;
+    font-size: 12px;
     cursor: pointer;
   }
 
-  .revenue-wrapper {
-    max-width: 700px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    gap: 30px;
-    align-items: center;
-  }
-  .revenue-chart {
-    border-radius: 18px;
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
-    padding: 22px 20px;
-    background: #fff;
-  }
-  .revenue-stack { display: flex; flex-direction: column; gap: 8px; }
-  .rev-block {
-    border-radius: 999px;
-    padding: 8px 16px;
-    font-size: 13px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border: 1px solid var(--border);
-  }
-  .rev-block.website { background: #f5f5f5; }
-  .rev-block.tiktok { background: #fafafa; }
-  .rev-block.off { background: #ffffff; }
-  .rev-label { font-weight: 600; }
-  .rev-bar {
-    flex: 1;
-    height: 4px;
-    margin: 0 10px;
-    border-radius: 999px;
-    background: #ddd;
-    position: relative;
-    overflow: hidden;
-  }
-  .rev-bar-fill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    border-radius: inherit;
-    background: var(--accent);
-  }
-  .revenue-text { font-size: 14px; color: var(--muted); }
+  .action-btn:hover { background: var(--panel-soft); }
 
-  .testimonials-grid {
-    max-width: 1000px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 22px;
-  }
-  .testimonial-card {
-    background: #111;
-    color: #f8f8f8;
+  .quick-card {
+    border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 20px 18px 22px;
-    position: relative;
-    overflow: hidden;
-  }
-  .testimonial-quote { font-size: 14px; line-height: 1.7; }
-  .testimonial-name {
-    margin-top: 16px;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    opacity: 0.8;
-  }
-  .testimonial-card::before {
-    content: "“";
-    position: absolute;
-    font-size: 54px;
-    top: -10px;
-    left: 12px;
-    opacity: 0.15;
+    padding: 15px;
+    background: var(--panel-soft);
+    margin-bottom: 12px;
   }
 
-  #contact p { text-align: center; font-size: 15px; color: var(--muted); }
+  .quick-card strong { display: block; margin-bottom: 6px; }
+  .quick-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
 
-  footer {
+  .recap-box {
+    width: 100%;
+    min-height: 430px;
+    border-radius: 16px;
+    padding: 16px;
+    background: #0b1220;
+    color: #e5e7eb;
+    font-family: Consolas, Monaco, monospace;
+    line-height: 1.55;
+    border: none;
+  }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .empty-state {
+    padding: 24px;
+    color: var(--muted);
     text-align: center;
-    padding: 40px 20px 30px;
-    border-top: 1px solid var(--border);
+    background: var(--panel-soft);
+    border-radius: 14px;
+  }
+
+  .footer-note {
+    margin-top: 20px;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 12px;
+    text-align: center;
   }
 
-  #lightbox {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.85);
-    z-index: 999;
-    display: none;
-    justify-content: center;
-    align-items: center;
-  }
-  #lightbox img {
-    max-width: 90%;
-    max-height: 90%;
-    border-radius: 12px;
+  .small { font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 1050px) {
+    .hero, .grid-2 { grid-template-columns: 1fr; }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: 1fr; }
   }
 
-  /* For Marketplaces & Hiring Teams block */
-  .marketplaces-box {
-    max-width: 800px;
-    margin: 0 auto;
-    background: var(--card);
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
-    padding: 26px 24px;
-    font-size: 14px;
-    color: var(--muted);
-  }
-  .marketplaces-box ul {
-    margin-left: 18px;
-  }
-
-  /* --------- RESPONSIVE TWEAKS --------- */
-
-  @media (max-width: 900px) {
-    .hero-inner { 
-      grid-template-columns: 1fr; 
-      text-align: center; 
-    }
-    .hero-side {
-      border-left: none;
-      border-top: 1px solid var(--border);
-      padding-left: 0;
-      padding-top: 24px;
-      text-align: left;
-    }
-    .hero-buttons { justify-content: center; }
-  }
-
-  @media (max-width: 800px) {
-    .revenue-wrapper { grid-template-columns: 1fr; gap: 24px; }
-  }
-
-  @media (max-width: 600px) {
-    .nav-inner { padding: 10px 14px; }
-    .nav-left { font-size: 14px; }
-    .nav-links {
-      gap: 10px;
-      font-size: 12px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    header.hero {
-      padding: 70px 16px 50px;
-    }
-    .hero h1 { font-size: 32px; }
-    .hero-sub { font-size: 15px; }
-
-    section { padding: 60px 16px; }
-    h2 { font-size: 24px; }
-    .section-subtitle { font-size: 14px; }
-
-    .metric-box,
-    .service-card,
-    .case-study {
-      padding: 20px 18px;
-    }
-
-    .screenshots {
-      justify-content: center;
-    }
-    .screenshots img {
-      width: 100%;
-      max-width: 340px;
-      margin: 8px auto;
-      display: block;
-    }
+  @media (max-width: 700px) {
+    .nav-inner { align-items: flex-start; flex-direction: column; }
+    .hero { padding: 22px; }
+    .metrics-grid { grid-template-columns: 1fr; }
+    .form-grid, .form-grid.three, .form-grid.two { grid-template-columns: 1fr; }
+    th, td { padding: 10px; }
   }
 </style>
 </head>
 <body>
 <nav>
   <div class="nav-inner">
-    <div class="nav-left">JV</div>
-    <div class="nav-links">
-      <a href="#metrics">Metrics</a>
-      <a href="#services">Work With Me</a>
-      <a href="#cases">Portfolio</a>
-      <a href="#testimonials">Testimonials</a>
-      <a href="#contact">Contact</a>
+    <div class="brand">
+      <div class="brand-mark">JV</div>
+      <div>
+        <div>Ops Command Center</div>
+        <div class="small">Inventory • CS • Replacements • Recaps</div>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <button class="btn" onclick="copyRecap()">Copy Daily Recap</button>
+      <button class="btn" onclick="exportData()">Export Backup</button>
+      <button class="btn btn-danger" onclick="resetToday()">Reset Today</button>
     </div>
   </div>
 </nav>
 
-<header class="hero" id="about">
-  <div class="hero-inner">
+<main class="wrap">
+  <header class="hero">
     <div>
-      <div class="hero-tags">Creator Growth • Live Commerce • Marketplaces</div>
-      <h1>Creator Growth &amp; Live Commerce Operator for Marketplaces &amp; Brands</h1>
-      <p class="hero-sub">
-        I help creators, sellers, and marketplaces like Whatnot scale livestream revenue through
-        data-driven show strategy, seller coaching, and social media growth.
-      </p>
-      <p class="hero-sub">
-        Over the last three years, I’ve supported <strong>$10M+ in multi-channel revenue</strong>, built
-        <strong>150K+ followers</strong> and <strong>3M+ views</strong>, and helped run hundreds of livestreams
-        across TikTok Shop, Whatnot, and eBay Live.
-      </p>
-      <div class="hero-buttons">
-        <a href="#cases"><button class="btn-primary">View Case Studies</button></a>
-        <a href="#services"><button class="btn-secondary">Work With Me</button></a>
-        <a href="files/Jonathan_Valencia_Resume.pdf" target="_blank" rel="noopener">
-          <button class="btn-secondary">Download Resume (PDF)</button>
-        </a>
-      </div>
-    </div>
-    <div class="hero-side">
-      <h3>What I Specialize In</h3>
-      <p>• Creator growth &amp; social optimization</p>
-      <p>• Livestream performance &amp; break structure</p>
-      <p>• TikTok Shop product card optimization</p>
-      <p>• Multi-channel sales &amp; retention systems</p>
-      <p>• Onboarding &amp; coaching new sellers</p>
-      <p>• CRM workflows (Salesforce, HubSpot, Airtable)</p>
-    </div>
-  </div>
-</header>
-
-<section id="metrics">
-  <h2>Key Metrics</h2>
-  <p class="section-subtitle">
-    Rounded, recruiter- and marketplace-friendly impact across TikTok Shop, Whatnot, eBay Live, and DTC.
-  </p>
-  <div class="metrics-grid">
-    <div class="metric-box">
-      <div class="metric-number" data-target="10" data-prefix="$" data-suffix="M+">0</div>
-      <div class="metric-label">Total Multi-Channel Revenue Supported</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-number" data-target="3.26" data-prefix="$" data-suffix="M+">0</div>
-      <div class="metric-label">TikTok Shop GMV</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-number" data-target="38" data-prefix="" data-suffix="K+">0</div>
-      <div class="metric-label">TikTok Shop Orders</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-number" data-target="7.9" data-prefix="" data-suffix="K+">0</div>
-      <div class="metric-label">Whatnot Orders</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-number" data-target="150" data-prefix="" data-suffix="K+">0</div>
-      <div class="metric-label">Followers Built Across Accounts</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-number" data-target="3" data-prefix="" data-suffix="M+">0</div>
-      <div class="metric-label">Total Video Views</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-number">$500–$3K</div>
-      <div class="metric-label">Average Livestream Profit Supported</div>
-    </div>
-    <div class="metric-box">
-      <div class="metric-number" data-target="285" data-prefix="~$" data-suffix="K">0</div>
-      <div class="metric-label">Peak Monthly Revenue</div>
-    </div>
-  </div>
-</section>
-
-<section id="services">
-  <h2>Work With Me</h2>
-  <p class="section-subtitle">
-    I partner with marketplaces, creator-led brands, and e-commerce teams to turn livestreams into a repeatable
-    revenue channel. I combine hands-on hosting experience with sales ops and CRM workflows to help sellers
-    not just go live—but grow.
-  </p>
-  <div class="services-grid">
-    <div class="service-card">
-      <div class="service-title">Live Commerce Optimization</div>
-      <div class="service-tagline">Turn your livestreams into predictable, high-converting shows.</div>
-      <ul class="service-list">
-        <li>Show structure, pacing, and segment design</li>
-        <li>Break strategy &amp; product sequencing</li>
-        <li>Offer design, urgency, and objection handling in real time</li>
-        <li>Viewer funnel from hook → value → purchase → repeat</li>
-      </ul>
-      <div class="service-footnote">Ideal for: TikTok Shop, Whatnot &amp; eBay Live teams</div>
-    </div>
-
-    <div class="service-card">
-      <div class="service-title">Creator Growth &amp; Social Strategy</div>
-      <div class="service-tagline">Grow your audience and turn views into buyers.</div>
-      <ul class="service-list">
-        <li>TikTok &amp; Whatnot account audits</li>
-        <li>Content pillars and hook templates</li>
-        <li>Retention and watch-time optimization</li>
-        <li>Simple posting calendars aligned with live selling</li>
-      </ul>
-      <div class="service-footnote">Ideal for: creators &amp; creator-led brands</div>
-    </div>
-
-    <div class="service-card">
-      <div class="service-title">Multi-Channel Revenue Systems</div>
-      <div class="service-tagline">Align TikTok Shop, Whatnot, eBay Live, and DTC into a single engine.</div>
-      <ul class="service-list">
-        <li>Ops workflows for packing and fulfillment</li>
-        <li>CRM setup (Salesforce, HubSpot, Airtable) and simple pipelines</li>
-        <li>Basic GMV and repeat-rate reporting</li>
-        <li>Playbooks for scaling roles and handoffs</li>
-      </ul>
-      <div class="service-footnote">Ideal for: scaling e-commerce operations</div>
-    </div>
-  </div>
-</section>
-
-<section id="cases">
-  <h2>Portfolio &amp; Case Studies</h2>
-  <p class="section-subtitle">
-    A snapshot of the systems, growth, and revenue I’ve helped build. Names can be anonymized on request for private brand engagements.
-  </p>
-
-  <div class="case-study">
-    <h3>TikTok Growth &amp; Live Selling (ValenciaBreaks)</h3>
-    <p class="case-body">
-      From new accounts to a combined 150K+ followers and 3M+ views by treating every clip and live as part of a single growth engine.
-    </p>
-    <ul class="case-list">
-      <li>Implemented hooks, storytelling, and retention edits that 2–5x’d average performance</li>
-      <li>Built content calendars aligned with live show cadence and drop schedules</li>
-      <li>Turned organic content into a steady source of new buyers for live shows</li>
-    </ul>
-    <div class="screenshots">
-      <img src="pandabuy_growth_compare_outline.png" alt="TikTok growth comparison 1">
-      <img src="waxnpacks_growth_compare_outline_account2.png" alt="TikTok growth comparison 2">
-      <img src="waxnpacks_growth_compare_outline.png" alt="TikTok growth comparison 3">
-    </div>
-  </div>
-
-  <div class="case-study">
-    <h3>TikTok Shop Seller Optimization</h3>
-    <p class="case-body">
-      Restructured the seller funnel to improve conversion and increase GMV through better on-stream packaging and off-stream systems.
-    </p>
-    <ul class="case-list">
-      <li>Optimized product cards, titles, thumbnails, and pricing</li>
-      <li>Refined break structure and on-stream messaging to improve add-to-cart and purchase</li>
-      <li>Contributed to 38K+ TikTok Shop orders, Gold Star Seller rank, and a strong 4.7★ store rating</li>
-    </ul>
-    <div class="screenshots">
-      <img src="analytics_before.jpg" alt="TikTok Shop analytics before optimization">
-      <img src="analytics_after.jpg" alt="TikTok Shop analytics after optimization">
-    </div>
-  </div>
-
-  <div class="case-study">
-    <h3>Whatnot &amp; Multi-Platform Livestream Performance</h3>
-    <p class="case-body">
-      Supported high-volume shows on Whatnot and eBay Live with strong repeat purchase behavior and tight operations.
-    </p>
-    <ul class="case-list">
-      <li>Managed listings, stream pacing, and live chat communication</li>
-      <li>Trained team members on show setup, closing techniques, and customer care</li>
-      <li>Helped drive 7.9K+ Whatnot orders at a 4.9★ seller rating, plus additional sales on eBay Live</li>
-    </ul>
-    <div class="screenshots">
-      <img src="whatnot-waxnpacks-profile.jpg"
-           alt="WaxNPacks Whatnot shop profile showing 4.9 rating, 938 reviews, 7.8K sold, &lt;1d avg ship time">
-      <img src="ebay-waxnpacks-profile.jpg"
-           alt="Wax N Packs eBay profile showing 100% positive feedback, 2.1K items sold, and Top Rated Seller badge">
-    </div>
-  </div>
-</section>
-
-<section id="revenue">
-  <h2>Revenue &amp; Operations Snapshot</h2>
-  <p class="section-subtitle">High-level view of the multi-channel revenue I helped support.</p>
-  <div class="revenue-wrapper">
-    <div class="revenue-chart">
-      <h3 style="margin-top:0;font-size:18px;margin-bottom:10px;">Multi-Channel Revenue Mix (Approx.)</h3>
-      <div class="revenue-stack">
-        <div class="rev-block website">
-          <span class="rev-label">Website / DTC</span>
-          <div class="rev-bar">
-            <div class="rev-bar-fill" style="width:50%;"></div>
-          </div>
-          <span>~50%</span>
-        </div>
-        <div class="rev-block tiktok">
-          <span class="rev-label">TikTok Shop</span>
-          <div class="rev-bar">
-            <div class="rev-bar-fill" style="width:30%;"></div>
-          </div>
-          <span>~30%</span>
-        </div>
-        <div class="rev-block off">
-          <span class="rev-label">Off-Platform (Payments)</span>
-          <div class="rev-bar">
-            <div class="rev-bar-fill" style="width:20%;"></div>
-          </div>
-          <span>~20%</span>
-        </div>
-      </div>
-    </div>
-    <div class="revenue-text">
+      <div class="eyebrow">Role System • Built for Jonny</div>
+      <h1>Inventory & Operations Coordinator Dashboard</h1>
       <p>
-        Over roughly three years, I contributed heavily to a multi-channel operation that supported
-        <strong>$10M+ in total revenue</strong> across:
+        One page to run the day: customer service sweeps, surprise sets, inventory exceptions,
+        replacement logs, blockers, completed work, and end-of-day recap. This is your personal
+        control center for consistency, accuracy, loss control, and process improvement.
       </p>
-      <p>• Website / DTC store<br>
-         • TikTok Shop livestreams<br>
-         • Whatnot auctions<br>
-         • Off-platform payment channels</p>
-      <p>
-        My work touched livestream execution, content strategy, customer communication, packaging,
-        and basic CRM tracking—helping keep shows running smoothly while revenue scaled.
-      </p>
+      <div class="nav-actions" style="margin-top:18px;">
+        <button class="btn btn-primary" onclick="setTab('today')">Start Today</button>
+        <button class="btn" onclick="setTab('recap')">Generate Recap</button>
+      </div>
     </div>
+    <aside class="hero-side">
+      <h3>Daily Operating Loop</h3>
+      <p class="mini">1. Morning CS sweep across all accounts</p>
+      <p class="mini">2. Surprise sets / live prep</p>
+      <p class="mini">3. Admin logging + replacements</p>
+      <p class="mini">4. Inventory exceptions Tue/Wed/Thu</p>
+      <p class="mini">5. Final CS sweep + daily recap</p>
+    </aside>
+  </header>
+
+  <section class="metrics-grid" aria-label="Dashboard Metrics">
+    <div class="metric">
+      <div class="metric-label">Tasks Completed</div>
+      <div class="metric-number" id="metricTasks">0/0</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Open Issues</div>
+      <div class="metric-number" id="metricIssues">0</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Replacements Logged</div>
+      <div class="metric-number" id="metricReplacements">0</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Inventory Variances</div>
+      <div class="metric-number" id="metricVariances">0</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Blocked / Follow Up</div>
+      <div class="metric-number" id="metricBlocked">0</div>
+    </div>
+  </section>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="today" onclick="setTab('today')">Today</button>
+    <button class="tab" data-tab="cs" onclick="setTab('cs')">CS / Issues</button>
+    <button class="tab" data-tab="inventory" onclick="setTab('inventory')">Inventory</button>
+    <button class="tab" data-tab="replacements" onclick="setTab('replacements')">Replacements</button>
+    <button class="tab" data-tab="sets" onclick="setTab('sets')">Surprise Sets</button>
+    <button class="tab" data-tab="weekly" onclick="setTab('weekly')">Weekly Review</button>
+    <button class="tab" data-tab="recap" onclick="setTab('recap')">Daily Recap</button>
   </div>
-</section>
 
-<section id="marketplaces">
-  <h2>For Marketplaces &amp; Hiring Teams</h2>
-  <div class="marketplaces-box">
-    <p>
-      If you’re building or scaling a live commerce marketplace, I can bring:
-    </p>
-    <ul>
-      <li>Hands-on experience hosting and running hundreds of livestreams</li>
-      <li>A track record of $10M+ in multi-channel revenue supported</li>
-      <li>The ability to acquire, onboard, and coach sellers using proven frameworks</li>
-      <li>CRM-driven visibility into which sellers, shows, and segments are working—and why</li>
-    </ul>
-  </div>
-</section>
-
-<section id="testimonials">
-  <h2>Testimonials</h2>
-  <p class="section-subtitle">How people describe working with me on live commerce and growth.</p>
-  <div class="testimonials-grid">
-    <div class="testimonial-card">
-      <div class="testimonial-quote">
-        “Jonathan understands how to translate attention into revenue. He’s hands-on with streams,
-        content, and operations, which makes him rare in creator commerce.”
+  <section id="today" class="section active">
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">Today's Workflow</h2>
+            <p class="panel-sub">Track the actual day without jumping between a million tabs.</p>
+          </div>
+          <button class="btn btn-primary" onclick="addTask()">Add Task</button>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div>
+              <label>Area</label>
+              <select id="taskArea">
+                <option>Customer Service</option>
+                <option>Surprise Sets</option>
+                <option>Inventory</option>
+                <option>Admin</option>
+                <option>Studio Readiness</option>
+                <option>TikTok Shop</option>
+              </select>
+            </div>
+            <div>
+              <label>Account</label>
+              <select id="taskAccount">
+                <option>All</option>
+                <option>VR</option>
+                <option>PS</option>
+                <option>CK</option>
+                <option>TT-01</option>
+                <option>TT-02</option>
+                <option>TT-03</option>
+                <option>TT-04</option>
+              </select>
+            </div>
+            <div>
+              <label>Target Time</label>
+              <input id="taskTarget" placeholder="Example: 10:30 AM" />
+            </div>
+            <div>
+              <label>Status</label>
+              <select id="taskStatus">
+                <option>Not Started</option>
+                <option>In Progress</option>
+                <option>Completed</option>
+                <option>Follow Up</option>
+                <option>Blocked</option>
+              </select>
+            </div>
+            <div class="wide">
+              <label>Task</label>
+              <input id="taskText" placeholder="Example: Morning sweep across VR / PS / CK" />
+            </div>
+            <div class="wide">
+              <label>Notes</label>
+              <input id="taskNotes" placeholder="Anything important, blocker, or result" />
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Area</th><th>Account</th><th>Task</th><th>Target</th><th>Status</th><th>Notes</th><th></th></tr>
+            </thead>
+            <tbody id="taskRows"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="testimonial-name">
-        Live Commerce Partner • Collectibles
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">Focus Queue</h2>
+            <p class="panel-sub">What needs attention before the day ends.</p>
+          </div>
+        </div>
+        <div class="panel-body" id="focusQueue"></div>
       </div>
     </div>
-    <div class="testimonial-card">
-      <div class="testimonial-quote">
-        “He doesn’t just run shows—he builds systems. From break strategy to packaging workflows,
-        he made our operation feel organized, repeatable, and scalable.”
+  </section>
+
+  <section id="cs" class="section">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">Customer Service / Issues Tracker</h2>
+          <p class="panel-sub">Track what was resolved, what needs follow-up, and what could affect customer experience or TikTok score.</p>
+        </div>
+        <button class="btn btn-primary" onclick="addIssue()">Add Issue</button>
       </div>
-      <div class="testimonial-name">
-        E-Commerce Operator • Multi-Channel
+      <div class="panel-body">
+        <div class="form-grid">
+          <div>
+            <label>Account</label>
+            <select id="issueAccount"><option>VR</option><option>PS</option><option>CK</option></select>
+          </div>
+          <div>
+            <label>Channel</label>
+            <select id="issueChannel"><option>Shop Chat</option><option>Email</option><option>TikTok DM</option><option>Instagram DM</option><option>Gmail</option><option>Other</option></select>
+          </div>
+          <div>
+            <label>Customer / User</label>
+            <input id="issueCustomer" placeholder="Username, email, or order customer" />
+          </div>
+          <div>
+            <label>Risk</label>
+            <select id="issueRisk"><option>Low</option><option>Medium</option><option>High</option></select>
+          </div>
+          <div>
+            <label>Status</label>
+            <select id="issueStatus"><option>Follow Up</option><option>In Progress</option><option>Completed</option><option>Blocked</option><option>Needs Review</option></select>
+          </div>
+          <div>
+            <label>Issue Type</label>
+            <select id="issueType"><option>Missing Package</option><option>Wrong Item</option><option>Damaged Item</option><option>Refund / Return</option><option>Order Update</option><option>Replacement</option><option>Other</option></select>
+          </div>
+          <div class="wide">
+            <label>Issue</label>
+            <input id="issueText" placeholder="What happened?" />
+          </div>
+          <div class="wide">
+            <label>Next Action / Result</label>
+            <input id="issueNext" placeholder="What needs to happen next or how was it resolved?" />
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Account</th><th>Channel</th><th>Customer</th><th>Type</th><th>Issue</th><th>Status</th><th>Risk</th><th>Next Action</th><th></th></tr>
+          </thead>
+          <tbody id="issueRows"></tbody>
+        </table>
       </div>
     </div>
-    <div class="testimonial-card">
-      <div class="testimonial-quote">
-        “Jonathan has a great instinct for what viewers respond to and how to keep them engaged.
-        His feedback on hooks, pacing, and offers consistently moved the needle.”
+  </section>
+
+  <section id="inventory" class="section">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">Inventory Exception Tracker</h2>
+          <p class="panel-sub">Do not drown in counts. Track the items that need action: variance, mismatch, restock, possible loss, or naming issue.</p>
+        </div>
+        <button class="btn btn-primary" onclick="addInventory()">Add Item</button>
       </div>
-      <div class="testimonial-name">
-        Creator • TikTok &amp; Whatnot
+      <div class="panel-body">
+        <div class="form-grid">
+          <div>
+            <label>Studio / Account</label>
+            <select id="invStudio"><option>TT-01</option><option>TT-02</option><option>TT-03</option><option>TT-04</option><option>VR</option><option>PS</option><option>CK</option></select>
+          </div>
+          <div>
+            <label>Shopify Qty</label>
+            <input id="invShopify" type="number" placeholder="0" />
+          </div>
+          <div>
+            <label>Physical Qty</label>
+            <input id="invPhysical" type="number" placeholder="0" />
+          </div>
+          <div>
+            <label>Action Needed</label>
+            <select id="invAction"><option>No Action</option><option>Update Shopify</option><option>Investigate</option><option>Restock Studio</option><option>Possible Loss</option><option>Duplicate / Naming Issue</option><option>Replacement Related</option></select>
+          </div>
+          <div class="wide">
+            <label>Product</label>
+            <input id="invProduct" placeholder="Product name" />
+          </div>
+          <div class="wide">
+            <label>Notes</label>
+            <input id="invNotes" placeholder="What did you find? What needs to be fixed?" />
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Studio</th><th>Product</th><th>Shopify</th><th>Physical</th><th>Variance</th><th>Action</th><th>Notes</th><th></th></tr>
+          </thead>
+          <tbody id="inventoryRows"></tbody>
+        </table>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section id="contact">
-  <h2>Contact</h2>
-  <p class="section-subtitle">
-    Open to roles in live commerce, seller growth, inside sales / account executive roles at marketplaces, and e-commerce operations.
-  </p>
-  <p>Email: <a href="mailto:valenciabreaksllc@outlook.com">valenciabreaksllc@outlook.com</a></p>
-  <p>LinkedIn: <a href="https://linkedin.com/in/valenciajonathan" target="_blank">linkedin.com/in/valenciajonathan</a></p>
-</section>
+  <section id="replacements" class="section">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">Replacement + Loss Control Log</h2>
+          <p class="panel-sub">Log every replacement with root cause so you can prove loss prevention and find repeat issues.</p>
+        </div>
+        <button class="btn btn-primary" onclick="addReplacement()">Add Replacement</button>
+      </div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div>
+            <label>Date</label>
+            <input id="repDate" type="date" />
+          </div>
+          <div>
+            <label>Account</label>
+            <select id="repAccount"><option>VR</option><option>PS</option><option>CK</option></select>
+          </div>
+          <div>
+            <label>Order #</label>
+            <input id="repOrder" placeholder="Order number" />
+          </div>
+          <div>
+            <label>Market Value</label>
+            <input id="repValue" type="number" placeholder="0" />
+          </div>
+          <div>
+            <label>Status</label>
+            <select id="repStatus"><option>Logged</option><option>Needs Review</option><option>Completed</option><option>Blocked</option></select>
+          </div>
+          <div>
+            <label>Root Cause</label>
+            <select id="repRoot"><option>Packing Error</option><option>Inventory Error</option><option>Shipping Issue</option><option>Wrong Item</option><option>Missing Item</option><option>Damaged Item</option><option>Customer Error</option><option>Unknown</option></select>
+          </div>
+          <div class="wide">
+            <label>Reason / Items</label>
+            <input id="repReason" placeholder="What is being replaced and why?" />
+          </div>
+          <div class="wide">
+            <label>Notes</label>
+            <input id="repNotes" placeholder="Evidence, follow-up, or action taken" />
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Date</th><th>Account</th><th>Order</th><th>Reason</th><th>Root Cause</th><th>Value</th><th>Status</th><th>Notes</th><th></th></tr>
+          </thead>
+          <tbody id="replacementRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
-<footer>
-  © 2025 ValenciaBreaks LLC — Designed for recruiters, founders, and hiring teams.
-</footer>
+  <section id="sets" class="section">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">Surprise Set Prep Log</h2>
+          <p class="panel-sub">Use this to prove what was built, uploaded, blocked, or needs review. Your SetSheet tool can stay separate for now.</p>
+        </div>
+        <button class="btn btn-primary" onclick="addSet()">Add Set</button>
+      </div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div>
+            <label>Date</label>
+            <input id="setDate" type="date" />
+          </div>
+          <div>
+            <label>Account</label>
+            <select id="setAccount"><option>VR</option><option>PS</option><option>CK</option></select>
+          </div>
+          <div>
+            <label>Stream / Host</label>
+            <input id="setStream" placeholder="Example: 5PM stream" />
+          </div>
+          <div>
+            <label>Status</label>
+            <select id="setStatus"><option>Completed</option><option>In Progress</option><option>Follow Up</option><option>Blocked</option></select>
+          </div>
+          <div>
+            <label>Total Products</label>
+            <input id="setProducts" type="number" placeholder="0" />
+          </div>
+          <div>
+            <label>Unknown Items</label>
+            <input id="setUnknown" type="number" placeholder="0" />
+          </div>
+          <div class="wide">
+            <label>Notes</label>
+            <input id="setNotes" placeholder="Uploaded? Any blockers? Any product issues?" />
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Date</th><th>Account</th><th>Stream</th><th>Products</th><th>Unknown</th><th>Status</th><th>Notes</th><th></th></tr>
+          </thead>
+          <tbody id="setRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
-<div id="lightbox"><img src=""></div>
+  <section id="weekly" class="section">
+    <div class="grid-3">
+      <div class="panel">
+        <div class="panel-head"><div><h2 class="panel-title">Consistency</h2><p class="panel-sub">What got done without gaps.</p></div></div>
+        <div class="panel-body">
+          <div class="quick-card"><strong>Daily Tasks Completed</strong><p id="weeklyTasks">0 completed tasks logged.</p></div>
+          <div class="quick-card"><strong>Surprise Sets</strong><p id="weeklySets">0 surprise set records logged.</p></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2 class="panel-title">Accuracy</h2><p class="panel-sub">Inventory exceptions and corrections.</p></div></div>
+        <div class="panel-body">
+          <div class="quick-card"><strong>Inventory Variances</strong><p id="weeklyInventory">0 variances logged.</p></div>
+          <div class="quick-card"><strong>Open Actions</strong><p id="weeklyOpen">0 open blockers/follow-ups.</p></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2 class="panel-title">Loss Control</h2><p class="panel-sub">Replacement volume, dollar impact, and root causes.</p></div></div>
+        <div class="panel-body">
+          <div class="quick-card"><strong>Replacements</strong><p id="weeklyReps">0 replacements logged.</p></div>
+          <div class="quick-card"><strong>Estimated Value</strong><p id="weeklyValue">$0 estimated replacement value.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="recap" class="section">
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">Auto Daily Recap</h2>
+            <p class="panel-sub">Generated from what you logged today. Copy it at the end of your shift.</p>
+          </div>
+          <button class="btn btn-primary" onclick="copyRecap()">Copy</button>
+        </div>
+        <div class="panel-body">
+          <textarea id="recapText" class="recap-box" readonly></textarea>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2 class="panel-title">Performance Proof</h2><p class="panel-sub">Keep this in mind for reviews and raise path.</p></div></div>
+        <div class="panel-body">
+          <div class="quick-card"><strong>Process Improvement</strong><p>Built a one-page command center to reduce tab switching and centralize daily ops.</p></div>
+          <div class="quick-card"><strong>Loss Control</strong><p>Replacement logs track root cause, order, value, and follow-up status.</p></div>
+          <div class="quick-card"><strong>Inventory Accuracy</strong><p>Inventory tracker focuses on exceptions, variances, and actions needed.</p></div>
+          <div class="quick-card"><strong>Ownership</strong><p>Daily recap creates a clean paper trail of completed work, blockers, and wins.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="footer-note">Saved locally in this browser using localStorage. Later, this can connect to Google Sheets, Shopify exports, or a database.</p>
+</main>
 
 <script>
-  const lightbox = document.getElementById("lightbox");
-  const lightboxImg = lightbox.querySelector("img");
-  document.querySelectorAll(".screenshots img").forEach(img => {
-    img.addEventListener("click", () => {
-      lightboxImg.src = img.src;
-      lightbox.style.display = "flex";
-    });
-  });
-  lightbox.addEventListener("click", () => {
-    lightbox.style.display = "none";
-  });
+  const todayISO = new Date().toISOString().slice(0, 10);
 
-  const metricNumbers = document.querySelectorAll(".metric-number[data-target]");
-  let metricsAnimated = false;
-  function animateMetrics() {
-    if (metricsAnimated) return;
-    const metricsSection = document.getElementById("metrics");
-    const rect = metricsSection.getBoundingClientRect();
-    if (rect.top < window.innerHeight - 100) {
-      metricsAnimated = true;
-      metricNumbers.forEach(el => {
-        const target = parseFloat(el.getAttribute("data-target"));
-        const prefix = el.getAttribute("data-prefix") || "";
-        const suffix = el.getAttribute("data-suffix") || "";
-        const duration = 1200;
-        const startTime = performance.now();
-        function update(now) {
-          const progress = Math.min((now - startTime) / duration, 1);
-          const decimals = (target % 1 === 0) ? 0 : 2;
-          const value = (target * progress).toFixed(decimals);
-          el.textContent = prefix + value + suffix;
-          if (progress < 1) requestAnimationFrame(update);
-        }
-        requestAnimationFrame(update);
-      });
+  const defaultData = {
+    tasks: [
+      { id: cryptoId(), area: "Customer Service", account: "All", task: "Morning sweep across VR / PS / CK", target: "10:30 AM", status: "Not Started", notes: "Shop chat, email, DMs, TikTok issues" },
+      { id: cryptoId(), area: "Surprise Sets", account: "All", task: "Build / upload surprise sets", target: "12:00 PM", status: "Not Started", notes: "Use SetSheet workflow" },
+      { id: cryptoId(), area: "Admin", account: "All", task: "Update logs, replacements, and notes", target: "1:00 PM", status: "Not Started", notes: "Keep records clean" },
+      { id: cryptoId(), area: "Customer Service", account: "All", task: "Final CS sweep", target: "4:45 PM", status: "Not Started", notes: "Make sure nothing urgent is sitting" },
+      { id: cryptoId(), area: "Admin", account: "All", task: "End-of-day recap", target: "5:15 PM", status: "Not Started", notes: "Copy recap before ending shift" }
+    ],
+    issues: [],
+    inventory: [],
+    replacements: [],
+    sets: []
+  };
+
+  let data = loadData();
+
+  function cryptoId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return String(Date.now()) + Math.random().toString(16).slice(2);
+  }
+
+  function loadData() {
+    const saved = localStorage.getItem("jonnyOpsCommandCenter");
+    if (!saved) return structuredClone(defaultData);
+    try {
+      const parsed = JSON.parse(saved);
+      return { ...structuredClone(defaultData), ...parsed };
+    } catch (e) {
+      return structuredClone(defaultData);
     }
   }
-  window.addEventListener("scroll", animateMetrics);
-  window.addEventListener("load", animateMetrics);
+
+  function saveData() {
+    localStorage.setItem("jonnyOpsCommandCenter", JSON.stringify(data));
+    render();
+  }
+
+  function setTab(tabId) {
+    document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.tab === tabId));
+    document.querySelectorAll(".section").forEach(sec => sec.classList.toggle("active", sec.id === tabId));
+    if (tabId === "recap") updateRecap();
+  }
+
+  function statusClass(status) {
+    if (["Completed", "Logged"].includes(status)) return "done";
+    if (["In Progress", "Not Started"].includes(status)) return "progress";
+    if (["Blocked"].includes(status)) return "blocked";
+    if (["Follow Up"].includes(status)) return "follow";
+    if (["Needs Review"].includes(status)) return "review";
+    return "neutral";
+  }
+
+  function statusPill(status) {
+    return `<span class="pill ${statusClass(status)}">${escapeHtml(status)}</span>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function val(id) {
+    return document.getElementById(id).value.trim();
+  }
+
+  function clear(ids) {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.type === "date") el.value = todayISO;
+      else if (el.tagName === "SELECT") el.selectedIndex = 0;
+      else el.value = "";
+    });
+  }
+
+  function addTask() {
+    const task = val("taskText");
+    if (!task) return alert("Add a task first.");
+    data.tasks.unshift({
+      id: cryptoId(),
+      area: val("taskArea"),
+      account: val("taskAccount"),
+      task,
+      target: val("taskTarget") || "",
+      status: val("taskStatus"),
+      notes: val("taskNotes")
+    });
+    clear(["taskText", "taskTarget", "taskNotes"]);
+    saveData();
+  }
+
+  function addIssue() {
+    const issue = val("issueText");
+    if (!issue) return alert("Add the issue first.");
+    data.issues.unshift({
+      id: cryptoId(),
+      account: val("issueAccount"),
+      channel: val("issueChannel"),
+      customer: val("issueCustomer"),
+      type: val("issueType"),
+      issue,
+      status: val("issueStatus"),
+      risk: val("issueRisk"),
+      next: val("issueNext")
+    });
+    clear(["issueCustomer", "issueText", "issueNext"]);
+    saveData();
+  }
+
+  function addInventory() {
+    const product = val("invProduct");
+    if (!product) return alert("Add a product first.");
+    data.inventory.unshift({
+      id: cryptoId(),
+      studio: val("invStudio"),
+      product,
+      shopify: Number(val("invShopify") || 0),
+      physical: Number(val("invPhysical") || 0),
+      action: val("invAction"),
+      notes: val("invNotes")
+    });
+    clear(["invProduct", "invShopify", "invPhysical", "invNotes"]);
+    saveData();
+  }
+
+  function addReplacement() {
+    const reason = val("repReason");
+    if (!reason) return alert("Add the replacement reason/items first.");
+    data.replacements.unshift({
+      id: cryptoId(),
+      date: val("repDate") || todayISO,
+      account: val("repAccount"),
+      order: val("repOrder"),
+      reason,
+      root: val("repRoot"),
+      value: Number(val("repValue") || 0),
+      status: val("repStatus"),
+      notes: val("repNotes")
+    });
+    clear(["repOrder", "repReason", "repValue", "repNotes"]);
+    saveData();
+  }
+
+  function addSet() {
+    const stream = val("setStream");
+    if (!stream) return alert("Add the stream or set name first.");
+    data.sets.unshift({
+      id: cryptoId(),
+      date: val("setDate") || todayISO,
+      account: val("setAccount"),
+      stream,
+      products: Number(val("setProducts") || 0),
+      unknown: Number(val("setUnknown") || 0),
+      status: val("setStatus"),
+      notes: val("setNotes")
+    });
+    clear(["setStream", "setProducts", "setUnknown", "setNotes"]);
+    saveData();
+  }
+
+  function updateItem(collection, id, key, value) {
+    data[collection] = data[collection].map(item => item.id === id ? { ...item, [key]: value } : item);
+    saveData();
+  }
+
+  function deleteItem(collection, id) {
+    if (!confirm("Delete this row?")) return;
+    data[collection] = data[collection].filter(item => item.id !== id);
+    saveData();
+  }
+
+  function renderTasks() {
+    const rows = document.getElementById("taskRows");
+    if (!data.tasks.length) {
+      rows.innerHTML = `<tr><td colspan="7"><div class="empty-state">No tasks yet.</div></td></tr>`;
+      return;
+    }
+    rows.innerHTML = data.tasks.map(t => `
+      <tr>
+        <td>${escapeHtml(t.area)}</td>
+        <td>${escapeHtml(t.account)}</td>
+        <td><strong>${escapeHtml(t.task)}</strong></td>
+        <td>${escapeHtml(t.target)}</td>
+        <td>
+          <select onchange="updateItem('tasks','${t.id}','status',this.value)">
+            ${["Not Started","In Progress","Completed","Follow Up","Blocked"].map(s => `<option ${t.status===s?"selected":""}>${s}</option>`).join("")}
+          </select>
+        </td>
+        <td>${escapeHtml(t.notes)}</td>
+        <td><button class="action-btn" onclick="deleteItem('tasks','${t.id}')">Delete</button></td>
+      </tr>
+    `).join("");
+  }
+
+  function renderIssues() {
+    const rows = document.getElementById("issueRows");
+    if (!data.issues.length) {
+      rows.innerHTML = `<tr><td colspan="9"><div class="empty-state">No CS issues logged yet.</div></td></tr>`;
+      return;
+    }
+    rows.innerHTML = data.issues.map(i => `
+      <tr>
+        <td><strong>${escapeHtml(i.account)}</strong></td>
+        <td>${escapeHtml(i.channel)}</td>
+        <td>${escapeHtml(i.customer)}</td>
+        <td>${escapeHtml(i.type)}</td>
+        <td>${escapeHtml(i.issue)}</td>
+        <td>${statusPill(i.status)}</td>
+        <td>${escapeHtml(i.risk)}</td>
+        <td>${escapeHtml(i.next)}</td>
+        <td><button class="action-btn" onclick="deleteItem('issues','${i.id}')">Delete</button></td>
+      </tr>
+    `).join("");
+  }
+
+  function renderInventory() {
+    const rows = document.getElementById("inventoryRows");
+    if (!data.inventory.length) {
+      rows.innerHTML = `<tr><td colspan="8"><div class="empty-state">No inventory exceptions logged yet.</div></td></tr>`;
+      return;
+    }
+    rows.innerHTML = data.inventory.map(i => {
+      const variance = Number(i.physical) - Number(i.shopify);
+      return `
+        <tr>
+          <td><strong>${escapeHtml(i.studio)}</strong></td>
+          <td>${escapeHtml(i.product)}</td>
+          <td>${escapeHtml(i.shopify)}</td>
+          <td>${escapeHtml(i.physical)}</td>
+          <td><strong>${variance}</strong></td>
+          <td>${statusPill(i.action === "No Action" ? "Completed" : i.action)}</td>
+          <td>${escapeHtml(i.notes)}</td>
+          <td><button class="action-btn" onclick="deleteItem('inventory','${i.id}')">Delete</button></td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function renderReplacements() {
+    const rows = document.getElementById("replacementRows");
+    if (!data.replacements.length) {
+      rows.innerHTML = `<tr><td colspan="9"><div class="empty-state">No replacements logged yet.</div></td></tr>`;
+      return;
+    }
+    rows.innerHTML = data.replacements.map(r => `
+      <tr>
+        <td>${escapeHtml(r.date)}</td>
+        <td><strong>${escapeHtml(r.account)}</strong></td>
+        <td>${escapeHtml(r.order)}</td>
+        <td>${escapeHtml(r.reason)}</td>
+        <td>${escapeHtml(r.root)}</td>
+        <td>$${Number(r.value || 0).toFixed(2)}</td>
+        <td>${statusPill(r.status)}</td>
+        <td>${escapeHtml(r.notes)}</td>
+        <td><button class="action-btn" onclick="deleteItem('replacements','${r.id}')">Delete</button></td>
+      </tr>
+    `).join("");
+  }
+
+  function renderSets() {
+    const rows = document.getElementById("setRows");
+    if (!data.sets.length) {
+      rows.innerHTML = `<tr><td colspan="8"><div class="empty-state">No surprise sets logged yet.</div></td></tr>`;
+      return;
+    }
+    rows.innerHTML = data.sets.map(s => `
+      <tr>
+        <td>${escapeHtml(s.date)}</td>
+        <td><strong>${escapeHtml(s.account)}</strong></td>
+        <td>${escapeHtml(s.stream)}</td>
+        <td>${escapeHtml(s.products)}</td>
+        <td>${escapeHtml(s.unknown)}</td>
+        <td>${statusPill(s.status)}</td>
+        <td>${escapeHtml(s.notes)}</td>
+        <td><button class="action-btn" onclick="deleteItem('sets','${s.id}')">Delete</button></td>
+      </tr>
+    `).join("");
+  }
+
+  function updateMetrics() {
+    const completedTasks = data.tasks.filter(t => t.status === "Completed").length;
+    const openIssues = data.issues.filter(i => i.status !== "Completed").length;
+    const variances = data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").length;
+    const blocked = [
+      ...data.tasks.filter(t => ["Blocked", "Follow Up"].includes(t.status)),
+      ...data.issues.filter(i => ["Blocked", "Follow Up", "Needs Review"].includes(i.status)),
+      ...data.replacements.filter(r => ["Blocked", "Needs Review"].includes(r.status)),
+      ...data.sets.filter(s => ["Blocked", "Follow Up"].includes(s.status))
+    ].length;
+
+    document.getElementById("metricTasks").textContent = `${completedTasks}/${data.tasks.length}`;
+    document.getElementById("metricIssues").textContent = openIssues;
+    document.getElementById("metricReplacements").textContent = data.replacements.length;
+    document.getElementById("metricVariances").textContent = variances;
+    document.getElementById("metricBlocked").textContent = blocked;
+
+    document.getElementById("weeklyTasks").textContent = `${completedTasks} completed out of ${data.tasks.length} tasks logged.`;
+    document.getElementById("weeklySets").textContent = `${data.sets.length} surprise set records logged.`;
+    document.getElementById("weeklyInventory").textContent = `${variances} inventory exceptions / variances logged.`;
+    document.getElementById("weeklyOpen").textContent = `${blocked} open blockers, reviews, or follow-ups.`;
+    document.getElementById("weeklyReps").textContent = `${data.replacements.length} replacements logged.`;
+    const totalValue = data.replacements.reduce((sum, r) => sum + Number(r.value || 0), 0);
+    document.getElementById("weeklyValue").textContent = `$${totalValue.toFixed(2)} estimated replacement value.`;
+  }
+
+  function renderFocusQueue() {
+    const focus = document.getElementById("focusQueue");
+    const openTasks = data.tasks.filter(t => t.status !== "Completed").slice(0, 4);
+    const riskyIssues = data.issues.filter(i => i.status !== "Completed").slice(0, 4);
+    const inventoryActions = data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").slice(0, 3);
+
+    const blocks = [];
+    if (openTasks.length) blocks.push(`<div class="quick-card"><strong>Open Tasks</strong><p>${openTasks.map(t => `${escapeHtml(t.area)}: ${escapeHtml(t.task)} (${escapeHtml(t.status)})`).join("<br>")}</p></div>`);
+    if (riskyIssues.length) blocks.push(`<div class="quick-card"><strong>CS Follow-Ups</strong><p>${riskyIssues.map(i => `${escapeHtml(i.account)} ${escapeHtml(i.channel)}: ${escapeHtml(i.customer)} — ${escapeHtml(i.next || i.issue)}`).join("<br>")}</p></div>`);
+    if (inventoryActions.length) blocks.push(`<div class="quick-card"><strong>Inventory Actions</strong><p>${inventoryActions.map(i => `${escapeHtml(i.studio)}: ${escapeHtml(i.product)} — ${escapeHtml(i.action)}`).join("<br>")}</p></div>`);
+
+    blocks.push(`<div class="quick-card"><strong>End-of-Day Reminder</strong><p>Before leaving: final CS sweep, log replacements, update inventory exceptions, copy daily recap.</p></div>`);
+    focus.innerHTML = blocks.join("");
+  }
+
+  function updateRecap() {
+    const completed = data.tasks.filter(t => t.status === "Completed").map(t => `- ${t.area} (${t.account}): ${t.task}`).join("\n") || "- None logged yet";
+    const open = data.tasks.filter(t => t.status !== "Completed").map(t => `- ${t.area} (${t.account}): ${t.task} — ${t.status}`).join("\n") || "- No open tasks";
+    const issues = data.issues.filter(i => i.status !== "Completed").map(i => `- ${i.account} ${i.channel}: ${i.customer || "Customer"} — ${i.issue}; next: ${i.next || "Needs update"}`).join("\n") || "- No open CS issues";
+    const reps = data.replacements.map(r => `- ${r.account} order ${r.order || "N/A"}: ${r.reason} | Root cause: ${r.root} | Value: $${Number(r.value || 0).toFixed(2)} | ${r.status}`).join("\n") || "- No replacements logged";
+    const inv = data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").map(i => `- ${i.studio}: ${i.product} | Shopify ${i.shopify}, Physical ${i.physical}, Variance ${Number(i.physical) - Number(i.shopify)} | Action: ${i.action}`).join("\n") || "- No inventory exceptions logged";
+    const sets = data.sets.map(s => `- ${s.account} ${s.stream}: ${s.products} products, ${s.unknown} unknown items | ${s.status}`).join("\n") || "- No surprise sets logged";
+    const totalValue = data.replacements.reduce((sum, r) => sum + Number(r.value || 0), 0);
+
+    const recap = `Daily Recap — ${new Date().toLocaleDateString()}\n\nCompleted Today:\n${completed}\n\nStill Open / Follow-Up:\n${open}\n\nCustomer Service Issues:\n${issues}\n\nReplacements / Loss Control:\n${reps}\n\nInventory Exceptions:\n${inv}\n\nSurprise Sets:\n${sets}\n\nMetrics:\n- Tasks completed: ${data.tasks.filter(t => t.status === "Completed").length}/${data.tasks.length}\n- Open CS issues: ${data.issues.filter(i => i.status !== "Completed").length}\n- Replacements logged: ${data.replacements.length}\n- Estimated replacement value: $${totalValue.toFixed(2)}\n- Inventory exceptions: ${data.inventory.filter(i => Number(i.physical) !== Number(i.shopify) || i.action !== "No Action").length}\n\nBiggest Win:\n- Add today's biggest win here.\n\nMain Blocker:\n- Add today's main blocker here.`;
+
+    document.getElementById("recapText").value = recap;
+  }
+
+  function copyRecap() {
+    updateRecap();
+    const text = document.getElementById("recapText").value;
+    navigator.clipboard.writeText(text).then(() => alert("Daily recap copied."));
+  }
+
+  function exportData() {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `jonny-ops-backup-${todayISO}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function resetToday() {
+    if (!confirm("This clears today's local dashboard data. Export a backup first if you want to keep it. Continue?")) return;
+    data = structuredClone(defaultData);
+    saveData();
+  }
+
+  function render() {
+    renderTasks();
+    renderIssues();
+    renderInventory();
+    renderReplacements();
+    renderSets();
+    updateMetrics();
+    renderFocusQueue();
+    updateRecap();
+  }
+
+  document.getElementById("repDate").value = todayISO;
+  document.getElementById("setDate").value = todayISO;
+
+  render();
 </script>
 </body>
 </html>
