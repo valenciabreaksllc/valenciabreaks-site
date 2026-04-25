@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OP Command Center</title>
+  <title>OP Inventory & Operations Coordinator</title>
   <style>
     :root{--bg:#f5f5f3;--text:#1f1f1f;--muted:#6f6f6f;--line:#d8d8d5;--line-dark:#b9b9b4;--dark:#333;--header:#3f3f3f;--green:#c6efce;--green-text:#006100;--yellow:#fff2cc;--yellow-text:#7f6000;--red:#ffc7ce;--red-text:#9c0006;--blue:#cfe2f3;--blue-text:#073763;--pink:#f4cccc;--pink-text:#990000;--orange:#fce4d6;--orange-text:#c65911}
     *{box-sizing:border-box}
@@ -97,7 +97,7 @@
   <div id="lockScreen" class="lock-screen">
     <div class="lock-card">
       <div class="lock-mark">JV</div>
-      <h1>OP Command Center</h1>
+      <h1>OP Inventory & Operations Coordinator</h1>
       <p>Private internal dashboard. Enter the password to unlock your workspace.</p>
       <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" />
       <button id="unlockButton" class="btn btn-dark" style="width:100%;">Unlock workspace</button>
@@ -108,7 +108,7 @@
   <div id="appShell" class="app locked-blur">
     <aside class="sidebar">
       <div class="workspace-title">
-        <strong>OP Command Center</strong>
+        <strong>OP Inventory & Operations Coordinator</strong>
         <span>Personal ops workspace (local-only)</span>
       </div>
 
@@ -143,7 +143,7 @@
     <main class="main">
       <div class="topbar">
         <div>
-          <h1>OP Command Center</h1>
+          <h1>OP Inventory & Operations Coordinator</h1>
           <div class="subtitle">Simple, clean, familiar—like Notion + Google Sheets. Everything saves to this browser only.</div>
         </div>
         <div class="actions">
@@ -386,9 +386,115 @@
     </main>
   </div>
 
+  <!-- Supabase CDN (vanilla JS) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script>
     const PASSWORD = 'opcomics';
     const STORAGE_PREFIX = 'opcc.v1.';
+    
+    // ==========================
+    // Supabase: Live Work Queue
+    // ==========================
+    // Paste your project credentials here.
+    // The site will still work without Supabase (localStorage-only) if these are blank.
+    const SUPABASE_URL = "https://qwfubfhwserfwxqiycyy.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
+    const SUPABASE_TABLE_WORK_QUEUE = "work_queue";
+
+    const supabaseClient = (() => {
+      try {
+        const hasCreds = SUPABASE_URL && SUPABASE_ANON_KEY &&
+          SUPABASE_URL !== "PASTE_SUPABASE_URL_HERE" &&
+          SUPABASE_ANON_KEY !== "PASTE_SUPABASE_ANON_KEY_HERE";
+        const lib = window.supabase;
+        if(!hasCreds) return null;
+        if(!lib || typeof lib.createClient !== 'function') return null;
+        return lib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      } catch {
+        return null;
+      }
+    })();
+
+    function supabaseEnabled(){ return !!supabaseClient; }
+
+    function queueRowToDb(r){
+      return {
+        id: r.id,
+        received_time: r.receivedTime || '',
+        source: r.source || '',
+        account: r.account || '',
+        customer: r.customer || '',
+        order_number: r.orderNumber || '',
+        issue_type: r.issueType || '',
+        priority: r.priority || '',
+        status: r.status || '',
+        next_action: r.nextAction || '',
+        send_to: r.sendTo || '',
+        notes: r.notes || ''
+      };
+    }
+
+    function dbToQueueRow(row){
+      return {
+        id: row.id,
+        receivedTime: row.received_time || '',
+        source: row.source || 'Manual',
+        account: row.account || 'All',
+        customer: row.customer || '',
+        orderNumber: row.order_number || '',
+        issueType: row.issue_type || 'General Question',
+        priority: row.priority || 'Medium',
+        status: row.status || 'New',
+        nextAction: row.next_action || '',
+        sendTo: row.send_to || 'Daily Follow-Up',
+        notes: row.notes || ''
+      };
+    }
+
+    async function supabaseLoadWorkQueue(){
+      if(!supabaseEnabled()) return null;
+      const { data, error } = await supabaseClient
+        .from(SUPABASE_TABLE_WORK_QUEUE)
+        .select('*');
+      if(error) throw error;
+      if(!Array.isArray(data)) return [];
+      return data.map(dbToQueueRow);
+    }
+
+    async function supabaseInsertWorkQueueRow(r){
+      if(!supabaseEnabled()) return;
+      const payload = queueRowToDb(r);
+      const { error } = await supabaseClient
+        .from(SUPABASE_TABLE_WORK_QUEUE)
+        .insert(payload);
+      if(error) throw error;
+    }
+
+    async function supabaseUpsertWorkQueueRow(r){
+      if(!supabaseEnabled()) return;
+      const payload = queueRowToDb(r);
+      const { error } = await supabaseClient
+        .from(SUPABASE_TABLE_WORK_QUEUE)
+        .upsert(payload, { onConflict: 'id' });
+      if(error) throw error;
+    }
+
+    async function supabaseDeleteWorkQueueRow(id){
+      if(!supabaseEnabled()) return;
+      const { error } = await supabaseClient
+        .from(SUPABASE_TABLE_WORK_QUEUE)
+        .delete()
+        .eq('id', id);
+      if(error) throw error;
+    }
+
+    // Debounced updates to avoid spamming Supabase while editing.
+    const queueSyncTimers = {};
+    function queueSyncDebounced(id, fn){
+      if(queueSyncTimers[id]) clearTimeout(queueSyncTimers[id]);
+      queueSyncTimers[id] = setTimeout(() => { fn(); }, 350);
+    }
     const OPTIONS = {source:['VR Email','TikTok Shop Chat','TikTok DM','Instagram DM','TikTok Refund','TikTok Return','Shopify','Manual'],account:['All','VR','PS','CK'],issueType:['Missing Item','Wrong Item','Missing Package','Damaged Item','Refund Request','Return Request','Order Update','Inventory Issue','Surprise Set Issue','General Question'],priority:['Low','Medium','High','Urgent'],queueStatus:['New','In Progress','Needs Review','Follow Up','Waiting on Customer','Waiting on Team','Resolved'],sendTo:['Daily Follow-Up','Issues Caught + Resolved','Replacement / Loss Log','Inventory Exception','Weekly Review'],simpleStatus:['Not Started','In Progress','Needs Review','Follow Up','Completed'],yesNo:['No','Yes']};
     function $(s,r){return(r||document).querySelector(s)} function $all(s,r){return Array.from((r||document).querySelectorAll(s))}
     function lsKey(k){return STORAGE_PREFIX+k} function loadJSON(k,f){try{const raw=localStorage.getItem(lsKey(k));return raw?JSON.parse(raw):f}catch{return f}} function saveJSON(k,v){localStorage.setItem(lsKey(k),JSON.stringify(v))}
@@ -407,7 +513,7 @@
     function loadAll(){Object.keys(store).forEach(k=>{store[k].rows=loadJSON(store[k].key,[])})} function saveAll(){Object.keys(store).forEach(k=>saveJSON(store[k].key,store[k].rows))}
     let saveTimer=null; function scheduleSaveAll(){if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>saveAll(),150)}
     let selectedQueueRowId=null;
-    function renderQueue(){const tb=$('#queueTable tbody');tb.innerHTML='';store.queue.rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.dataset.id=r.id;tr.addEventListener('click',()=>{selectedQueueRowId=r.id;$all('#queueTable tbody tr').forEach(x=>x.style.boxShadow='');tr.style.boxShadow='inset 0 0 0 2px #b9b9b4'});tr.appendChild(makeTdText(r.receivedTime,()=>{r.receivedTime=tr.children[0].textContent}));let td=document.createElement('td');let s=buildSelect(OPTIONS.source,r.source,'',null);s.addEventListener('change',()=>{r.source=s.value;scheduleSaveAll()});td.appendChild(s);tr.appendChild(td);td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.customer,()=>{r.customer=tr.children[3].textContent}));tr.appendChild(makeTdText(r.orderNumber,()=>{r.orderNumber=tr.children[4].textContent}));td=document.createElement('td');let it=buildSelect(OPTIONS.issueType,r.issueType,'',null);it.addEventListener('change',()=>{r.issueType=it.value;scheduleSaveAll()});td.appendChild(it);tr.appendChild(td);td=document.createElement('td');let p=buildSelect(OPTIONS.priority,r.priority,'priority',priorityClass);p.addEventListener('change',()=>{r.priority=p.value;scheduleSaveAll();updateMetrics()});td.appendChild(p);tr.appendChild(td);td=document.createElement('td');let st=buildSelect(OPTIONS.queueStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics()});td.appendChild(st);tr.appendChild(td);tr.appendChild(makeTdText(r.nextAction,()=>{r.nextAction=tr.children[8].textContent}));td=document.createElement('td');let send=buildSelect(OPTIONS.sendTo,r.sendTo,'',null);send.addEventListener('change',()=>{r.sendTo=send.value;scheduleSaveAll()});td.appendChild(send);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[10].textContent}));tr.appendChild(makeTdDelete(()=>{store.queue.rows.splice(i,1);if(selectedQueueRowId===r.id)selectedQueueRowId=null;scheduleSaveAll();renderQueue();updateMetrics()}));tb.appendChild(tr)})}
+    function renderQueue(){const tb=$('#queueTable tbody');tb.innerHTML='';store.queue.rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.dataset.id=r.id;tr.addEventListener('click',()=>{selectedQueueRowId=r.id;$all('#queueTable tbody tr').forEach(x=>x.style.boxShadow='');tr.style.boxShadow='inset 0 0 0 2px #b9b9b4'});tr.appendChild(makeTdText(r.receivedTime,()=>{r.receivedTime=tr.children[0].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));let td=document.createElement('td');let s=buildSelect(OPTIONS.source,r.source,'',null);s.addEventListener('change',()=>{r.source=s.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(s);tr.appendChild(td);td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.customer,()=>{r.customer=tr.children[3].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));tr.appendChild(makeTdText(r.orderNumber,()=>{r.orderNumber=tr.children[4].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let it=buildSelect(OPTIONS.issueType,r.issueType,'',null);it.addEventListener('change',()=>{r.issueType=it.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(it);tr.appendChild(td);td=document.createElement('td');let p=buildSelect(OPTIONS.priority,r.priority,'priority',priorityClass);p.addEventListener('change',()=>{r.priority=p.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(p);tr.appendChild(td);td=document.createElement('td');let st=buildSelect(OPTIONS.queueStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(st);tr.appendChild(td);tr.appendChild(makeTdText(r.nextAction,()=>{r.nextAction=tr.children[8].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let send=buildSelect(OPTIONS.sendTo,r.sendTo,'',null);send.addEventListener('change',()=>{r.sendTo=send.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(send);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[10].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));tr.appendChild(makeTdDelete(()=>{const id=r.id;store.queue.rows.splice(i,1);if(selectedQueueRowId===id)selectedQueueRowId=null;scheduleSaveAll();renderQueue();updateMetrics();supabaseDeleteWorkQueueRow(id).catch(()=>{})}));tb.appendChild(tr)})}
     function renderWorkflowTable(id,key,hasTarget){const tb=$('#'+id+' tbody');tb.innerHTML='';const rows=store[key].rows;rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.item,()=>{r.item=tr.children[0].textContent}));let td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.details,()=>{r.details=tr.children[2].textContent}));td=document.createElement('td');let st=buildSelect(OPTIONS.simpleStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics()});td.appendChild(st);tr.appendChild(td);if(hasTarget){tr.appendChild(makeTdText(r.target,()=>{r.target=tr.children[4].textContent}));tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[5].textContent}))}else{tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[4].textContent}))}tr.appendChild(makeTdDelete(()=>{rows.splice(i,1);scheduleSaveAll();renderAllTables();updateMetrics()}));tb.appendChild(tr)})}
     function renderIssues(){const tb=$('#issuesTable tbody');tb.innerHTML='';store.issues.rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.date,()=>{r.date=tr.children[0].textContent}));let td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.issue,()=>{r.issue=tr.children[2].textContent}));tr.appendChild(makeTdText(r.actionTaken,()=>{r.actionTaken=tr.children[3].textContent}));td=document.createElement('td');let t=buildSelect(['CS','Inventory','Replacement','Surprise Set','Studio Readiness','Other'],r.type,'',null);t.addEventListener('change',()=>{r.type=t.value;scheduleSaveAll()});td.appendChild(t);tr.appendChild(td);tr.appendChild(makeTdNumber(r.saved,()=>{r.saved=tr.children[5].textContent}));td=document.createElement('td');let fu=buildSelect(OPTIONS.yesNo,r.followUpNeeded,'',null);fu.addEventListener('change',()=>{r.followUpNeeded=fu.value;scheduleSaveAll()});td.appendChild(fu);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[7].textContent}));tr.appendChild(makeTdDelete(()=>{store.issues.rows.splice(i,1);scheduleSaveAll();renderIssues();updateMetrics()}));tb.appendChild(tr)})}
     function renderTemplates(){const tb=$('#csTemplateTable tbody');tb.innerHTML='';const f=['name','shortcut','category','trigger','requiresRefund','requiresReview','finalAction','internalNotes','responseStarter'];store.templates.rows.forEach((r,i)=>{const tr=document.createElement('tr');f.forEach(k=>{const td=makeTdText(r[k],()=>{r[k]=td.textContent});tr.appendChild(td)});tr.appendChild(makeTdDelete(()=>{store.templates.rows.splice(i,1);scheduleSaveAll();renderTemplates()}));tb.appendChild(tr)})}
@@ -429,8 +535,8 @@
     function assistantRecap(){$('#assistantOutput').value=buildRecapText();$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
     function assistantImprove(){const lines=['Suggest Process Improvement:','','- Require every new Live Work Queue item to have Priority + Next Action within 2 minutes.','- Batch Needs Review twice per day (end of first CS block + end of day).','- For inventory variances: require Updated? selection + a short root-cause note.','','Pick one and write it into Weekly Review -> Process Improvement + Action Plan.'];$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
     function assistantDraftResponse(){const item=store.queue.rows.find(r=>r.id===selectedQueueRowId)||getOpenQueueItems()[0];const lines=['Draft Customer Response (starter):',''];if(!item){lines.push('No open work items found. Add an item in Live Work Queue first.')}else{const issue=item.issueType||'your request';const order=item.orderNumber?('Order #'+item.orderNumber):'your order';lines.push('Hello! Thanks for reaching out about '+order+'.');lines.push('');lines.push("I'm reviewing "+issue+" now and will update you as soon as I confirm the next step.");lines.push('If you have any photos or extra details, please send them here so we can resolve this faster.');lines.push('');lines.push('- Internal next action: '+(item.nextAction||'Set a next action in the queue'))}$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
-    function addQueueRow(p){const r=Object.assign({id:rowId(),receivedTime:nowTimeLabel(),source:'Manual',account:'All',customer:'',orderNumber:'',issueType:'General Question',priority:'Medium',status:'New',nextAction:'',sendTo:'Daily Follow-Up',notes:''},p||{});store.queue.rows.unshift(r);scheduleSaveAll();renderQueue();updateMetrics()}
-    function resolveSelectedQueue(){if(!selectedQueueRowId){alert('Select a queue row first.');return}const r=store.queue.rows.find(x=>x.id===selectedQueueRowId);if(!r)return;r.status='Resolved';scheduleSaveAll();renderQueue();updateMetrics()}
+    function addQueueRow(p){const r=Object.assign({id:rowId(),receivedTime:nowTimeLabel(),source:'Manual',account:'All',customer:'',orderNumber:'',issueType:'General Question',priority:'Medium',status:'New',nextAction:'',sendTo:'Daily Follow-Up',notes:''},p||{});store.queue.rows.unshift(r);scheduleSaveAll();renderQueue();updateMetrics();supabaseInsertWorkQueueRow(r).catch(()=>{})}
+    function resolveSelectedQueue(){if(!selectedQueueRowId){alert('Select a queue row first.');return}const r=store.queue.rows.find(x=>x.id===selectedQueueRowId);if(!r)return;r.status='Resolved';scheduleSaveAll();renderQueue();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}
     function suggestFromQueue(){const open=getOpenQueueItems();if(!open.length){$('#assistantOutput').value='Suggested Next Step:\\nNo open items in the queue. Document a process improvement or get ahead for tomorrow.';$('#ai').scrollIntoView({behavior:'smooth',block:'start'});return}const urgentHigh=open.filter(r=>r.priority==='Urgent'||r.priority==='High');const target=urgentHigh.length?urgentHigh[urgentHigh.length-1]:open[open.length-1];const text=['Suggested Next Step (from Live Work Queue):','','Work this item now:','- Priority: '+(target.priority||''),'- Issue: '+(target.issueType||''),'- Source: '+(target.source||''),'- Account: '+(target.account||''),'- Customer: '+(target.customer||''),'- Order #: '+(target.orderNumber||''),'','Then set: Status + Next Action + Send To.'].join('\\n');$('#assistantOutput').value=text;$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
     function addWorkflowRow(key,p){const r=Object.assign({id:rowId(),item:'',account:'All',details:'',status:'Not Started',target:'',notes:''},p||{});store[key].rows.push(r);scheduleSaveAll();renderAllTables();updateMetrics()}
     function addDoneRow(p){const r=Object.assign({id:rowId(),item:'',account:'All',details:'',status:'Completed',notes:''},p||{});store.workflowDone.rows.push(r);scheduleSaveAll();renderAllTables();updateMetrics()}
@@ -442,14 +548,17 @@
     function addSocialRow(p){const r=Object.assign({id:rowId(),date:new Date().toLocaleDateString(),platform:'TikTok',account:'All',idea:'',hook:'',status:'Not Started',views:'',notes:''},p||{});store.social.rows.push(r);scheduleSaveAll();renderSocial();updateMetrics()}
     function addStreamerDate(key){store[key].rows.push({id:rowId(),date:'',morning:false,night:false,notes:''});scheduleSaveAll();renderAllTables()}
     function exportBackup(){const payload={version:'opcc.v1',exportedAt:new Date().toISOString(),data:{}};Object.keys(store).forEach(k=>payload.data[store[k].key]=store[k].rows);payload.data.fields={todayDate:$('#todayDate').textContent,pendingFollowUps:$('#pendingFollowUps').textContent,dailyCurrentStatus:$('#dailyCurrentStatus').value,setProcess1:$('#setProcess1').textContent,setProcess2:$('#setProcess2').textContent,setProcess3:$('#setProcess3').textContent,setProcess4:$('#setProcess4').textContent,setProcessStatus1:$('#setProcessStatus1').value,setProcessStatus2:$('#setProcessStatus2').value,setProcessStatus3:$('#setProcessStatus3').value,setProcessStatus4:$('#setProcessStatus4').value,weeklyWeekOf:$('#weeklyWeekOf').textContent,weeklyPreparedBy:$('#weeklyPreparedBy').textContent,weeklyStatus:$('#weeklyStatus').value,weeklyCountsCompleted:$('#weeklyCountsCompleted').textContent,weeklyOpenDiscrepancies:$('#weeklyOpenDiscrepancies').textContent,weeklyReplacements:$('#weeklyReplacements').textContent,weeklyGoodwill:$('#weeklyGoodwill').textContent,weeklyEventsAhead:$('#weeklyEventsAhead').textContent,weeklyRisk:$('#weeklyRisk').value,weeklyBiggestFix:$('#weeklyBiggestFix').textContent,weeklyProcessImprovement:$('#weeklyProcessImprovement').textContent,weeklyMainIssue:$('#weeklyMainIssue').textContent,weeklyActionPlan:$('#weeklyActionPlan').textContent};payload.data['scheduleRows.html']=$('#scheduleRows').innerHTML;payload.data['weeklyAccuracy.html']=$('#weeklyAccuracy').innerHTML;download('op-command-center-backup.json',JSON.stringify(payload,null,2))}
-    function resetDemoData(){const ok=confirm('Reset demo data?\\n\\nThis clears ALL locally saved OP Command Center data in this browser.');if(!ok)return;const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf(STORAGE_PREFIX)===0)keys.push(k)}keys.forEach(k=>localStorage.removeItem(k));alert('Local data cleared. The page will reload.');location.reload()}
+    function resetDemoData(){const ok=confirm('Reset demo data?\\n\\nThis clears ALL locally saved OP Inventory & Operations Coordinator data in this browser.');if(!ok)return;const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf(STORAGE_PREFIX)===0)keys.push(k)}keys.forEach(k=>localStorage.removeItem(k));alert('Local data cleared. The page will reload.');location.reload()}
     function initSingletonSelects(){const daily=$('#dailyCurrentStatus');daily.innerHTML='';OPTIONS.simpleStatus.forEach(v=>{const o=document.createElement('option');o.textContent=v;daily.appendChild(o)});daily.value=loadText('dailyCurrentStatus','Not Started');daily.className='status '+statusClass(daily.value);daily.addEventListener('change',()=>{saveText('dailyCurrentStatus',daily.value);daily.className='status '+statusClass(daily.value);updateMetrics()});const weekly=$('#weeklyStatus');weekly.innerHTML='';['In Progress','Needs Review','Completed'].forEach(v=>{const o=document.createElement('option');o.textContent=v;weekly.appendChild(o)});weekly.value=loadText('weeklyStatus','In Progress');weekly.className='status '+statusClass(weekly.value);weekly.addEventListener('change',()=>{saveText('weeklyStatus',weekly.value);weekly.className='status '+statusClass(weekly.value);updateMetrics()});for(let i=1;i<=4;i++){const sel=$('#setProcessStatus'+i);sel.innerHTML='';['Not Started','In Progress','Completed'].forEach(v=>{const o=document.createElement('option');o.textContent=v;sel.appendChild(o)});sel.value=loadText('setProcessStatus'+i,'Not Started');sel.className='status '+statusClass(sel.value);sel.addEventListener('change',()=>{saveText('setProcessStatus'+i,sel.value);sel.className='status '+statusClass(sel.value);updateMetrics()})}}
     function hydrateSavedFields(){$('#todayDate').textContent=loadText('todayDate',new Date().toLocaleDateString());$('#pendingFollowUps').textContent=loadText('pendingFollowUps','0');['todayDate','pendingFollowUps','setProcess1','setProcess2','setProcess3','setProcess4','weeklyWeekOf','weeklyPreparedBy','weeklyCountsCompleted','weeklyOpenDiscrepancies','weeklyReplacements','weeklyGoodwill','weeklyEventsAhead','weeklyBiggestFix','weeklyProcessImprovement','weeklyMainIssue','weeklyActionPlan'].forEach(id=>{const el=$('#'+id);el.textContent=loadText(id,el.textContent);el.addEventListener('blur',()=>{saveText(id,el.textContent);updateMetrics()})});$('#weeklyRisk').value=loadText('weeklyRisk','On Track');$('#weeklyRisk').addEventListener('change',()=>saveText('weeklyRisk',$('#weeklyRisk').value));const sched=loadText('scheduleRows.html','');if(sched)$('#scheduleRows').innerHTML=sched;$('#scheduleRows').addEventListener('input',()=>saveText('scheduleRows.html',$('#scheduleRows').innerHTML));const acc=loadText('weeklyAccuracy.html','');if(acc)$('#weeklyAccuracy').innerHTML=acc;$('#weeklyAccuracy').addEventListener('input',()=>saveText('weeklyAccuracy.html',$('#weeklyAccuracy').innerHTML))}
     function seedIfEmpty(){if(!store.queue.rows.length){addQueueRow({source:'VR Email',account:'VR',issueType:'Order Update',priority:'Medium',status:'New',nextAction:'Open email + confirm order details',sendTo:'Daily Follow-Up'});addQueueRow({source:'TikTok Shop Chat',account:'CK',issueType:'Missing Item',priority:'High',status:'Needs Review',nextAction:'Verify packing / evidence, decide replacement vs refund',sendTo:'Issues Caught + Resolved'})}if(!store.workflowPriority.rows.length){addWorkflowRow('workflowPriority',{item:'Customer Service sweep',account:'All',details:'refunds, chat, DMs, email',status:'Not Started',target:'10:30',notes:''});addWorkflowRow('workflowPriority',{item:'Surprise Sets / Live Prep',account:'All',details:'build sets + update uploads',status:'Not Started',target:'12:00',notes:''});addWorkflowRow('workflowPriority',{item:'Inventory check',account:'All',details:'reconcile flagged variances',status:'Not Started',target:'16:30',notes:''})}if(!store.templates.rows.length){addTemplateRow({name:'Package Taking Too Long - Initial',shortcut:'/noscan1',category:'Shipping',trigger:'Tracking shows label created / no scan',requiresRefund:'No',requiresReview:'No',finalAction:'Follow up',internalNotes:'Use when internal system shows handoff or ready.',responseStarter:'Hello! Thanks for reaching out. I’m checking the latest tracking details now and will update you shortly.'});addTemplateRow({name:'Missing Items - Initial Review',shortcut:'/missing1',category:'Order Issue',trigger:'Package arrived but items are missing',requiresRefund:'No',requiresReview:'Yes',finalAction:'Investigate',internalNotes:'Check order and packing before deciding.',responseStarter:'Hello! Thanks for the update. I’m going to review the order details and will follow up with the next step.'});addTemplateRow({name:'Wrong Item - Keep As Compensation',shortcut:'/wrong1',category:'Order Issue',trigger:'Approved: customer keeps wrong item',requiresRefund:'No',requiresReview:'No',finalAction:'Close',internalNotes:'Use when value is acceptable and approved.',responseStarter:'Hello! Thanks for your patience. You can keep the item you received, and we’ll take care of the correct resolution from here.'});addTemplateRow({name:'Damaged Item - Initial Review',shortcut:'/damage1',category:'Order Issue',trigger:'Item arrived damaged',requiresRefund:'No',requiresReview:'Yes',finalAction:'Review',internalNotes:'Request photos if needed. Decide replacement/refund.',responseStarter:'Hello! I’m sorry about that. If you can share a photo of the damage, I’ll review and help resolve this right away.'})}if(!store.streamerVR.rows.length){store.streamerVR.rows=[{id:rowId(),date:'',morning:false,night:false,notes:''}];store.streamerPS.rows=[{id:rowId(),date:'',morning:false,night:false,notes:''}];store.streamerCK.rows=[{id:rowId(),date:'',morning:false,night:false,notes:''}];scheduleSaveAll()}}
     function unlockDashboard(){const input=$('#passwordInput');const err=$('#passwordError');if(input.value.trim()===PASSWORD){sessionStorage.setItem('opCommandUnlocked','true');$('#lockScreen').style.display='none';$('#appShell').classList.remove('locked-blur');err.textContent='';input.value=''}else{err.textContent='Wrong password.';input.value='';input.focus()}}
     function lockDashboard(){sessionStorage.removeItem('opCommandUnlocked');$('#lockScreen').style.display='flex';$('#appShell').classList.add('locked-blur')}
     function setupScrollSpy(){const sections=document.querySelectorAll('main section[id]');const links=document.querySelectorAll('.side-link');const obs=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=document.querySelector('.side-link[href=\"#'+e.target.id+'\"]');if(a)a.classList.add('active')}})},{root:null,rootMargin:'-25% 0px -60% 0px',threshold:0});sections.forEach(s=>obs.observe(s))}
-    function init(){$('#unlockButton').addEventListener('click',unlockDashboard);$('#passwordInput').addEventListener('keydown',e=>{if(e.key==='Enter')unlockDashboard()});if(sessionStorage.getItem('opCommandUnlocked')==='true'){$('#lockScreen').style.display='none';$('#appShell').classList.remove('locked-blur')}$('#btnLock').addEventListener('click',lockDashboard);$('#btnExport').addEventListener('click',exportBackup);$('#btnReset').addEventListener('click',resetDemoData);$('#btnRecapTop').addEventListener('click',assistantRecap);$('#btnReviewTop').addEventListener('click',assistantReview);$('#btnAddQueue').addEventListener('click',()=>addQueueRow());$('#btnResolveQueue').addEventListener('click',resolveSelectedQueue);$('#btnSuggestQueue').addEventListener('click',suggestFromQueue);$('#btnAddPriority').addEventListener('click',()=>addWorkflowRow('workflowPriority'));$('#btnAddFollowUp').addEventListener('click',()=>addWorkflowRow('workflowFollow'));$('#btnAddLivePrep').addEventListener('click',()=>addWorkflowRow('workflowLive'));$('#btnAddResolved').addEventListener('click',()=>addDoneRow());$('#btnAddIssue').addEventListener('click',()=>addIssueRow());$('#btnAddTemplate').addEventListener('click',()=>addTemplateRow());$('#btnAddSet').addEventListener('click',()=>addSetRow());$('#btnAddInventory').addEventListener('click',()=>addInventoryRow());$('#btnAddReturn').addEventListener('click',()=>addReturnRow());$('#btnAddSocial').addEventListener('click',()=>addSocialRow());$('#btnAddVRDate').addEventListener('click',()=>addStreamerDate('streamerVR'));$('#btnAddPSDate').addEventListener('click',()=>addStreamerDate('streamerPS'));$('#btnAddCKDate').addEventListener('click',()=>addStreamerDate('streamerCK'));$('#btnReview').addEventListener('click',assistantReview);$('#btnRecap').addEventListener('click',assistantRecap);$('#btnImprove').addEventListener('click',assistantImprove);$('#btnDraft').addEventListener('click',assistantDraftResponse);loadAll();initSingletonSelects();hydrateSavedFields();seedIfEmpty();renderAllTables();updateMetrics();setupScrollSpy()}
+    function init(){$('#unlockButton').addEventListener('click',unlockDashboard);$('#passwordInput').addEventListener('keydown',e=>{if(e.key==='Enter')unlockDashboard()});if(sessionStorage.getItem('opCommandUnlocked')==='true'){$('#lockScreen').style.display='none';$('#appShell').classList.remove('locked-blur')}$('#btnLock').addEventListener('click',lockDashboard);$('#btnExport').addEventListener('click',exportBackup);$('#btnReset').addEventListener('click',resetDemoData);$('#btnRecapTop').addEventListener('click',assistantRecap);$('#btnReviewTop').addEventListener('click',assistantReview);$('#btnAddQueue').addEventListener('click',()=>addQueueRow());$('#btnResolveQueue').addEventListener('click',resolveSelectedQueue);$('#btnSuggestQueue').addEventListener('click',suggestFromQueue);$('#btnAddPriority').addEventListener('click',()=>addWorkflowRow('workflowPriority'));$('#btnAddFollowUp').addEventListener('click',()=>addWorkflowRow('workflowFollow'));$('#btnAddLivePrep').addEventListener('click',()=>addWorkflowRow('workflowLive'));$('#btnAddResolved').addEventListener('click',()=>addDoneRow());$('#btnAddIssue').addEventListener('click',()=>addIssueRow());$('#btnAddTemplate').addEventListener('click',()=>addTemplateRow());$('#btnAddSet').addEventListener('click',()=>addSetRow());$('#btnAddInventory').addEventListener('click',()=>addInventoryRow());$('#btnAddReturn').addEventListener('click',()=>addReturnRow());$('#btnAddSocial').addEventListener('click',()=>addSocialRow());$('#btnAddVRDate').addEventListener('click',()=>addStreamerDate('streamerVR'));$('#btnAddPSDate').addEventListener('click',()=>addStreamerDate('streamerPS'));$('#btnAddCKDate').addEventListener('click',()=>addStreamerDate('streamerCK'));$('#btnReview').addEventListener('click',assistantReview);$('#btnRecap').addEventListener('click',assistantRecap);$('#btnImprove').addEventListener('click',assistantImprove);$('#btnDraft').addEventListener('click',assistantDraftResponse);loadAll();initSingletonSelects();hydrateSavedFields();seedIfEmpty();renderAllTables();updateMetrics();setupScrollSpy();
+      // Supabase load (Work Queue only). If it fails, we keep localStorage data.
+      (async()=>{try{const rows=await supabaseLoadWorkQueue();if(Array.isArray(rows)){store.queue.rows=rows;scheduleSaveAll();renderQueue();updateMetrics();}}catch{}})();
+    }
     init();
   </script>
 </body>
