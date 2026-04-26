@@ -371,7 +371,7 @@
       </section>
 
       <section id="ai" class="section">
-        <div class="section-title"><h2>AI / Next Steps</h2><div class="view-pills"><span class="pill blue">Assistant panel</span><span class="pill gray">Rule-based</span></div></div>
+        <div class="section-title"><h2>AI / Next Steps</h2><div class="view-pills"><span class="pill blue">Assistant panel</span><span class="pill gray">AI-assisted</span></div></div>
         <div class="grid-2">
           <div class="sheet-card">
             <div class="sheet-header">ASSISTANT ACTIONS</div>
@@ -541,8 +541,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     function getOpenQueueItems(){return store.queue.rows.filter(r=>r.status!=='Resolved')}
     function getRisks(){const risks=[];const open=getOpenQueueItems();const urgentHigh=open.filter(r=>r.priority==='Urgent'||r.priority==='High');const needsReview=open.filter(r=>r.status==='Needs Review');const invFlags=store.inventory.rows.filter(r=>calcVariance(r)!==0);if(urgentHigh.length)risks.push('Urgent/High items open: '+urgentHigh.length);if(needsReview.length)risks.push('Needs Review items open: '+needsReview.length);if(invFlags.length)risks.push('Inventory variances flagged: '+invFlags.length);return risks}
     function recommendedNextStep(){const open=getOpenQueueItems();const urgentHigh=open.filter(r=>r.priority==='Urgent'||r.priority==='High');if(urgentHigh.length)return'Clear Urgent/High Live Work Queue items first (start with oldest).';const needsReview=open.filter(r=>r.status==='Needs Review');if(needsReview.length)return'Review items marked Needs Review and decide: resolve / follow-up / waiting.';const invFlags=store.inventory.rows.filter(r=>calcVariance(r)!==0);if(invFlags.length)return'Reconcile inventory variances (confirm physical vs Shopify, then mark Updated).';if(open.length)return'Work top-to-bottom through Live Work Queue and set a clear Next Action for each.';return'No major risks detected. Document one process improvement or get ahead for tomorrow.'}
-    function buildRecapText(){const risks=getRisks();const open=getOpenQueueItems();const resolved=store.queue.rows.filter(r=>r.status==='Resolved').slice(0,10);const lines=[];lines.push('Recommended Next Step:');lines.push(recommendedNextStep());lines.push('');lines.push('Risks:');if(!risks.length)lines.push('- None flagged.');risks.forEach(x=>lines.push('- '+x));lines.push('');lines.push('Open Live Work Queue:');if(!open.length)lines.push('- None.');open.slice(0,8).forEach(r=>lines.push('- ['+r.priority+'] '+(r.issueType||'Work item')+' ('+(r.source||'')+', '+(r.account||'')+') -> '+(r.nextAction||'Set next action')));lines.push('');lines.push('Completed Work Summary (latest resolved):');if(!resolved.length)lines.push('- None yet.');resolved.slice(0,8).forEach(r=>lines.push('- '+(r.issueType||'Work item')+' ('+(r.account||'')+')'));lines.push('');lines.push('Follow-Ups:');const f=open.filter(r=>r.status==='Follow Up'||String(r.status).indexOf('Waiting')===0);if(!f.length)lines.push('- None.');f.slice(0,8).forEach(r=>lines.push('- '+(r.customer||'Customer')+' / '+(r.orderNumber||'Order')+' -> '+(r.status||'')+' -> '+(r.nextAction||'Set next action')));lines.push('');lines.push('Performance Proof:');lines.push('- Issues logged: '+store.issues.rows.length);lines.push('- Inventory flags: '+store.inventory.rows.filter(r=>calcVariance(r)!==0).length);return lines.join('\\n')}
-    function assistantReviewRule(){const risks=getRisks();const lines=[];lines.push('Recommended Next Step:');lines.push(recommendedNextStep());lines.push('');lines.push('Risks:');if(!risks.length)lines.push('- None flagged.');risks.forEach(x=>lines.push('- '+x));lines.push('');const open=getOpenQueueItems();const f=open.filter(r=>r.status==='Follow Up'||String(r.status).indexOf('Waiting')===0);lines.push('Follow-Ups:');lines.push(!f.length?'- None.':'- Open follow-ups: '+f.length);$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
+    function buildRecapText(){const risks=getRisks();const open=getOpenQueueItems();const resolved=store.queue.rows.filter(r=>r.status==='Resolved').slice(0,10);const lines=[];lines.push('Recommended Next Step:');lines.push(recommendedNextStep());lines.push('');lines.push('Risks:');if(!risks.length)lines.push('- None flagged.');risks.forEach(x=>lines.push('- '+x));lines.push('');lines.push('Open Live Work Queue:');if(!open.length)lines.push('- None.');open.slice(0,8).forEach(r=>lines.push('- ['+r.priority+'] '+(r.issueType||'Work item')+' ('+(r.source||'')+', '+(r.account||'')+') -> '+(r.nextAction||'Set next action')));lines.push('');lines.push('Completed Work Summary (latest resolved):');if(!resolved.length)lines.push('- None yet.');resolved.slice(0,8).forEach(r=>lines.push('- '+(r.issueType||'Work item')+' ('+(r.account||'')+')'));lines.push('');lines.push('Follow-Ups:');const f=open.filter(r=>r.status==='Follow Up'||String(r.status).indexOf('Waiting')===0);if(!f.length)lines.push('- None.');f.slice(0,8).forEach(r=>lines.push('- '+(r.customer||'Customer')+' / '+(r.orderNumber||'Order')+' -> '+(r.status||'')+' -> '+(r.nextAction||'Set next action')));lines.push('');lines.push('Performance Proof:');lines.push('- Issues logged: '+store.issues.rows.length);lines.push('- Inventory flags: '+store.inventory.rows.filter(r=>calcVariance(r)!==0).length);return lines.join('\n')}
+    function assistantReviewRule(){const risks=getRisks();const lines=[];lines.push('Recommended Next Step:');lines.push(recommendedNextStep());lines.push('');lines.push('Risks:');if(!risks.length)lines.push('- None flagged.');risks.forEach(x=>lines.push('- '+x));lines.push('');const open=getOpenQueueItems();const f=open.filter(r=>r.status==='Follow Up'||String(r.status).indexOf('Waiting')===0);lines.push('Follow-Ups:');lines.push(!f.length?'- None.':'- Open follow-ups: '+f.length);$('#assistantOutput').value=lines.join('\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
 
     function formatAiReviewOutput(obj){
       const lines=[];
@@ -564,7 +564,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       lines.push('');
       lines.push('Daily Recap:');
       lines.push(obj.daily_recap||'');
-      return lines.join('\\n');
+      return lines.join('\n');
     }
 
     async function assistantReview(){
@@ -586,11 +586,11 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       }
     }
     function assistantRecap(){$('#assistantOutput').value=buildRecapText();$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
-    function assistantImprove(){const lines=['Suggest Process Improvement:','','- Require every new Live Work Queue item to have Priority + Next Action within 2 minutes.','- Batch Needs Review twice per day (end of first CS block + end of day).','- For inventory variances: require Updated? selection + a short root-cause note.','','Pick one and write it into Weekly Review -> Process Improvement + Action Plan.'];$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
-    function assistantDraftResponse(){const item=store.queue.rows.find(r=>r.id===selectedQueueRowId)||getOpenQueueItems()[0];const lines=['Draft Customer Response (starter):',''];if(!item){lines.push('No open work items found. Add an item in Live Work Queue first.')}else{const issue=item.issueType||'your request';const order=item.orderNumber?('Order #'+item.orderNumber):'your order';lines.push('Hello! Thanks for reaching out about '+order+'.');lines.push('');lines.push("I'm reviewing "+issue+" now and will update you as soon as I confirm the next step.");lines.push('If you have any photos or extra details, please send them here so we can resolve this faster.');lines.push('');lines.push('- Internal next action: '+(item.nextAction||'Set a next action in the queue'))}$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
+    function assistantImprove(){const lines=['Suggest Process Improvement:','','- Require every new Live Work Queue item to have Priority + Next Action within 2 minutes.','- Batch Needs Review twice per day (end of first CS block + end of day).','- For inventory variances: require Updated? selection + a short root-cause note.','','Pick one and write it into Weekly Review -> Process Improvement + Action Plan.'];$('#assistantOutput').value=lines.join('\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
+    function assistantDraftResponse(){const item=store.queue.rows.find(r=>r.id===selectedQueueRowId)||getOpenQueueItems()[0];const lines=['Draft Customer Response (starter):',''];if(!item){lines.push('No open work items found. Add an item in Live Work Queue first.')}else{const issue=item.issueType||'your request';const order=item.orderNumber?('Order #'+item.orderNumber):'your order';lines.push('Hello! Thanks for reaching out about '+order+'.');lines.push('');lines.push("I'm reviewing "+issue+" now and will update you as soon as I confirm the next step.");lines.push('If you have any photos or extra details, please send them here so we can resolve this faster.');lines.push('');lines.push('- Internal next action: '+(item.nextAction||'Set a next action in the queue'))}$('#assistantOutput').value=lines.join('\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
     function addQueueRow(p){const r=Object.assign({id:rowId(),receivedTime:nowTimeLabel(),source:'Manual',account:'All',customer:'',orderNumber:'',issueType:'General Question',priority:'Medium',status:'New',nextAction:'',sendTo:'Daily Follow-Up',notes:'',archived:false,archivedAt:null,resolvedAt:null},p||{});store.queue.rows.unshift(r);scheduleSaveAll();renderQueue();updateMetrics();supabaseInsertWorkQueueRow(r).catch(()=>{})}
     function resolveSelectedQueue(){if(!selectedQueueRowId){alert('Select a queue row first.');return}const r=store.queue.rows.find(x=>x.id===selectedQueueRowId);if(!r)return;r.status='Resolved';r.resolvedAt=new Date().toISOString();scheduleSaveAll();renderQueue();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}
-    function suggestFromQueue(){const open=getOpenQueueItems();if(!open.length){$('#assistantOutput').value='Suggested Next Step:\\nNo open items in the queue. Document a process improvement or get ahead for tomorrow.';$('#ai').scrollIntoView({behavior:'smooth',block:'start'});return}const urgentHigh=open.filter(r=>r.priority==='Urgent'||r.priority==='High');const target=urgentHigh.length?urgentHigh[urgentHigh.length-1]:open[open.length-1];const text=['Suggested Next Step (from Live Work Queue):','','Work this item now:','- Priority: '+(target.priority||''),'- Issue: '+(target.issueType||''),'- Source: '+(target.source||''),'- Account: '+(target.account||''),'- Customer: '+(target.customer||''),'- Order #: '+(target.orderNumber||''),'','Then set: Status + Next Action + Send To.'].join('\\n');$('#assistantOutput').value=text;$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
+    function suggestFromQueue(){const open=getOpenQueueItems();if(!open.length){$('#assistantOutput').value='Suggested Next Step:\\nNo open items in the queue. Document a process improvement or get ahead for tomorrow.';$('#ai').scrollIntoView({behavior:'smooth',block:'start'});return}const urgentHigh=open.filter(r=>r.priority==='Urgent'||r.priority==='High');const target=urgentHigh.length?urgentHigh[urgentHigh.length-1]:open[open.length-1];const text=['Suggested Next Step (from Live Work Queue):','','Work this item now:','- Priority: '+(target.priority||''),'- Issue: '+(target.issueType||''),'- Source: '+(target.source||''),'- Account: '+(target.account||''),'- Customer: '+(target.customer||''),'- Order #: '+(target.orderNumber||''),'','Then set: Status + Next Action + Send To.'].join('\n');$('#assistantOutput').value=text;$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
     function addWorkflowRow(key,p){const r=Object.assign({id:rowId(),item:'',account:'All',details:'',status:'Not Started',target:'',notes:''},p||{});store[key].rows.push(r);scheduleSaveAll();renderAllTables();updateMetrics()}
     function addDoneRow(p){const r=Object.assign({id:rowId(),item:'',account:'All',details:'',status:'Completed',notes:''},p||{});store.workflowDone.rows.push(r);scheduleSaveAll();renderAllTables();updateMetrics()}
     function addIssueRow(p){const r=Object.assign({id:rowId(),date:new Date().toLocaleDateString(),account:'All',issue:'',actionTaken:'',type:'CS',saved:'',followUpNeeded:'No',notes:''},p||{});store.issues.rows.push(r);scheduleSaveAll();renderIssues();updateMetrics()}
@@ -1206,7 +1206,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
                 <button class="btn" id="btnImprove">Suggest Process Improvement</button>
                 <button class="btn" id="btnDraft">Draft Customer Response</button>
               </div>
-              <div class="hint">Private + predictable (no API). Uses your current data to make suggestions.</div>
+              <div class="hint">AI-assisted review. Uses your Live Work Queue through Supabase/OpenAI, with a local fallback if unavailable.</div>
             </div>
           </div>
           <div class="sheet-card">
@@ -1861,7 +1861,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       lines.push('Performance Proof:');
       lines.push('- Issues logged: ' + store.issues.rows.length);
       lines.push('- Inventory flags: ' + store.inventory.rows.filter(r => calcVariance(r) !== 0).length);
-      return lines.join('\\n');
+      return lines.join('\n');
     }
 
     function assistantReview(){
@@ -1878,7 +1878,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       const follow = open.filter(r => r.status === 'Follow Up' || String(r.status).indexOf('Waiting') === 0);
       lines.push('Follow-Ups:');
       lines.push(follow.length === 0 ? '- None.' : '- Open follow-ups: ' + follow.length);
-      $('#assistantOutput').value = lines.join('\\n');
+      $('#assistantOutput').value = lines.join('\n');
       $('#ai').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     function assistantRecap(){
@@ -1894,7 +1894,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       lines.push('- For inventory variances: require Updated? selection + a short root-cause note.');
       lines.push('');
       lines.push('Pick one and write it into Weekly Review -> Process Improvement + Action Plan.');
-      $('#assistantOutput').value = lines.join('\\n');
+      $('#assistantOutput').value = lines.join('\n');
       $('#ai').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     function assistantDraftResponse(){
@@ -1914,7 +1914,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
         lines.push('');
         lines.push('- Internal next action: ' + (item.nextAction || 'Set a next action in the queue'));
       }
-      $('#assistantOutput').value = lines.join('\\n');
+      $('#assistantOutput').value = lines.join('\n');
       $('#ai').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
@@ -1968,7 +1968,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
         '- Order #: ' + (target.orderNumber || ''),
         '',
         'Then set: Status + Next Action + Send To.'
-      ].join('\\n');
+      ].join('\n');
       $('#assistantOutput').value = text;
       $('#ai').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -3598,7 +3598,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
         '- Order #: ' + (target.orderNumber || ''),
         '',
         'Then set: Status + Next Action + Send To.'
-      ].join('\\n');
+      ].join('\n');
       $('#assistantOutput').value = text;
       $('#ai').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }

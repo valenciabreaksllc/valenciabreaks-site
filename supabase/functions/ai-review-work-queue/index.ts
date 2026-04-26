@@ -1,178 +1,172 @@
-// Supabase Edge Function: ai-review-work-queue
-// - Keeps OpenAI API key private (stored as Supabase secret OPENAI_API_KEY)
-// - Accepts JSON: { workQueueItems: [...] }
-// - Returns JSON:
-//   recommended_next_step, risks, follow_ups, suggested_process_improvement, daily_recap
-//
-// Deploy:
-// - supabase functions deploy ai-review-work-queue
-// - supabase secrets set OPENAI_API_KEY=...
-//
-// Note: This function uses the OpenAI Responses API.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+type WorkQueueItem = {
+  receivedTime?: string;
+  source?: string;
+  account?: string;
+  customer?: string;
+  orderNumber?: string;
+  issueType?: string;
+  priority?: string;
+  status?: string;
+  nextAction?: string;
+  sendTo?: string;
+  notes?: string;
+  archived?: boolean;
+};
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
-
-function json(data: unknown, init: ResponseInit = {}) {
-  return new Response(JSON.stringify(data), {
-    status: init.status ?? 200,
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
     headers: {
-      "content-type": "application/json; charset=utf-8",
-      ...(init.headers ?? {}),
+      ...corsHeaders,
+      "Content-Type": "application/json",
     },
   });
 }
 
-function badRequest(message: string) {
-  return json({ error: message }, { status: 400 });
+function safeItems(items: unknown): WorkQueueItem[] {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const row = item as WorkQueueItem;
+
+      return {
+        receivedTime: String(row.receivedTime || "").slice(0, 80),
+        source: String(row.source || "").slice(0, 80),
+        account: String(row.account || "").slice(0, 40),
+        customer: String(row.customer || "").slice(0, 120),
+        orderNumber: String(row.orderNumber || "").slice(0, 120),
+        issueType: String(row.issueType || "").slice(0, 120),
+        priority: String(row.priority || "").slice(0, 40),
+        status: String(row.status || "").slice(0, 80),
+        nextAction: String(row.nextAction || "").slice(0, 300),
+        sendTo: String(row.sendTo || "").slice(0, 120),
+        notes: String(row.notes || "").slice(0, 500),
+        archived: Boolean(row.archived),
+      };
+    })
+    .filter((item) => !item.archived)
+    .slice(0, 50);
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "access-control-allow-origin": "*",
-        "access-control-allow-headers":
-          "authorization, x-client-info, apikey, content-type",
-        "access-control-allow-methods": "POST, OPTIONS",
-      },
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  if (req.method !== "POST") return json({ error: "Use POST" }, { status: 405 });
-
-  if (!OPENAI_API_KEY) {
-    return json(
-      { error: "Missing OPENAI_API_KEY secret on Supabase." },
-      { status: 500 },
-    );
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-  let body: unknown;
   try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON body.");
-  }
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
 
-  const workQueueItems = (body as any)?.workQueueItems;
-  if (!Array.isArray(workQueueItems)) {
-    return badRequest("Body must include workQueueItems: []");
-  }
-
-  // Keep input small + predictable
-  const trimmed = workQueueItems.slice(0, 200).map((x: any) => ({
-    id: String(x?.id ?? ""),
-    receivedTime: String(x?.receivedTime ?? ""),
-    source: String(x?.source ?? ""),
-    account: String(x?.account ?? ""),
-    customer: String(x?.customer ?? ""),
-    orderNumber: String(x?.orderNumber ?? ""),
-    issueType: String(x?.issueType ?? ""),
-    priority: String(x?.priority ?? ""),
-    status: String(x?.status ?? ""),
-    nextAction: String(x?.nextAction ?? ""),
-    sendTo: String(x?.sendTo ?? ""),
-    notes: String(x?.notes ?? ""),
-    archived: Boolean(x?.archived ?? false),
-    archivedAt: x?.archivedAt ?? null,
-    resolvedAt: x?.resolvedAt ?? null,
-  }));
-
-  const schema = {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      recommended_next_step: { type: "string" },
-      risks: { type: "array", items: { type: "string" } },
-      follow_ups: { type: "array", items: { type: "string" } },
-      suggested_process_improvement: { type: "string" },
-      daily_recap: { type: "string" },
-    },
-    required: [
-      "recommended_next_step",
-      "risks",
-      "follow_ups",
-      "suggested_process_improvement",
-      "daily_recap",
-    ],
-  } as const;
-
-  const instructions =
-    "You are an operations assistant for an Inventory / Operations Coordinator. " +
-    "You will review a Live Work Queue list. " +
-    "Be practical and concise. Prioritize: urgent/high items, needs review, follow-ups, waiting states, and anything with financial or customer-risk. " +
-    "Output must follow the provided JSON schema exactly.";
-
-  const userPrompt =
-    "Work queue items (JSON):\n" + JSON.stringify(trimmed) + "\n\n" +
-    "Rules:\n" +
-    "- Ignore archived items unless they still represent an active risk.\n" +
-    "- Prefer a single clear recommended_next_step.\n" +
-    "- risks: short bullets.\n" +
-    "- follow_ups: short actionable bullets.\n" +
-    "- suggested_process_improvement: 1 improvement.\n" +
-    "- daily_recap: 6-12 lines, ops-friendly (not chatty).";
-
-  const resp = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${OPENAI_API_KEY}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      // Cost-conscious model
-      model: "gpt-4.1-mini",
-      input: [
-        { role: "system", content: instructions },
-        { role: "user", content: userPrompt },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "work_queue_review",
-          schema,
-          strict: true,
+    if (!apiKey) {
+      return jsonResponse(
+        {
+          error: "Missing OPENAI_API_KEY Supabase secret.",
         },
+        500,
+      );
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const workQueueItems = safeItems(body.workQueueItems);
+
+    const prompt = `
+You are an operations workflow reviewer for an Inventory & Operations Coordinator at OP Comics.
+
+Review the active Live Work Queue items below and return practical next steps.
+
+Focus on:
+- urgent or high priority items
+- unresolved customer issues
+- TikTok Shop chat/refund/return issues
+- VR Email
+- TikTok DMs
+- Instagram DMs
+- inventory issues
+- replacement/loss risks
+- what should be worked on next
+- what should be documented as performance proof
+
+Return ONLY valid JSON with exactly these keys:
+{
+  "recommended_next_step": "string",
+  "risks": ["string"],
+  "follow_ups": ["string"],
+  "suggested_process_improvement": "string",
+  "daily_recap": "string"
+}
+
+Active Live Work Queue items:
+${JSON.stringify(workQueueItems, null, 2)}
+`;
+
+    const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        model: "gpt-5.4-mini",
+        input: prompt,
+        text: {
+          format: {
+            type: "json_object",
+          },
+        },
+      }),
+    });
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    return json(
-      { error: "OpenAI request failed", status: resp.status, detail: text },
-      { status: 502 },
+    const openAIData = await openAIResponse.json().catch(() => null);
+
+    if (!openAIResponse.ok) {
+      return jsonResponse(
+        {
+          error: "OpenAI request failed.",
+          details: openAIData,
+        },
+        500,
+      );
+    }
+
+    const outputText =
+      openAIData?.output_text ||
+      openAIData?.output?.[0]?.content?.[0]?.text ||
+      "";
+
+    let parsed;
+
+    try {
+      parsed = JSON.parse(outputText);
+    } catch {
+      parsed = {
+        recommended_next_step: outputText || "No recommendation returned.",
+        risks: [],
+        follow_ups: [],
+        suggested_process_improvement:
+          "Review the queue manually and confirm high-priority follow-ups.",
+        daily_recap: "AI returned text but not structured JSON.",
+      };
+    }
+
+    return jsonResponse(parsed);
+  } catch (error) {
+    return jsonResponse(
+      {
+        error: "Edge Function crashed.",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      500,
     );
   }
-
-  const data = await resp.json();
-  // Responses API returns the structured JSON in output_text when using json_schema.
-  // We also defensively try to parse from common fields.
-  const outputText: string =
-    data?.output_text ??
-    data?.output?.[0]?.content?.[0]?.text ??
-    "";
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(outputText);
-  } catch {
-    return json(
-      { error: "Model did not return valid JSON.", raw: outputText },
-      { status: 502 },
-    );
-  }
-
-  return new Response(JSON.stringify(parsed), {
-    status: 200,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": "*",
-      "access-control-allow-headers":
-        "authorization, x-client-info, apikey, content-type",
-    },
-  });
 });
-
