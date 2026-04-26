@@ -542,7 +542,49 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     function getRisks(){const risks=[];const open=getOpenQueueItems();const urgentHigh=open.filter(r=>r.priority==='Urgent'||r.priority==='High');const needsReview=open.filter(r=>r.status==='Needs Review');const invFlags=store.inventory.rows.filter(r=>calcVariance(r)!==0);if(urgentHigh.length)risks.push('Urgent/High items open: '+urgentHigh.length);if(needsReview.length)risks.push('Needs Review items open: '+needsReview.length);if(invFlags.length)risks.push('Inventory variances flagged: '+invFlags.length);return risks}
     function recommendedNextStep(){const open=getOpenQueueItems();const urgentHigh=open.filter(r=>r.priority==='Urgent'||r.priority==='High');if(urgentHigh.length)return'Clear Urgent/High Live Work Queue items first (start with oldest).';const needsReview=open.filter(r=>r.status==='Needs Review');if(needsReview.length)return'Review items marked Needs Review and decide: resolve / follow-up / waiting.';const invFlags=store.inventory.rows.filter(r=>calcVariance(r)!==0);if(invFlags.length)return'Reconcile inventory variances (confirm physical vs Shopify, then mark Updated).';if(open.length)return'Work top-to-bottom through Live Work Queue and set a clear Next Action for each.';return'No major risks detected. Document one process improvement or get ahead for tomorrow.'}
     function buildRecapText(){const risks=getRisks();const open=getOpenQueueItems();const resolved=store.queue.rows.filter(r=>r.status==='Resolved').slice(0,10);const lines=[];lines.push('Recommended Next Step:');lines.push(recommendedNextStep());lines.push('');lines.push('Risks:');if(!risks.length)lines.push('- None flagged.');risks.forEach(x=>lines.push('- '+x));lines.push('');lines.push('Open Live Work Queue:');if(!open.length)lines.push('- None.');open.slice(0,8).forEach(r=>lines.push('- ['+r.priority+'] '+(r.issueType||'Work item')+' ('+(r.source||'')+', '+(r.account||'')+') -> '+(r.nextAction||'Set next action')));lines.push('');lines.push('Completed Work Summary (latest resolved):');if(!resolved.length)lines.push('- None yet.');resolved.slice(0,8).forEach(r=>lines.push('- '+(r.issueType||'Work item')+' ('+(r.account||'')+')'));lines.push('');lines.push('Follow-Ups:');const f=open.filter(r=>r.status==='Follow Up'||String(r.status).indexOf('Waiting')===0);if(!f.length)lines.push('- None.');f.slice(0,8).forEach(r=>lines.push('- '+(r.customer||'Customer')+' / '+(r.orderNumber||'Order')+' -> '+(r.status||'')+' -> '+(r.nextAction||'Set next action')));lines.push('');lines.push('Performance Proof:');lines.push('- Issues logged: '+store.issues.rows.length);lines.push('- Inventory flags: '+store.inventory.rows.filter(r=>calcVariance(r)!==0).length);return lines.join('\\n')}
-    function assistantReview(){const risks=getRisks();const lines=[];lines.push('Recommended Next Step:');lines.push(recommendedNextStep());lines.push('');lines.push('Risks:');if(!risks.length)lines.push('- None flagged.');risks.forEach(x=>lines.push('- '+x));lines.push('');const open=getOpenQueueItems();const f=open.filter(r=>r.status==='Follow Up'||String(r.status).indexOf('Waiting')===0);lines.push('Follow-Ups:');lines.push(!f.length?'- None.':'- Open follow-ups: '+f.length);$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
+    function assistantReviewRule(){const risks=getRisks();const lines=[];lines.push('Recommended Next Step:');lines.push(recommendedNextStep());lines.push('');lines.push('Risks:');if(!risks.length)lines.push('- None flagged.');risks.forEach(x=>lines.push('- '+x));lines.push('');const open=getOpenQueueItems();const f=open.filter(r=>r.status==='Follow Up'||String(r.status).indexOf('Waiting')===0);lines.push('Follow-Ups:');lines.push(!f.length?'- None.':'- Open follow-ups: '+f.length);$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
+
+    function formatAiReviewOutput(obj){
+      const lines=[];
+      lines.push('Recommended Next Step:');
+      lines.push(obj.recommended_next_step||'');
+      lines.push('');
+      lines.push('Risks:');
+      const risks=Array.isArray(obj.risks)?obj.risks:[];
+      if(!risks.length) lines.push('- None flagged.');
+      risks.forEach(r=>lines.push('- '+r));
+      lines.push('');
+      lines.push('Follow-Ups:');
+      const fu=Array.isArray(obj.follow_ups)?obj.follow_ups:[];
+      if(!fu.length) lines.push('- None.');
+      fu.forEach(r=>lines.push('- '+r));
+      lines.push('');
+      lines.push('Suggested Process Improvement:');
+      lines.push(obj.suggested_process_improvement||'');
+      lines.push('');
+      lines.push('Daily Recap:');
+      lines.push(obj.daily_recap||'');
+      return lines.join('\\n');
+    }
+
+    async function assistantReview(){
+      try{
+        if(!supabaseEnabled()) throw new Error('supabase disabled');
+        if(!supabaseClient.functions||typeof supabaseClient.functions.invoke!=='function') throw new Error('functions not available');
+        const items=store.queue.rows
+          .filter(x=>!x.archived)
+          .map(x=>({
+            id:x.id,receivedTime:x.receivedTime,source:x.source,account:x.account,customer:x.customer,orderNumber:x.orderNumber,issueType:x.issueType,priority:x.priority,status:x.status,nextAction:x.nextAction,sendTo:x.sendTo,notes:x.notes,archived:!!x.archived,archivedAt:x.archivedAt||null,resolvedAt:x.resolvedAt||null
+          }));
+        const { data, error } = await supabaseClient.functions.invoke('ai-review-work-queue',{ body:{ workQueueItems: items } });
+        if(error) throw error;
+        if(!data) throw new Error('No response');
+        $('#assistantOutput').value = formatAiReviewOutput(data);
+        $('#ai').scrollIntoView({behavior:'smooth',block:'start'});
+      }catch{
+        assistantReviewRule();
+      }
+    }
     function assistantRecap(){$('#assistantOutput').value=buildRecapText();$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
     function assistantImprove(){const lines=['Suggest Process Improvement:','','- Require every new Live Work Queue item to have Priority + Next Action within 2 minutes.','- Batch Needs Review twice per day (end of first CS block + end of day).','- For inventory variances: require Updated? selection + a short root-cause note.','','Pick one and write it into Weekly Review -> Process Improvement + Action Plan.'];$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
     function assistantDraftResponse(){const item=store.queue.rows.find(r=>r.id===selectedQueueRowId)||getOpenQueueItems()[0];const lines=['Draft Customer Response (starter):',''];if(!item){lines.push('No open work items found. Add an item in Live Work Queue first.')}else{const issue=item.issueType||'your request';const order=item.orderNumber?('Order #'+item.orderNumber):'your order';lines.push('Hello! Thanks for reaching out about '+order+'.');lines.push('');lines.push("I'm reviewing "+issue+" now and will update you as soon as I confirm the next step.");lines.push('If you have any photos or extra details, please send them here so we can resolve this faster.');lines.push('');lines.push('- Internal next action: '+(item.nextAction||'Set a next action in the queue'))}$('#assistantOutput').value=lines.join('\\n');$('#ai').scrollIntoView({behavior:'smooth',block:'start'})}
