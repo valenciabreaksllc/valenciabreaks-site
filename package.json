@@ -1,0 +1,14 @@
+{
+  "name": "valenciabreaks-site",
+  "version": "1.0.0",
+  "description": "Valencia Breaks Site - OP Inventory & Operations Coordinator",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx serve . --listen 3000"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}

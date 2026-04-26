@@ -115,6 +115,7 @@
 
       <nav class="nav" aria-label="Page sections">
         <div class="nav-section-label">Daily</div>
+        <a class="side-link" href="#ai-intake">AI Intake</a>
         <a class="side-link active" href="#today">Today / Overview</a>
         <a class="side-link" href="#queue">Live Work Queue</a>
         <a class="side-link" href="#schedule">Block Schedule</a>
@@ -131,7 +132,7 @@
         <div class="nav-section-label">Review</div>
         <a class="side-link" href="#streamers">Streamer Schedule</a>
         <a class="side-link" href="#weekly">Weekly Inventory + Ops Review</a>
-        <a class="side-link" href="#ai">AI / Next Steps</a>
+        <a class="side-link" href="#ai">AI-assisted / Next Steps</a>
       </nav>
 
       <div class="sidebar-actions">
@@ -152,6 +153,61 @@
           <button class="btn btn-dark" id="btnReviewTop">Review next steps</button>
         </div>
       </div>
+
+      <section id="ai-intake" class="section">
+        <div class="section-title"><h2>AI Intake</h2><div class="view-pills"><span class="pill blue">AI-assisted</span><span class="pill gray">Manual entry</span></div></div>
+        <div class="sheet-card">
+          <div class="sheet-header">AI MANUAL INTAKE</div>
+          <div class="sheet-subheader">Paste customer inquiry details, classify with AI, and draft response.</div>
+          <div class="sheet-body">
+            <div class="grid-2">
+              <div>
+                <label>Source</label>
+                <select id="intakeSource">
+                  <option>VR Email</option>
+                  <option>TikTok Shop Chat</option>
+                  <option>TikTok DM</option>
+                  <option>Instagram DM</option>
+                  <option>TikTok Refund</option>
+                  <option>TikTok Return</option>
+                  <option>Shopify</option>
+                  <option>Manual</option>
+                </select>
+              </div>
+              <div>
+                <label>Account</label>
+                <select id="intakeAccount">
+                  <option>All</option>
+                  <option>VR</option>
+                  <option>PS</option>
+                  <option>CK</option>
+                </select>
+              </div>
+              <div>
+                <label>Customer / Username</label>
+                <input type="text" id="intakeCustomer" placeholder="Customer name or username" />
+              </div>
+              <div>
+                <label>Order #</label>
+                <input type="text" id="intakeOrderNumber" placeholder="Order number if applicable" />
+              </div>
+            </div>
+            <div style="margin-top:12px;">
+              <label>Raw Message</label>
+              <textarea id="intakeRawMessage" placeholder="Paste the customer's message here"></textarea>
+            </div>
+            <div style="margin-top:12px;">
+              <label>AI Output</label>
+              <textarea id="intakeAIOutput" readonly placeholder="AI classification and draft response will appear here"></textarea>
+            </div>
+            <div class="toolbar" style="margin-top:12px;">
+              <button class="btn btn-dark" id="btnClassifyDraft">Classify + Draft</button>
+              <button class="btn" id="btnAddToQueue">Add to Live Work Queue</button>
+              <button class="btn" id="btnClearIntake">Clear Intake</button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section id="today" class="section">
         <div class="section-title"><h2>Today / Overview</h2><div class="view-pills"><span class="pill gray">Daily command center</span><span class="pill blue">Sheets style</span></div></div>
@@ -2184,6 +2240,84 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
         });
       }, { root: null, rootMargin: '-25% 0px -60% 0px', threshold: 0 });
       sections.forEach(section => observer.observe(section));
+    }
+
+    async function classifyDraft(){
+      const source = $('#intakeSource').value;
+      const account = $('#intakeAccount').value;
+      const customer = $('#intakeCustomer').value.trim();
+      const orderNumber = $('#intakeOrderNumber').value.trim();
+      const rawMessage = $('#intakeRawMessage').value.trim();
+      if(!rawMessage){
+        alert('Please enter a raw message.');
+        return;
+      }
+      try{
+        if(!supabaseEnabled()) throw new Error('Supabase not enabled');
+        const { data, error } = await supabaseClient.functions.invoke('ai-classify-intake', {
+          body: {
+            source,
+            account,
+            customer,
+            orderNumber,
+            rawMessage,
+            csTemplates: store.templates.rows
+          }
+        });
+        if(error) throw error;
+        lastAIResult = data;
+        const output = [
+          'Issue Type: ' + (data.issue_type || ''),
+          'Priority: ' + (data.priority || ''),
+          'Status: ' + (data.status || ''),
+          'Next Action: ' + (data.next_action || ''),
+          'Send To: ' + (data.send_to || ''),
+          '',
+          'Draft Response:',
+          data.draft_response || '',
+          '',
+          'Internal Notes: ' + (data.internal_notes || '')
+        ].join('\n');
+        $('#intakeAIOutput').value = output;
+        $('#ai-intake').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch(e){
+        alert('Error classifying: ' + e.message);
+      }
+    }
+
+    function addToQueueFromIntake(){
+      if(!lastAIResult){
+        alert('Please classify + draft first.');
+        return;
+      }
+      const source = $('#intakeSource').value;
+      const account = $('#intakeAccount').value;
+      const customer = $('#intakeCustomer').value.trim();
+      const orderNumber = $('#intakeOrderNumber').value.trim();
+      const notes = (lastAIResult.draft_response || '') + '\n\nInternal: ' + (lastAIResult.internal_notes || '');
+      addQueueRow({
+        source,
+        account,
+        customer,
+        orderNumber,
+        issueType: lastAIResult.issue_type,
+        priority: lastAIResult.priority,
+        status: lastAIResult.status,
+        nextAction: lastAIResult.next_action,
+        sendTo: lastAIResult.send_to,
+        notes
+      });
+      alert('Added to Live Work Queue.');
+    }
+
+    function clearIntake(){
+      $('#intakeSource').value = 'Manual';
+      $('#intakeAccount').value = 'All';
+      $('#intakeCustomer').value = '';
+      $('#intakeOrderNumber').value = '';
+      $('#intakeRawMessage').value = '';
+      $('#intakeAIOutput').value = '';
+      lastAIResult = null;
     }
 
     function init(){
