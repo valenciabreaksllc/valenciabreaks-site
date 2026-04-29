@@ -594,11 +594,114 @@
     td {
       border-color: #edf0f5;
     }
+
+    /* Ops polish pass - interaction + cleaner lane pages */
+    .rail-avatar { font-weight: 950; letter-spacing: -.04em; }
+    .compact-home-header { justify-content: flex-end; padding: 10px 20px 8px; min-height: 54px; }
+    .home-only-actions { width: 100%; justify-content: flex-end; }
+    .calendar-panel { position: relative; }
+    .planner-now-line { position: absolute; left: 104px; right: 18px; height: 2px; background: #e94b76; border-radius: 999px; box-shadow: 0 0 0 3px rgba(233,75,118,.10); z-index: 10; pointer-events: none; display: none; }
+    .planner-now-line::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 999px; background: #e94b76; }
+    .planner-now-line span { position: absolute; left: -54px; top: -10px; background: #fff; color: #e94b76; font-size: 11px; font-weight: 900; padding: 2px 6px; border: 1px solid rgba(233,75,118,.25); border-radius: 999px; }
+    .calendar-task { position: relative; cursor: grab; user-select: none; }
+    .calendar-task:active { cursor: grabbing; }
+    .task-remove-btn, .custom-task-remove { position: absolute; top: 5px; right: 6px; width: 18px; height: 18px; border: 0; border-radius: 999px; background: rgba(255,255,255,.86); color: #667085; cursor: pointer; font-size: 14px; line-height: 18px; display: grid; place-items: center; opacity: 0; transition: .15s ease; }
+    .calendar-task:hover .task-remove-btn, .calendar-task:hover .custom-task-remove { opacity: 1; }
+    .cal-cell.drag-over { outline: 2px dashed #7c8cff; outline-offset: -4px; background: #f7f8ff; }
+    #queueTable th:nth-child(2), #queueTable td:nth-child(2) { min-width: 170px; }
+    #queueTable th:nth-child(10), #queueTable td:nth-child(10) { min-width: 185px; }
+    #queueTable th:nth-child(12), #queueTable td:nth-child(12) { min-width: 135px; }
+    .queue-action-stack { display: flex; gap: 6px; align-items: center; justify-content: center; }
+    .trash-btn { border-color: #ffd1d8; background: #fff5f6; color: #b4233c; }
+    .trash-btn:hover { background: #ffe8ec; }
+    .tool-iframe { width: 100%; height: 560px; border: 1px solid #e6e9f0; border-radius: 18px; background: #fff; }
+    .setsheet-frame { min-height: 580px; }
+    .sets-layout-grid { align-items: start; }
+    .ops-check-table label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .ops-check-table input[type="checkbox"] { width: 16px; height: 16px; accent-color: #17a56b; }
+    .roadmap-list { display: grid; gap: 10px; }
+    .roadmap-step { padding: 12px; background: #f8fafc; border: 1px solid #edf0f5; border-radius: 16px; }
+    .roadmap-step strong { display: block; color: #172033; font-size: 13px; margin-bottom: 4px; }
+    .roadmap-step span { display: block; color: #526070; font-size: 13px; line-height: 1.45; }
+    .section.active-page:not(#home) .sheet-card { box-shadow: 0 10px 24px rgba(15,17,17,.035); border-color: #e8edf5; }
     @media (max-width: 1180px) {
       .task-tools { grid-template-columns: 1fr 1fr; }
       .op-planner-body { grid-template-columns: 1fr; }
       .planner-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
+
+
+    /* ChatGPT polish pass: cleaner page spacing + local tools */
+    .section { min-height: 0; padding: 16px 22px 24px; }
+    #home.section { min-height: 100vh; padding: 0; }
+    .section.active-page:not(#home) { padding-top: 14px; padding-bottom: 14px; }
+    .section.active-page:not(#home) + .section.active-page { padding-top: 4px; }
+    .section.active-page:not(#home) .section-title { max-width: 1480px; margin: 0 auto 10px; }
+    .section.active-page:not(#home) .sheet-card,
+    .section.active-page:not(#home) .page-card { margin-bottom: 12px; }
+    .section.active-page:not(#home) .grid-2,
+    .section.active-page:not(#home) .grid-3 { gap: 12px; }
+    .compact-home-header { justify-content: space-between; padding: 12px 20px; }
+    .home-title-block { display: flex; align-items: center; gap: 10px; min-width: 220px; }
+    .home-title-block h1 { margin: 0; font-size: 22px; line-height: 1.1; letter-spacing: -.05em; font-weight: 950; }
+    .home-title-dot { width: 32px; height: 32px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: #101828; font-size: 13px; font-weight: 950; letter-spacing: -.03em; }
+    .home-only-actions { width: auto; justify-content: flex-end; }
+    .priority-tool-card { max-width: 1480px; margin: 0 auto 12px; background: linear-gradient(135deg,#fff,#f9fbff); border: 1px solid #e6ebf4; border-radius: 20px; padding: 14px 16px; box-shadow: 0 10px 24px rgba(15,17,17,.035); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .priority-tool-card strong { display: block; font-size: 14px; color: #172033; margin-bottom: 3px; }
+    .priority-tool-card span { display: block; color: #667085; font-size: 13px; line-height: 1.4; }
+    .priority-tool-card .btn { white-space: nowrap; }
+    .setsheet-local-tool { display: grid; gap: 12px; }
+    .setsheet-local-top { display: grid; grid-template-columns: minmax(180px, 280px) 1fr; gap: 10px; align-items: end; }
+    .setsheet-local-tool textarea { min-height: 220px; border-radius: 16px; padding: 12px; font-size: 13px; line-height: 1.45; background: #fbfcff; border-color: #dfe5ef; }
+    .setsheet-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+    .setsheet-stat { background: #f8fafc; border: 1px solid #edf0f5; border-radius: 14px; padding: 10px; }
+    .setsheet-stat strong { display:block; font-size: 18px; color:#172033; }
+    .setsheet-stat span { font-size: 12px; color:#667085; }
+    .setsheet-output { max-height: 320px; overflow:auto; border: 1px solid #edf0f5; border-radius: 16px; background:#fff; }
+    .setsheet-output table { margin: 0; }
+    .setsheet-output th, .setsheet-output td { font-size: 12px; }
+    .tool-placeholder-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .tool-placeholder { background:#f8fafc; border:1px solid #edf0f5; border-radius:16px; padding:12px; }
+    .tool-placeholder strong { display:block; margin-bottom:4px; color:#172033; font-size:13px; }
+    .tool-placeholder span { color:#667085; font-size:12px; line-height:1.45; display:block; }
+    @media (max-width: 900px) {
+      .setsheet-local-top, .tool-placeholder-grid { grid-template-columns: 1fr; }
+      .compact-home-header { align-items: flex-start; flex-direction: column; }
+      .home-only-actions { width: 100%; justify-content: flex-start; }
+    }
+
+  
+    /* ChatGPT update: Google Calendar style interactions + cleaner page spacing */
+    :root { --cal-row-height: 92px; }
+    .section { padding-top: 8px; padding-bottom: 14px; }
+    .section + .section { border-top: 0; }
+    .section.active-page:not(#home) { padding-top: 10px !important; padding-bottom: 10px !important; }
+    .section.active-page:not(#home) .sheet-card, .section.active-page:not(#home) .page-card { margin-bottom: 10px !important; }
+    .priority-tool-card { display: none !important; }
+    .calendar-scroll-shell { position: relative; overflow: auto; flex: 1; min-height: 580px; border-top: 1px solid #edf0f5; }
+    .calendar-grid-clean { display: grid; grid-template-columns: 74px repeat(7, minmax(128px, 1fr)) !important; min-width: 1060px; }
+    .cal-head { position: sticky; top: 0; z-index: 2; min-height: 52px !important; background: #fbfcff; }
+    .cal-time { min-height: var(--cal-row-height) !important; padding-top: 12px !important; }
+    .cal-cell { min-height: var(--cal-row-height) !important; padding: 6px !important; cursor: pointer; transition: background .15s ease, box-shadow .15s ease; }
+    .cal-cell:hover { background: #f8fbff; box-shadow: inset 0 0 0 1px #cfe0ff; }
+    .cal-cell.drag-over { background: #eff6ff !important; box-shadow: inset 0 0 0 2px #6699ff; }
+    .calendar-task { position: relative; height: auto !important; min-height: 58px !important; margin-bottom: 5px; cursor: grab; }
+    .calendar-task:active { cursor: grabbing; }
+    .calendar-task .task-remove-btn, .calendar-task .custom-task-remove { opacity: 0; position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border: 0; border-radius: 999px; background: rgba(17,24,39,.12); color: #111827; font-weight: 950; cursor: pointer; transition: opacity .15s ease; }
+    .calendar-task:hover .task-remove-btn, .calendar-task:hover .custom-task-remove { opacity: 1; }
+    .planner-now-line { position: absolute; left: 74px; right: 0; height: 2px; background: #ef4444; z-index: 4; pointer-events: none; box-shadow: 0 0 0 1px rgba(239,68,68,.12); }
+    .planner-now-line::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 999px; background: #ef4444; }
+    .planner-now-line span { position: absolute; left: 8px; top: -12px; background: #ef4444; color: #fff; border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 950; }
+    .task-tools { grid-template-columns: minmax(220px, 1fr) 86px 110px 110px auto !important; gap: 8px; padding: 10px 14px; }
+    .sets-layout-grid > .sheet-card:nth-of-type(n+3) { display: none !important; }
+    body:not(.show-streamers-section) #streamers { display: none !important; }
+    .weekly-check-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .weekly-check-cell { display: grid; gap: 6px; font-size: 12px; }
+    .weekly-check-cell label { display: flex; align-items: center; gap: 6px; line-height: 1.25; }
+    .weekly-check-cell input { width: 14px; height: 14px; }
+    .cs-template-toggle { margin: 8px 0 10px; }
+    #csTemplatesPanel.collapsed #csTemplateTable, #csTemplatesPanel.collapsed #btnAddTemplate { display: none; }
+    @media (max-width: 860px){ .calendar-grid-clean { grid-template-columns: 68px repeat(7, 136px) !important; } .task-tools { grid-template-columns: 1fr 1fr !important; } }
 
   </style>
 </head>
@@ -616,7 +719,7 @@
 
   <div id="appShell" class="app locked-blur">
     <aside class="sidebar">
-      <div class="rail-avatar">🤴</div>
+      <div class="rail-avatar">OP</div>
       <nav class="rail-nav" aria-label="Main app pages">
         <a class="side-link active" href="#home" data-view="home"><span class="nav-emoji">🏠</span><span>Home</span></a>
         <a class="side-link" href="#cs" data-view="cs"><span class="nav-emoji">💬</span><span>CS</span></a>
@@ -646,19 +749,19 @@
 
      <section id="home" class="section active-page">
         <div class="op-planner-app polished-planner">
-          <header class="op-planner-header">
-            <div class="op-title-row">
-              <div class="op-title">
-                <h1>OP Inventory &amp; Operations Coordinator</h1>
-                <div class="op-subtitle">Planner Hub <span>•</span> Daily Command Center <span>•</span> <span class="style-pill">Notion / Slack / Monday style</span></div>
-              </div>
+          <header class="op-planner-header compact-home-header">
+            <div class="home-title-block">
+              <div class="home-title-dot">OP</div>
+              <h1>OP Command Center</h1>
             </div>
-            <div class="op-header-actions">
+            <div class="op-header-actions home-only-actions">
               <button class="btn" type="button" id="plannerTodayBtn">Today</button>
               <button class="btn" type="button" id="plannerPrevWeek">←</button>
               <button class="btn" type="button" id="plannerNextWeek">→</button>
+              <button class="btn" type="button" id="plannerZoomOut">− Zoom</button>
+              <button class="btn" type="button" id="plannerZoomIn">+ Zoom</button>
               <button class="btn" type="button">📅 Week</button>
-              <div class="profile-greeting"><div class="profile-dot">JV</div><div><strong>Good morning, OP</strong><br><span>Own the day, one block at a time.</span></div></div>
+              <div class="profile-greeting"><div class="profile-dot">JV</div><div><strong id="plannerGreetingText">Good morning, Jonny</strong><br><span id="plannerGreetingSubtext">Own the day, one block at a time.</span></div></div>
             </div>
           </header>
 
@@ -681,7 +784,7 @@
               <div class="task-tools">
                 <input id="plannerTaskTitle" type="text" placeholder="Add a task, note, or quick reminder…" />
                 <select id="plannerTaskDay">
-                  <option value="mon">Mon</option><option value="tue">Tue</option><option value="wed">Wed</option><option value="thu">Thu</option><option value="fri">Fri</option>
+                  <option value="mon">Mon</option><option value="tue">Tue</option><option value="wed">Wed</option><option value="thu">Thu</option><option value="fri">Fri</option><option value="sat">Sat</option><option value="sun">Sun</option>
                 </select>
                 <select id="plannerTaskTime">
                   <option>9:00 AM</option><option>10:30 AM</option><option>12:00 PM</option><option>1:00 PM</option><option>1:30 PM</option><option>2:00 PM</option><option>2:30 PM</option><option>3:00 PM</option><option>4:30 PM</option><option>5:00 PM</option>
@@ -692,7 +795,8 @@
                 <button class="btn btn-dark" id="plannerAddTask" type="button">+ Add Task</button>
               </div>
 
-              <div class="calendar-grid-clean" id="plannerCalendarGrid">
+              <div class="calendar-scroll-shell">
+                <div class="calendar-grid-clean" id="plannerCalendarGrid">
                   <div class="cal-head">TIME</div>
                   <div class="cal-head" data-day-head="mon">MON<small>Loading…</small></div>
                   <div class="cal-head" data-day-head="tue">TUE<small>Loading…</small></div>
@@ -760,6 +864,8 @@
                   <div class="cal-cell" data-day="thu" data-time="5:00 PM" aria-label="Thu 5:00 PM"><div class="calendar-task wrap static-task" draggable="true">🌙 Wrap Up / Tomorrow Prep<small>Plan tomorrow</small><small>Document wins</small></div></div>
                   <div class="cal-cell" data-day="fri" data-time="5:00 PM" aria-label="Fri 5:00 PM"><div class="calendar-task wrap static-task" draggable="true">🌙 Wrap Up / Tomorrow Prep<small>Plan tomorrow</small><small>Document wins</small></div></div>
               </div>
+              </div>
+              <div id="plannerNowLine" class="planner-now-line"><span id="plannerNowLabel">Now</span></div>
               <div class="focus-strip">⭐ Focus of the day: queue management, live prep, inventory accuracy, and staying ahead.</div>
             </section>
 
@@ -819,10 +925,11 @@
             <button id="btnPrioritizeQueue" type="button">hidden</button><button id="btnScheduleDay" type="button">hidden</button><button id="btnDraftResponse" type="button">hidden</button><button id="btnDailyRecap" type="button">hidden</button>
           </div>
         </div>
-      </section>>
+      </section>
 
       <section id="ai-intake" class="section">
         <div class="section-title"><h2>AI Intake</h2><div class="view-pills"><span class="pill blue">AI-assisted</span><span class="pill gray">Manual entry</span></div></div>
+        <div class="priority-tool-card"><div><strong>Priority Tool: CS / AI Intake</strong><span>Use this lane for customer messages, queue triage, templates, refunds, replacements, and follow-ups.</span></div><a class="btn btn-dark" href="#queue">Open Work Queue</a></div>
         <div class="sheet-card">
           <div class="sheet-header">AI MANUAL INTAKE</div>
           <div class="sheet-subheader">Paste customer inquiry details, classify with AI, and draft response.</div>
@@ -983,8 +1090,53 @@
       </section>
 
       <section id="sets" class="section">
-        <div class="section-title"><h2>Surprise Sets</h2><div class="view-pills"><span class="pill green">SetSheet</span><span class="pill gray">Log + checklist</span></div></div>
-        <div class="grid-2">
+        <div class="section-title"><h2>Surprise Sets</h2><div class="view-pills"><span class="pill green">SetSheet</span><span class="pill gray">Live prep</span><span class="pill blue">VR / PS / CK</span></div></div>
+        <div class="priority-tool-card"><div><strong>Priority Tool: Sets / SetSheet</strong><span>Convert surprise sets, prep live events, and track VR / PS / CK readiness from one clean Sets lane.</span></div><button class="btn btn-dark" type="button" onclick="document.getElementById('setsheetPaste')?.focus()">Open SetSheet Tool</button></div>
+        <div class="grid-2 sets-layout-grid">
+          <div class="sheet-card">
+            <div class="sheet-header">SETSHEET CONVERTER</div>
+            <div class="sheet-subheader">Built directly into OP Command Center so it matches the site and works without an embed.</div>
+            <div class="sheet-body setsheet-local-tool">
+              <div class="setsheet-local-top">
+                <div>
+                  <label>File name</label>
+                  <input id="setsheetFileName" type="text" value="surprise-set" placeholder="surprise-set" />
+                </div>
+                <div class="toolbar" style="margin:0; justify-content:flex-end;">
+                  <button class="btn btn-dark" id="setsheetConvert" type="button">Convert</button>
+                  <button class="btn" id="setsheetDownload" type="button">Download CSV</button>
+                  <button class="btn" id="setsheetReset" type="button">Reset</button>
+                </div>
+              </div>
+              <div>
+                <label>Paste surprise set</label>
+                <textarea id="setsheetPaste" placeholder="Paste the surprise set list here...
+Example:
+📦 BLACK VR BAG 📦
+🔥 **REVIVAL TRANCE COLLECTOR EDITION COMMANDER DECK 🔥**"></textarea>
+              </div>
+              <div class="setsheet-stats">
+                <div class="setsheet-stat"><strong id="setsheetUniqueCount">0</strong><span>unique products found</span></div>
+                <div class="setsheet-stat"><strong id="setsheetTotalCount">0</strong><span>total items counted</span></div>
+                <div class="setsheet-stat"><strong id="setsheetUnknownCount">0</strong><span>unknown items</span></div>
+              </div>
+              <div class="setsheet-output" id="setsheetOutput"><table><thead><tr><th>Product</th><th>Qty</th><th>Status</th></tr></thead><tbody><tr><td colspan="3">Paste a set and click Convert.</td></tr></tbody></table></div>
+            </div>
+          </div>
+          <div class="sheet-card">
+            <div class="sheet-header">LIVE EVENTS + SURPRISE SET CHECKLIST</div>
+            <div class="sheet-subheader">Track whether morning/night live events and surprise sets are complete for each account.</div>
+            <div class="sheet-body">
+              <table class="ops-check-table">
+                <thead><tr><th>Account</th><th>7AM Live</th><th>3:30PM Live</th><th>Surprise Set</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>VR</strong></td><td><label><input type="checkbox" data-setcheck="vrMorning"> Tanner</label></td><td><label><input type="checkbox" data-setcheck="vrNight"> Jacque</label></td><td><label><input type="checkbox" data-setcheck="vrSet"> Set ready</label></td><td contenteditable="true" data-setnote="vrNotes"></td></tr>
+                  <tr><td><strong>PS</strong></td><td><label><input type="checkbox" data-setcheck="psMorning"> Jimmy</label></td><td><label><input type="checkbox" data-setcheck="psNight"> Baxter</label></td><td><label><input type="checkbox" data-setcheck="psSet"> Set ready</label></td><td contenteditable="true" data-setnote="psNotes"></td></tr>
+                  <tr><td><strong>CK</strong></td><td><label><input type="checkbox" data-setcheck="ckMorning"> Jay</label></td><td><label><input type="checkbox" data-setcheck="ckNight"> Jake</label></td><td><label><input type="checkbox" data-setcheck="ckSet"> Set ready</label></td><td contenteditable="true" data-setnote="ckNotes"></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
           <div class="sheet-card">
             <div class="sheet-header">SURPRISE SET QUICK LOG</div>
             <div class="sheet-body">
@@ -1009,13 +1161,35 @@
       </section>
 
       <section id="inventory" class="section">
-        <div class="section-title"><h2>Inventory</h2><div class="view-pills"><span class="pill yellow">Exceptions</span><span class="pill gray">Variance auto-calc</span></div></div>
-        <div class="sheet-card">
-          <div class="sheet-header">INVENTORY</div>
-          <div class="sheet-subheader">Variance = Physical QT - Shopify QT</div>
-          <div class="sheet-body">
-            <table class="wide-table" id="inventoryTable"><thead><tr><th>Week Of</th><th>Studio</th><th>Product Name</th><th>Last Week QT</th><th>Physical QT</th><th>Shopify QT</th><th>Variance</th><th>Updated?</th><th>Notes</th><th>Delete</th></tr></thead><tbody></tbody></table>
-            <button class="btn" id="btnAddInventory">Add Inventory Row</button>
+        <div class="section-title"><h2>Inventory</h2><div class="view-pills"><span class="pill yellow">Exceptions</span><span class="pill gray">Variance auto-calc</span><span class="pill blue">Scanner plan</span></div></div>
+        <div class="priority-tool-card"><div><strong>Priority Tool: Inventory / Price Check</strong><span>Track studio inventory, plan the scanner workflow, and build toward the TCGPlayer price-check tool.</span></div><button class="btn btn-dark" type="button" onclick="document.getElementById('priceCheckSearch')?.focus()">Open Price Check Plan</button></div>
+        <div class="grid-2">
+          <div class="sheet-card">
+            <div class="sheet-header">INVENTORY</div>
+            <div class="sheet-subheader">Variance = Physical QT - Shopify QT</div>
+            <div class="sheet-body">
+              <table class="wide-table" id="inventoryTable"><thead><tr><th>Week Of</th><th>Studio</th><th>Product Name</th><th>Last Week QT</th><th>Physical QT</th><th>Shopify QT</th><th>Variance</th><th>Updated?</th><th>Notes</th><th>Delete</th></tr></thead><tbody></tbody></table>
+              <button class="btn" id="btnAddInventory">Add Inventory Row</button>
+            </div>
+          </div>
+          <div class="sheet-card">
+            <div class="sheet-header">PHONE SCAN INVENTORY APP ROADMAP</div>
+            <div class="sheet-body roadmap-list">
+              <div class="roadmap-step"><strong>1. Scan on phone</strong><span>Use barcode / product search to count items by studio.</span></div>
+              <div class="roadmap-step"><strong>2. Upload to Command Center</strong><span>Counts save to this site by studio and date.</span></div>
+              <div class="roadmap-step"><strong>3. Import Shopify export</strong><span>Upload Shopify quantity CSV and compare against physical counts.</span></div>
+              <div class="roadmap-step"><strong>4. Variance report</strong><span>Flag over/short items and build follow-up tasks automatically.</span></div>
+            </div>
+          </div>
+          <div class="sheet-card">
+            <div class="sheet-header">PRICE CHECK OUTLINE</div>
+            <div class="sheet-body roadmap-list">
+              <input id="priceCheckSearch" type="text" placeholder="Future price-check search: product, box, case, or pack…" />
+              <div class="roadmap-step"><strong>TCGPlayer pricing target</strong><span>Look for sellers with 10k–50k sales and multiple boxes/cases/packs.</span></div>
+              <div class="roadmap-step"><strong>Average comp sellers</strong><span>Average comparable seller prices, then multiply by 1.15.</span></div>
+              <div class="roadmap-step"><strong>Pretty price rule</strong><span>Round to a price ending in 0, 5, or .99.</span></div>
+              <div class="roadmap-step"><strong>Status</strong><span>Ready for a scraper/build pass when you want to start the tool.</span></div>
+            </div>
           </div>
         </div>
       </section>
@@ -1078,6 +1252,15 @@
               <tr><th>Main Issue Going Into Next Week</th><td contenteditable="true" id="weeklyMainIssue"></td><th>Action Plan</th><td contenteditable="true" id="weeklyActionPlan"></td></tr>
             </table>
           </div>
+        </div>
+      </section>
+
+      <section id="role-proof" class="section">
+        <div class="section-title"><h2>Role Proof / Raise Tracker</h2><div class="view-pills"><span class="pill green">2027 raise prep</span><span class="pill gray">Performance plan</span></div></div>
+        <div class="grid-3">
+          <div class="sheet-card"><div class="sheet-header">INVENTORY ACCURACY</div><div class="sheet-body roadmap-list"><div class="roadmap-step"><strong>Weekly counts</strong><span>Show 100% completion across TT-01 to TT-04.</span></div><div class="roadmap-step"><strong>Variance trend</strong><span>Track stable, low variance and repeat discrepancy reduction.</span></div></div></div>
+          <div class="sheet-card"><div class="sheet-header">LOSS CONTROL</div><div class="sheet-body roadmap-list"><div class="roadmap-step"><strong>Replacement logging</strong><span>Track 100% replacement log compliance and root causes.</span></div><div class="roadmap-step"><strong>Dollars saved</strong><span>Use Issues Caught + Resolved to prove avoided loss.</span></div></div></div>
+          <div class="sheet-card"><div class="sheet-header">OWNERSHIP + PROCESS</div><div class="sheet-body roadmap-list"><div class="roadmap-step"><strong>Proactive fixes</strong><span>Document risks flagged before escalation.</span></div><div class="roadmap-step"><strong>Improvements</strong><span>Record systems/processes you improved over time.</span></div></div></div>
         </div>
       </section>
 
@@ -1243,6 +1426,22 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       queueSyncTimers[id] = setTimeout(() => { fn(); }, 350);
     }
     const OPTIONS = {source:['VR Email','TikTok Shop Chat','TikTok DM','Instagram DM','TikTok Refund','TikTok Return','Shopify','Manual'],account:['All','VR','PS','CK'],issueType:['Missing Item','Wrong Item','Missing Package','Damaged Item','Refund Request','Return Request','Order Update','Inventory Issue','Surprise Set Issue','General Question'],priority:['Low','Medium','High','Urgent'],queueStatus:['New','In Progress','Needs Review','Follow Up','Waiting on Customer','Waiting on Team','Resolved'],sendTo:['Daily Follow-Up','Issues Caught + Resolved','Replacement / Loss Log','Inventory Exception','Weekly Review'],simpleStatus:['Not Started','In Progress','Needs Review','Follow Up','Completed'],yesNo:['No','Yes']};
+    const CS_TEMPLATE_LIBRARY = [{"name":"Package Taking Too Long - Initial","shortcut":"/noscan1","category":"Shipping","trigger":"Customer says tracking only shows label created or no scan yet","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when internal system shows package handed to USPS or ready for pickup. No refund. No goodwill unless VIP or repeat issue.","responseStarter":"Hello, thanks for reaching out. According to our internal systems, your package has been picked up by USPS and is currently awaiting its initial scan. Tracking updates may take some time to appear, and USPS may take 1 to 2 business days to apply the first scan. Please let us know if you have any other questions."},{"name":"In Transit Delay - Initial","shortcut":"/transit1","category":"Shipping","trigger":"Customer says package is taking too long but tracking shows in transit","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when tracking is moving or still within expected delivery window.","responseStarter":"Hello, thanks for reaching out. According to the tracking information, your package is currently in transit with the carrier. Shipping updates can sometimes take time to appear between scans. We appreciate your patience and understanding."},{"name":"Signature Required - Initial","shortcut":"/sig1","category":"Shipping","trigger":"Customer receives notice that signature is required","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use for high-value orders. USPS still has package. No refund.","responseStarter":"Hello, thank you for reaching out. Since this is a high-value order, a signature is required for delivery. According to the notice, a delivery attempt was made but no authorized recipient was available. We recommend contacting your local post office to arrange redelivery or pick up the package directly. Please note that if the package is not claimed by [date], it will be returned to the sender. We appreciate your understanding."},{"name":"Returned Package - Monitoring","shortcut":"/return1","category":"Shipping","trigger":"Customer thinks one or more packages are being returned","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Use when waiting for returned parcel to physically arrive.","responseStarter":"Hello, thanks for following up. We will keep an eye out for any returned packages associated with your orders and will contact you as soon as we receive them or have an update."},{"name":"Chatbot Spam","shortcut":"/admin1","category":"Admin","trigger":"Customer confused by automated messages or repeated bot prompts","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use simple disengaging note.","responseStarter":"Thank you for reaching out. These messages are automatic. Have a great day."},{"name":"Stall / Internal Review","shortcut":"/admin2","category":"Admin","trigger":"Need time to investigate without promising resolution yet","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Standard holding response.","responseStarter":"Hello, thank you for providing that information. We are currently looking into this matter for you and reviewing everything on our end. Please allow some time for us to provide an update. We appreciate your patience and understanding."},{"name":"Order Number Request","shortcut":"/admin5","category":"Admin","trigger":"Customer is inquiring about order without any information provided.","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Ask customer for order number.","responseStarter":"Hello, thanks for reaching out. Could you please share the order number you are referring to?"},{"name":"Missing Items - Request Photos","shortcut":"/missing1","category":"Order Issue","trigger":"Customer says package arrived but items are missing","requiresRefund":"Yes","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Default response. Ask for package, packing slip, all contents.","responseStarter":"Hello, thanks for reaching out. Could you please send us photos of the package, the packing slip, and all of the contents you received? Once we have those images, we will review everything and investigate the situation right away to help resolve this for you."},{"name":"Opened Instead of Sealed - Under Review","shortcut":"/sealed1","category":"Order Issue","trigger":"Customer says they wanted item sealed but it was opened","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Review footage before deciding.","responseStarter":"Hello, thank you for providing that information. We are currently looking into this matter for you and reviewing everything on our end. Please allow some time for us to provide an update. We appreciate your patience and understanding."},{"name":"Surprise Set Refund - Initial","shortcut":"/ssrefund1","category":"Refund","trigger":"Customer wants cancellation or refund for surprise set order","requiresRefund":"No","requiresReview":"No","finalAction":"Direct to TikTok","internalNotes":"Use default policy response. Keep concise.","responseStarter":"Hello, thanks for reaching out. Unfortunately, due to TikTok’s guidelines, all sales on surprise sets are final in accordance with TikTok policy. Please contact TikTok directly for any further assistance. Thank you for your patience and understanding."},{"name":"Refund - Label Created","shortcut":"/refund1","category":"Refund","trigger":"Customer asks for refund but shipping label already created and item not ripped","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use only for this specific workflow. Do not use on surprise sets already opened.","responseStarter":"Hello, thanks for reaching out. Unfortunately, due to TikTok’s guidelines, once a shipping label has been created, we’re unable to process a refund at this stage. The label has already been created and we will send you an empty pack. Once it arrives, please submit a refund request through TikTok. As soon as it’s requested, we’ll promptly issue your refund. Thank you for your patience and understanding."},{"name":"Return - Already Shipped","shortcut":"/refund2","category":"Refund","trigger":"Customer wants return but item already shipped and still sealed","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Return path only if sealed and unused after arrival.","responseStarter":"Hello, we understand your concern. Once the product arrives and it is still sealed and unused, you can submit a return request through TikTok and we will promptly accept it and process the refund once it is returned. Please let us know if you have any other questions."},{"name":"Missing Package - Initial","shortcut":"/delivered1","category":"Missing Package","trigger":"Tracking shows delivered but customer says package missing","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Ask customer to check area, neighbors, leasing office, parcel locker, post office GPS scan. No replacement now.","responseStarter":"Hello, thanks for reaching out. According to the tracking information, the package was marked as delivered by the carrier. We recommend checking around the delivery area, with neighbors, or with your leasing office or mail room in case it was placed in a parcel locker or held there. You can also contact your local post office with your tracking number, as they can verify the GPS delivery scan and confirm where it was left. Please let us know if you have any other questions."},{"name":"Giveaway Winner - Request Address","shortcut":"/give1","category":"Giveaway","trigger":"Customer says they won giveaway and asks how to claim","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Basic giveaway intake.","responseStarter":"Hello, thanks for reaching out and congratulations on winning the giveaway! Please provide your shipping address, and we will get that shipped out shortly."},{"name":"Damage - Request Photos","shortcut":"/damage1","category":"Damage","trigger":"Customer says package or product arrived damaged","requiresRefund":"Yes","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Request photos first. Do not take fault.","responseStarter":"Hello, thanks for reaching out. Please send us photos of the package and the damaged item so we can review everything on our end and determine the best next step."},{"name":"Package Taking Too Long - Follow Up","shortcut":"/noscan2","category":"Shipping","trigger":"Customer follows up after 1 to 2 days with no update","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Reassure only. Do not overexplain. No compensation by default.","responseStarter":"Hello, thank you for following up. Your package is still on the way, and in some cases USPS may take additional time to complete the initial scan and update tracking. We appreciate your patience and understanding."},{"name":"In Transit Delay - Follow Up","shortcut":"/transit2","category":"Shipping","trigger":"Customer upset about delivery speed and asks for refund","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"If carrier still has package and product is collectible, do not refund by default.","responseStarter":"Hello, thank you for following up. At this time, the package remains in transit with the carrier, and we are unable to issue a refund while it is still on the way. We recommend continuing to monitor tracking for the next update."},{"name":"Signature Required - Wants Refund","shortcut":"/sig2","category":"Shipping","trigger":"Customer asks for refund because USPS has package","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"State USPS has package, not shop. No refund for collectibles or while package held by carrier.","responseStarter":"Hello, thanks for reaching out. Your order is still with USPS, and a delivery attempt was made but no authorized recipient was available. Since this is a high-value collectible, a signature is required, and refunds are not possible while the package is still being held for delivery. We recommend contacting your local post office to arrange redelivery or pickup directly. We appreciate your understanding."},{"name":"Signature Required - Move / New Address","shortcut":"/sig3","category":"Shipping","trigger":"Customer says they cannot pick up and are moving soon","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"If returned, then can assist later. Do not promise immediate reroute unless shop can do it.","responseStarter":"Hello, thank you for reaching out. If you are unable to pick up the package after a failed USPS signed delivery, it will be returned to us, and once it is returned, we can assist with shipping it to your new address."},{"name":"Returned Package - Not Yet Received","shortcut":"/return2","category":"Shipping","trigger":"Customer follows up and returned package still not at shop","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Use while still waiting on carrier return.","responseStarter":"Hello, thank you for following up. At this time, we have not yet received the returned package. We are continuing to monitor this and will update you as soon as anything arrives or if we have more information. We appreciate your patience and understanding in the meantime."},{"name":"Missing Items - Packaging Not Available","shortcut":"/missing2","category":"Order Issue","trigger":"Customer says packaging or slip was thrown away","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Investigate internally. Do not accuse. Benefit of doubt if business case makes sense.","responseStarter":"Hello, thank you for the update. We understand the packaging and packing slip may no longer be available. We will review the order on our end and investigate the situation further. Please allow some time for us to provide an update."},{"name":"Missing Items - Under Review","shortcut":"/missing3","category":"Order Issue","trigger":"Customer already sent photos","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Use while reviewing photos and order details.","responseStarter":"Hello, thank you for providing those images. We are currently reviewing everything on our end and investigating the situation. Please allow some time for us to provide an update."},{"name":"Wrong Item - Return Label Needed","shortcut":"/wrong2","category":"Order Issue","trigger":"Customer agrees to return wrong item for exchange","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Collect email for return label.","responseStarter":"Hello, thanks for reaching out. Could you please provide your current email address so we can send over your return label?"},{"name":"Opened Instead of Sealed - No Clear Request Found","shortcut":"/sealed2","category":"Order Issue","trigger":"Footage reviewed and no clear sealed request before opening","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Default no refund. Offer RIP10 only if needed or approved goodwill.","responseStarter":"Hello, thanks for reaching out. After further reviewing the footage, we were unable to find any clear request to have the item shipped sealed prior to it being opened. Based on this, the order falls under live opening guidelines and is not eligible for a refund. We apologize for any confusion or misunderstanding."},{"name":"Surprise Set Refund - Accidental Bid","shortcut":"/ssrefund2","category":"Refund","trigger":"Customer says accidental bid or unauthorized purchase","requiresRefund":"No","requiresReview":"No","finalAction":"Direct to TikTok","internalNotes":"Do not debate. Do not promise refund. Direct to TikTok.","responseStarter":"Hello, thank you for reaching out. We understand your concern. As this was a randomized surprise set, we are unable to cancel or refund the order on our end. If you believe the purchase was unauthorized, please contact TikTok directly for further review."},{"name":"Surprise Set Refund - Opened Live","shortcut":"/ssrefund3","category":"Refund","trigger":"Customer argues after products were opened live","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when reviewed footage confirms live opening. No compensation by default.","responseStarter":"Hello, thanks for reaching out. After further review, we can confirm the products were opened live during the broadcast and are therefore not eligible for a refund. We appreciate your understanding."},{"name":"Missing Package Claim - Confirm Non Receipt","shortcut":"/delivered2","category":"Missing Package","trigger":"Customer says they checked everywhere and still cannot locate it","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use to get explicit confirmation before opening claim.","responseStarter":"Hello, thank you for the update. Please confirm that you did not receive the package marked as delivered at [time] on [date]. Once confirmed, we will proceed with opening a USPS missing package claim and then discuss the next steps with you."},{"name":"Giveaway Winner - Choose Prize","shortcut":"/give2","category":"Giveaway","trigger":"Customer provided address and needs to pick prize type","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use if prize requires choice.","responseStarter":"Thank you for providing your address! Could you please confirm whether you would prefer the MTG Premium Pack or the Pokémon Premium Pack for your giveaway prize?"},{"name":"Damage - Transit Likely","shortcut":"/damage2","category":"Damage","trigger":"Customer provided photos and damage appears transit related","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Position as carrier-related. Review before replacing.","responseStarter":"Hello, thank you for providing the photos. Based on the information provided, this appears to have occurred during transit with the carrier. We are currently reviewing this on our end and will determine the best next step."},{"name":"Package Taking Too Long - Final","shortcut":"/noscan3","category":"Shipping","trigger":"Customer pushes and claims it was never shipped","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"If reasonable and frustrated, DISCOUNT CODE only if needed. Escalate only if scan delay becomes abnormal.","responseStarter":"Hello, thank you for reaching out. After further review, we can confirm your package has been handed off and is on the way. While tracking may not yet reflect movement, USPS can take time to complete the initial scan. If there is still no update after additional time, we will review it further on our end."},{"name":"Returned Package - Unable To Locate","shortcut":"/return3","category":"Shipping","trigger":"Returned package could not be located and replacement approved","requiresRefund":"No","requiresReview":"No","finalAction":"Replace","internalNotes":"Do not say we lost it. Say unable to locate returned package.","responseStarter":"Hello, thanks for reaching out. After further review, we were unfortunately unable to locate the returned package. As a resolution, we will be shipping out a brand new [item] to you. We appreciate your patience and understanding."},{"name":"End Conversation - Soft Close","shortcut":"/admin3","category":"Admin","trigger":"Issue resolved or no further action needed","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Friendly close.","responseStarter":"Of course. If you have any other questions or concerns, please let us know."},{"name":"End Conversation - Final Close","shortcut":"/admin4","category":"Admin","trigger":"Customer repetitive, hostile, or circular and no new info","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use to disengage. No debate.","responseStarter":"Hello, we understand your concerns and appreciate you taking the time to share this information. At this time, we have provided all available details regarding your order and its status. Any further updates or decisions regarding refunds will be handled directly through TikTok. We appreciate your understanding."},{"name":"Goodwill - DISCOUNT CODE","shortcut":"/goodwill1","category":"Admin","trigger":"Minor dissatisfaction where approved to offer baseline goodwill","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Default goodwill only. Do not offer product unless clear mistake or VIP.","responseStarter":"Hello, thank you for reaching out. While we’re unable to offer a refund or replacement in this case, we’d like to offer a small gesture of goodwill. You’re welcome to use the code [DISCOUNT] for 10% off a future order. We appreciate your understanding."},{"name":"VIP Customer - Light Recovery","shortcut":"/goodwill2","category":"Admin","trigger":"Known high spender or strong repeat customer with approved exception","requiresRefund":"No","requiresReview":"Yes","finalAction":"Close","internalNotes":"Use sparingly for valuable customers. Product goodwill only if approved.","responseStarter":"Hello, thank you for reaching out. We appreciate your continued support. While we’re unable to offer a full refund or replacement in this case, we would like to offer a small gesture of goodwill. Please let us know if you have any other questions."},{"name":"Missing Items - Replacement Approved","shortcut":"/missing4","category":"Order Issue","trigger":"Internal review confirms missing items should be replaced","requiresRefund":"No","requiresReview":"No","finalAction":"Replace","internalNotes":"Use only when mistake confirmed or approved exception.","responseStarter":"Hello, thank you for your patience. After further review, we will be shipping out the following replacement: [item]. Please allow some time for tracking updates once it has been sent. We appreciate your understanding and continued support."},{"name":"Missing Items - Replacement Shipped","shortcut":"/missing5","category":"Order Issue","trigger":"Replacement already created and tracking available","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Add item and tracking. Keep simple.","responseStarter":"Hello, thanks for reaching out. Your replacement [item] has been shipped out. Please allow some time for tracking updates, as USPS may take a bit to scan packages. Here is your tracking information: [tracking]. We appreciate your understanding and continued support."},{"name":"Wrong Item - Keep As Compensation","shortcut":"/wrong1","category":"Order Issue","trigger":"Approved option to let customer keep wrong item","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when wrong item has similar or higher value and approved by team.","responseStarter":"Hello, thank you for contacting Vaulted Support. After further review, we can offer two solutions. You may keep the [product] as compensation, or you can return it and we will exchange it for a [correct product]. We apologize for the misunderstanding and appreciate your patience."},{"name":"Wrong Item - Exchange After Return","shortcut":"/wrong3","category":"Order Issue","trigger":"Return label sent and waiting for item back","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Use while waiting for return to arrive.","responseStarter":"Hello, thanks for reaching out. We’d be happy to process an exchange once we receive the original product. We will also provide a return label and send you a confirmation once the replacement has been shipped."},{"name":"Opened Instead of Sealed - Small Goodwill","shortcut":"/sealed3","category":"Order Issue","trigger":"Approved small goodwill after confusion but no refund","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Default goodwill is RIP10 unless VIP or management approves product.","responseStarter":"Hello, thanks for reaching out. After further review, the order is not eligible for a refund under live opening guidelines. As a small gesture of goodwill, you’re welcome to use the code RIP10 for 10% off a future order. We appreciate your understanding."},{"name":"Surprise Set Refund - Final Disengage","shortcut":"/ssrefund4","category":"Refund","trigger":"Customer keeps arguing, threatens bank, repeats same points","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Final response. Do not continue debate.","responseStarter":"Hello, as previously stated, orders from surprise sets opened live are not eligible for a refund under TikTok guidelines. For any further assistance, please contact TikTok Support directly. Thank you."},{"name":"Missing Package Claim - Opened","shortcut":"/delivered3","category":"Missing Package","trigger":"Customer confirms non receipt","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Open claim. Do not promise replacement or refund yet.","responseStarter":"Hello, thank you for confirming. We will proceed with opening a USPS missing package claim regarding the delivery. Once we receive an update, we will follow up with you to discuss the next steps."},{"name":"Missing Package - Claim Pending","shortcut":"/delivered4","category":"Missing Package","trigger":"Customer asks for update while claim is pending","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Keep short. USPS timeline can take a while.","responseStarter":"Hello, thank you for following up. A missing package claim has already been submitted with USPS, and we are currently waiting for an update from their investigation. We appreciate your patience and understanding."},{"name":"Missing Package - Pushes For Refund","shortcut":"/delivered5","category":"Missing Package","trigger":"Customer demands immediate replacement or refund before claim result","requiresRefund":"No","requiresReview":"Yes","finalAction":"Close","internalNotes":"Hold line. If shop policy allows refund request through platform, direct there. Otherwise keep claim path.","responseStarter":"Hello, thank you for reaching out. Since the package is marked as delivered by the carrier, we are unable to issue a replacement or refund at this stage. We are continuing to review the matter through the carrier claim process and will follow up once we have an update."},{"name":"Giveaway Winner - Tracking Sent","shortcut":"/give3","category":"Giveaway","trigger":"Prize shipped with tracking","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Send once prize ships.","responseStarter":"Hello, thanks for confirming! Here is your tracking number: [tracking]. Please allow some time for tracking updates, as USPS may take a bit to scan packages. Congratulations again on winning the giveaway, and we truly appreciate your continued support!"},{"name":"Damage - Goodwill Replacement","shortcut":"/damage3","category":"Damage","trigger":"Approved replacement as goodwill for transit damage","requiresRefund":"No","requiresReview":"No","finalAction":"Replace","internalNotes":"Use when replacing even though carrier likely caused issue.","responseStarter":"Hello, thanks for reaching out. While this appears to be related to handling during transit with USPS, as a gesture of goodwill we will be sending you a replacement [product]. We appreciate your patience and understanding. Please let us know if you have any other questions."},{"name":"Damage - Manufacturing Issue No Replacement","shortcut":"/damage4","category":"Damage","trigger":"Issue appears manufacturing-related and no replacement approved","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when sourced directly from distributor and not shop-caused.","responseStarter":"Hello, we appreciate you bringing this to our attention. Unfortunately, we are unable to make any changes or replacements as this appears to be a manufacturing issue. Thank you again for reaching out."}];
+
+    function mergeCSTemplateLibrary(){
+      if(!store || !store.templates) return;
+      const existing = new Set((store.templates.rows || []).map(t => String(t.shortcut || '').trim().toLowerCase()).filter(Boolean));
+      let added = 0;
+      CS_TEMPLATE_LIBRARY.forEach(t => {
+        const key = String(t.shortcut || '').trim().toLowerCase();
+        if(!key || existing.has(key)) return;
+        store.templates.rows.push(Object.assign({ id: rowId() }, t));
+        existing.add(key);
+        added++;
+      });
+      if(added) scheduleSaveAll();
+    }
+
     function $(s,r){return(r||document).querySelector(s)} function $all(s,r){return Array.from((r||document).querySelectorAll(s))}
     function lsKey(k){return STORAGE_PREFIX+k} function loadJSON(k,f){try{const raw=localStorage.getItem(lsKey(k));return raw?JSON.parse(raw):f}catch{return f}} function saveJSON(k,v){localStorage.setItem(lsKey(k),JSON.stringify(v))}
     function loadText(k,f){const raw=localStorage.getItem(lsKey(k));return raw==null?f:raw} function saveText(k,v){localStorage.setItem(lsKey(k),String(v==null?'':v))}
@@ -1260,7 +1459,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     function loadAll(){Object.keys(store).forEach(k=>{if(k==='tomorrowPrep'){store[k].data=loadJSON(store[k].key,{surpriseSets:'',liveEvents:'',streamerSchedule:'',inventoryPrep:'',customerFollowUps:''})}else{store[k].rows=loadJSON(store[k].key,[])}})} function saveAll(){Object.keys(store).forEach(k=>{if(k==='tomorrowPrep'){saveJSON(store[k].key,store[k].data)}else{saveJSON(store[k].key,store[k].rows)}})}
     let saveTimer=null; function scheduleSaveAll(){if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>saveAll(),150)}
     let selectedQueueRowId=null;
-    function renderQueue(){const tb=$('#queueTable tbody');tb.innerHTML='';const showArchived=!!($('#showArchivedToggle')&&$('#showArchivedToggle').checked);store.queue.rows.forEach((r,i)=>{if(!showArchived&&r.archived)return;const tr=document.createElement('tr');tr.dataset.id=r.id;if(r.archived)tr.classList.add('archived-row');tr.addEventListener('click',()=>{selectedQueueRowId=r.id;$all('#queueTable tbody tr').forEach(x=>x.style.boxShadow='');tr.style.boxShadow='inset 0 0 0 2px #b9b9b4'});tr.appendChild(makeTdText(r.receivedTime,()=>{r.receivedTime=tr.children[0].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));let td=document.createElement('td');let s=buildSelect(OPTIONS.source,r.source,'',null);s.addEventListener('change',()=>{r.source=s.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(s);tr.appendChild(td);td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.customer,()=>{r.customer=tr.children[3].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));tr.appendChild(makeTdText(r.orderNumber,()=>{r.orderNumber=tr.children[4].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let it=buildSelect(OPTIONS.issueType,r.issueType,'',null);it.addEventListener('change',()=>{r.issueType=it.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(it);tr.appendChild(td);td=document.createElement('td');let p=buildSelect(OPTIONS.priority,r.priority,'priority',priorityClass);p.addEventListener('change',()=>{r.priority=p.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(p);tr.appendChild(td);td=document.createElement('td');let st=buildSelect(OPTIONS.queueStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(st);tr.appendChild(td);tr.appendChild(makeTdText(r.nextAction,()=>{r.nextAction=tr.children[8].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let send=buildSelect(OPTIONS.sendTo,r.sendTo,'',null);send.addEventListener('change',()=>{r.sendTo=send.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(send);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[10].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));const actionTd=document.createElement('td');const actionBtn=document.createElement('button');actionBtn.className='btn';actionBtn.style.padding='5px 8px';if(r.archived){actionBtn.textContent='Restore';actionBtn.addEventListener('click',(e)=>{e.stopPropagation();r.archived=false;r.archivedAt=null;scheduleSaveAll();renderQueue();updateMetrics();supabaseUpsertWorkQueueRow(r).catch(()=>{})});}else{actionBtn.textContent='Archive';actionBtn.addEventListener('click',(e)=>{e.stopPropagation();r.archived=true;r.archivedAt=new Date().toISOString();scheduleSaveAll();renderQueue();updateMetrics();supabaseUpsertWorkQueueRow(r).catch(()=>{})});}actionTd.appendChild(actionBtn);tr.appendChild(actionTd);tb.appendChild(tr)})}
+    function renderQueue(){const tb=$('#queueTable tbody');tb.innerHTML='';const showArchived=!!($('#showArchivedToggle')&&$('#showArchivedToggle').checked);store.queue.rows.forEach((r,i)=>{if(!showArchived&&r.archived)return;const tr=document.createElement('tr');tr.dataset.id=r.id;if(r.archived)tr.classList.add('archived-row');tr.addEventListener('click',()=>{selectedQueueRowId=r.id;$all('#queueTable tbody tr').forEach(x=>x.style.boxShadow='');tr.style.boxShadow='inset 0 0 0 2px #b9b9b4'});tr.appendChild(makeTdText(r.receivedTime,()=>{r.receivedTime=tr.children[0].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));let td=document.createElement('td');let s=buildSelect(OPTIONS.source,r.source,'',null);s.addEventListener('change',()=>{r.source=s.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(s);tr.appendChild(td);td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.customer,()=>{r.customer=tr.children[3].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));tr.appendChild(makeTdText(r.orderNumber,()=>{r.orderNumber=tr.children[4].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let it=buildSelect(OPTIONS.issueType,r.issueType,'',null);it.addEventListener('change',()=>{r.issueType=it.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(it);tr.appendChild(td);td=document.createElement('td');let p=buildSelect(OPTIONS.priority,r.priority,'priority',priorityClass);p.addEventListener('change',()=>{r.priority=p.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(p);tr.appendChild(td);td=document.createElement('td');let st=buildSelect(OPTIONS.queueStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(st);tr.appendChild(td);tr.appendChild(makeTdText(r.nextAction,()=>{r.nextAction=tr.children[8].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let send=buildSelect(OPTIONS.sendTo,r.sendTo,'',null);send.addEventListener('change',()=>{r.sendTo=send.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(send);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[10].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));const actionTd=document.createElement('td');const actionWrap=document.createElement('div');actionWrap.className='queue-action-stack';const actionBtn=document.createElement('button');actionBtn.className='btn';actionBtn.style.padding='5px 8px';if(r.archived){actionBtn.textContent='Restore';actionBtn.addEventListener('click',(e)=>{e.stopPropagation();r.archived=false;r.archivedAt=null;scheduleSaveAll();renderQueue();updateMetrics();supabaseUpsertWorkQueueRow(r).catch(()=>{})});}else{actionBtn.textContent='Archive';actionBtn.addEventListener('click',(e)=>{e.stopPropagation();r.archived=true;r.archivedAt=new Date().toISOString();scheduleSaveAll();renderQueue();updateMetrics();supabaseUpsertWorkQueueRow(r).catch(()=>{})});}const trashBtn=document.createElement('button');trashBtn.className='btn trash-btn';trashBtn.style.padding='5px 8px';trashBtn.textContent='🗑';trashBtn.title='Permanently delete';trashBtn.addEventListener('click',(e)=>{e.stopPropagation();const ok=confirm('Permanently delete this queue item? This cannot be undone.');if(!ok)return;store.queue.rows=store.queue.rows.filter(x=>x.id!==r.id);if(selectedQueueRowId===r.id)selectedQueueRowId=null;scheduleSaveAll();renderQueue();updateMetrics();renderCommandCenter();supabaseDeleteWorkQueueRow(r.id).catch(()=>{})});actionWrap.appendChild(actionBtn);actionWrap.appendChild(trashBtn);actionTd.appendChild(actionWrap);tr.appendChild(actionTd);tb.appendChild(tr)})}
     function renderWorkflowTable(id,key,hasTarget){const tb=$('#'+id+' tbody');tb.innerHTML='';const rows=store[key].rows;rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.item,()=>{r.item=tr.children[0].textContent}));let td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.details,()=>{r.details=tr.children[2].textContent}));td=document.createElement('td');let st=buildSelect(OPTIONS.simpleStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics()});td.appendChild(st);tr.appendChild(td);if(hasTarget){tr.appendChild(makeTdText(r.target,()=>{r.target=tr.children[4].textContent}));tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[5].textContent}))}else{tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[4].textContent}))}tr.appendChild(makeTdDelete(()=>{rows.splice(i,1);scheduleSaveAll();renderAllTables();updateMetrics()}));tb.appendChild(tr)})}
     function renderIssues(){const tb=$('#issuesTable tbody');tb.innerHTML='';store.issues.rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.date,()=>{r.date=tr.children[0].textContent}));let td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.issue,()=>{r.issue=tr.children[2].textContent}));tr.appendChild(makeTdText(r.actionTaken,()=>{r.actionTaken=tr.children[3].textContent}));td=document.createElement('td');let t=buildSelect(['CS','Inventory','Replacement','Surprise Set','Studio Readiness','Other'],r.type,'',null);t.addEventListener('change',()=>{r.type=t.value;scheduleSaveAll()});td.appendChild(t);tr.appendChild(td);tr.appendChild(makeTdNumber(r.saved,()=>{r.saved=tr.children[5].textContent}));td=document.createElement('td');let fu=buildSelect(OPTIONS.yesNo,r.followUpNeeded,'',null);fu.addEventListener('change',()=>{r.followUpNeeded=fu.value;scheduleSaveAll()});td.appendChild(fu);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[7].textContent}));tr.appendChild(makeTdDelete(()=>{store.issues.rows.splice(i,1);scheduleSaveAll();renderIssues();updateMetrics()}));tb.appendChild(tr)})}
     function renderTemplates(){const tb=$('#csTemplateTable tbody');tb.innerHTML='';const f=['name','shortcut','category','trigger','requiresRefund','requiresReview','finalAction','internalNotes','responseStarter'];store.templates.rows.forEach((r,i)=>{const tr=document.createElement('tr');f.forEach(k=>{const td=makeTdText(r[k],()=>{r[k]=td.textContent});tr.appendChild(td)});tr.appendChild(makeTdDelete(()=>{store.templates.rows.splice(i,1);scheduleSaveAll();renderTemplates()}));tb.appendChild(tr)})}
@@ -1355,7 +1554,67 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     function unlockDashboard(){const input=$('#passwordInput');const err=$('#passwordError');if(input.value.trim()===PASSWORD){sessionStorage.setItem('opCommandUnlocked','true');$('#lockScreen').style.display='none';$('#appShell').classList.remove('locked-blur');err.textContent='';input.value=''}else{err.textContent='Wrong password.';input.value='';input.focus()}}
     function lockDashboard(){sessionStorage.removeItem('opCommandUnlocked');$('#lockScreen').style.display='flex';$('#appShell').classList.add('locked-blur')}
     function setupScrollSpy(){const sections=document.querySelectorAll('main section[id]');const links=document.querySelectorAll('.side-link');const obs=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=document.querySelector('.side-link[href=\"#'+e.target.id+'\"]');if(a)a.classList.add('active')}})},{root:null,rootMargin:'-25% 0px -60% 0px',threshold:0});sections.forEach(s=>obs.observe(s))}
-    function init(){$('#unlockButton').addEventListener('click',unlockDashboard);$('#passwordInput').addEventListener('keydown',e=>{if(e.key==='Enter')unlockDashboard()});if(sessionStorage.getItem('opCommandUnlocked')==='true'){$('#lockScreen').style.display='none';$('#appShell').classList.remove('locked-blur')}$('#btnLock').addEventListener('click',lockDashboard);$('#btnExport').addEventListener('click',exportBackup);$('#btnReset').addEventListener('click',resetDemoData);$('#btnRecapTop').addEventListener('click',assistantRecap);$('#btnReviewTop').addEventListener('click',assistantReview);$('#btnAddQueue').addEventListener('click',()=>addQueueRow());$('#btnResolveQueue').addEventListener('click',resolveSelectedQueue);$('#btnSuggestQueue').addEventListener('click',suggestFromQueue);$('#showArchivedToggle').addEventListener('change',()=>{renderQueue();renderCommandCenter()});$('#btnAddPriority').addEventListener('click',()=>addWorkflowRow('workflowPriority'));$('#btnAddFollowUp').addEventListener('click',()=>addWorkflowRow('workflowFollow'));$('#btnAddLivePrep').addEventListener('click',()=>addWorkflowRow('workflowLive'));$('#btnAddResolved').addEventListener('click',()=>addDoneRow());$('#btnAddIssue').addEventListener('click',()=>addIssueRow());$('#btnAddTemplate').addEventListener('click',()=>addTemplateRow());$('#btnAddSet').addEventListener('click',()=>addSetRow());$('#btnAddInventory').addEventListener('click',()=>addInventoryRow());$('#btnAddReturn').addEventListener('click',()=>addReturnRow());$('#btnAddSocial').addEventListener('click',()=>addSocialRow());$('#btnAddVRDate').addEventListener('click',()=>addStreamerDate('streamerVR'));$('#btnAddPSDate').addEventListener('click',()=>addStreamerDate('streamerPS'));$('#btnAddCKDate').addEventListener('click',()=>addStreamerDate('streamerCK'));$('#btnReview').addEventListener('click',assistantReview);$('#btnRecap').addEventListener('click',assistantRecap);$('#btnImprove').addEventListener('click',assistantImprove);$('#btnDraft').addEventListener('click',assistantDraftResponse);$('#btnPrioritizeQueue').addEventListener('click',assistantReview);$('#btnScheduleDay').addEventListener('click',scheduleMyDay);$('#btnDraftResponse').addEventListener('click',assistantDraftResponse);$('#btnDailyRecap').addEventListener('click',assistantRecap);$('#tomorrowSurpriseSets').addEventListener('blur',()=>{store.tomorrowPrep.data.surpriseSets=$('#tomorrowSurpriseSets').value;scheduleSaveAll();});$('#tomorrowLiveEvents').addEventListener('blur',()=>{store.tomorrowPrep.data.liveEvents=$('#tomorrowLiveEvents').value;scheduleSaveAll();});$('#tomorrowStreamerSchedule').addEventListener('blur',()=>{store.tomorrowPrep.data.streamerSchedule=$('#tomorrowStreamerSchedule').value;scheduleSaveAll();});$('#tomorrowInventoryPrep').addEventListener('blur',()=>{store.tomorrowPrep.data.inventoryPrep=$('#tomorrowInventoryPrep').value;scheduleSaveAll();});$('#tomorrowCustomerFollowUps').addEventListener('blur',()=>{store.tomorrowPrep.data.customerFollowUps=$('#tomorrowCustomerFollowUps').value;scheduleSaveAll();});$('#btnAddWorkLog').addEventListener('click',()=>{const entry={id:rowId(),date:new Date().toLocaleDateString(),category:$('#workLogCategory').value,account:$('#workLogAccount').value,what:$('#workLogWhat').value,result:$('#workLogResult').value,notes:$('#workLogNotes').value,followUp:$('#workLogFollowUp').checked};store.workLog.rows.push(entry);scheduleSaveAll();renderWorkLog();$('#workLogWhat').value='';$('#workLogResult').value='';$('#workLogNotes').value='';$('#workLogFollowUp').checked=false;});$('#btnClearWorkLog').addEventListener('click',()=>{const today=new Date().toLocaleDateString();store.workLog.rows=store.workLog.rows.filter(r=>r.date!==today);scheduleSaveAll();renderWorkLog();});loadAll();initSingletonSelects();hydrateSavedFields();seedIfEmpty();renderAllTables();updateMetrics();setupScrollSpy();
+
+    function updatePlannerGreeting(){
+      const text=$('#plannerGreetingText');
+      const sub=$('#plannerGreetingSubtext');
+      if(!text) return;
+      const h=new Date().getHours();
+      let part='morning';
+      if(h>=12&&h<17) part='afternoon';
+      else if(h>=17||h<4) part='evening';
+      text.textContent='Good '+part+', Jonny';
+      if(sub) sub.textContent = part==='morning' ? 'Start clear. Stay ahead.' : part==='afternoon' ? 'Keep momentum and close the loop.' : 'Wrap up clean and prep tomorrow.';
+    }
+
+    let setsheetRows=[];
+    function cleanSetSheetLine(line){
+      return String(line||'')
+        .replace(/[🔥📦🎁🧃✨⭐✅☑️✔️♣️♠️♦️♥️]/g,' ')
+        .replace(/\*\*/g,'')
+        .replace(/[“”]/g,'"')
+        .replace(/\s+/g,' ')
+        .trim();
+    }
+    function convertSetSheet(){
+      const input=$('#setsheetPaste');
+      const out=$('#setsheetOutput');
+      if(!input||!out) return;
+      const counts={};
+      const unknown=[];
+      input.value.split(/\r?\n/).forEach(raw=>{
+        const name=cleanSetSheetLine(raw);
+        if(!name) return;
+        if(name.length<2) return;
+        counts[name]=(counts[name]||0)+1;
+      });
+      setsheetRows=Object.keys(counts).sort((a,b)=>a.localeCompare(b)).map(name=>({product:name,qty:counts[name],status:'Ready'}));
+      $('#setsheetUniqueCount').textContent=String(setsheetRows.length);
+      $('#setsheetTotalCount').textContent=String(setsheetRows.reduce((sum,r)=>sum+r.qty,0));
+      $('#setsheetUnknownCount').textContent=String(unknown.length);
+      const tbody=setsheetRows.length
+        ? setsheetRows.map(r=>`<tr><td>${escapeHtml(r.product)}</td><td>${r.qty}</td><td>${r.status}</td></tr>`).join('')
+        : '<tr><td colspan="3">No items found.</td></tr>';
+      out.innerHTML=`<table><thead><tr><th>Product</th><th>Qty</th><th>Status</th></tr></thead><tbody>${tbody}</tbody></table>`;
+    }
+    function escapeHtml(value){return String(value).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));}
+    function downloadSetSheetCSV(){
+      if(!setsheetRows.length) convertSetSheet();
+      if(!setsheetRows.length){ alert('Paste a surprise set and click Convert first.'); return; }
+      const name=($('#setsheetFileName')&&$('#setsheetFileName').value.trim())||'surprise-set';
+      const csv=['Product,Quantity,Status'].concat(setsheetRows.map(r=>`"${String(r.product).replace(/"/g,'""')}",${r.qty},${r.status}`)).join('\n');
+      download(name.replace(/\.csv$/i,'')+'.csv',csv);
+    }
+    function setupSetSheetTool(){
+      const convert=$('#setsheetConvert');
+      const dl=$('#setsheetDownload');
+      const reset=$('#setsheetReset');
+      if(convert) convert.addEventListener('click',convertSetSheet);
+      if(dl) dl.addEventListener('click',downloadSetSheetCSV);
+      if(reset) reset.addEventListener('click',()=>{ const input=$('#setsheetPaste'); if(input) input.value=''; setsheetRows=[]; convertSetSheet(); });
+    }
+
+    function init(){$('#unlockButton').addEventListener('click',unlockDashboard);$('#passwordInput').addEventListener('keydown',e=>{if(e.key==='Enter')unlockDashboard()});if(sessionStorage.getItem('opCommandUnlocked')==='true'){$('#lockScreen').style.display='none';$('#appShell').classList.remove('locked-blur')}$('#btnLock').addEventListener('click',lockDashboard);$('#btnExport').addEventListener('click',exportBackup);$('#btnReset').addEventListener('click',resetDemoData);$('#btnRecapTop').addEventListener('click',assistantRecap);$('#btnReviewTop').addEventListener('click',assistantReview);$('#btnAddQueue').addEventListener('click',()=>addQueueRow());$('#btnResolveQueue').addEventListener('click',resolveSelectedQueue);$('#btnSuggestQueue').addEventListener('click',suggestFromQueue);$('#showArchivedToggle').addEventListener('change',()=>{renderQueue();renderCommandCenter()});$('#btnAddPriority').addEventListener('click',()=>addWorkflowRow('workflowPriority'));$('#btnAddFollowUp').addEventListener('click',()=>addWorkflowRow('workflowFollow'));$('#btnAddLivePrep').addEventListener('click',()=>addWorkflowRow('workflowLive'));$('#btnAddResolved').addEventListener('click',()=>addDoneRow());$('#btnAddIssue').addEventListener('click',()=>addIssueRow());$('#btnAddTemplate').addEventListener('click',()=>addTemplateRow());$('#btnAddSet').addEventListener('click',()=>addSetRow());$('#btnAddInventory').addEventListener('click',()=>addInventoryRow());$('#btnAddReturn').addEventListener('click',()=>addReturnRow());$('#btnAddSocial').addEventListener('click',()=>addSocialRow());$('#btnAddVRDate').addEventListener('click',()=>addStreamerDate('streamerVR'));$('#btnAddPSDate').addEventListener('click',()=>addStreamerDate('streamerPS'));$('#btnAddCKDate').addEventListener('click',()=>addStreamerDate('streamerCK'));$('#btnReview').addEventListener('click',assistantReview);$('#btnRecap').addEventListener('click',assistantRecap);$('#btnImprove').addEventListener('click',assistantImprove);$('#btnDraft').addEventListener('click',assistantDraftResponse);$('#btnPrioritizeQueue').addEventListener('click',assistantReview);$('#btnScheduleDay').addEventListener('click',scheduleMyDay);$('#btnDraftResponse').addEventListener('click',assistantDraftResponse);$('#btnDailyRecap').addEventListener('click',assistantRecap);$('#tomorrowSurpriseSets').addEventListener('blur',()=>{store.tomorrowPrep.data.surpriseSets=$('#tomorrowSurpriseSets').value;scheduleSaveAll();});$('#tomorrowLiveEvents').addEventListener('blur',()=>{store.tomorrowPrep.data.liveEvents=$('#tomorrowLiveEvents').value;scheduleSaveAll();});$('#tomorrowStreamerSchedule').addEventListener('blur',()=>{store.tomorrowPrep.data.streamerSchedule=$('#tomorrowStreamerSchedule').value;scheduleSaveAll();});$('#tomorrowInventoryPrep').addEventListener('blur',()=>{store.tomorrowPrep.data.inventoryPrep=$('#tomorrowInventoryPrep').value;scheduleSaveAll();});$('#tomorrowCustomerFollowUps').addEventListener('blur',()=>{store.tomorrowPrep.data.customerFollowUps=$('#tomorrowCustomerFollowUps').value;scheduleSaveAll();});$('#btnAddWorkLog').addEventListener('click',()=>{const entry={id:rowId(),date:new Date().toLocaleDateString(),category:$('#workLogCategory').value,account:$('#workLogAccount').value,what:$('#workLogWhat').value,result:$('#workLogResult').value,notes:$('#workLogNotes').value,followUp:$('#workLogFollowUp').checked};store.workLog.rows.push(entry);scheduleSaveAll();renderWorkLog();$('#workLogWhat').value='';$('#workLogResult').value='';$('#workLogNotes').value='';$('#workLogFollowUp').checked=false;});$('#btnClearWorkLog').addEventListener('click',()=>{const today=new Date().toLocaleDateString();store.workLog.rows=store.workLog.rows.filter(r=>r.date!==today);scheduleSaveAll();renderWorkLog();});loadAll();initSingletonSelects();hydrateSavedFields();seedIfEmpty();mergeCSTemplateLibrary();renderAllTables();updateMetrics();setupScrollSpy();updatePlannerGreeting();setupSetSheetTool();
       // Supabase load (Work Queue only). If it fails, we keep localStorage data.
       (async()=>{try{const rows=await supabaseLoadWorkQueue();if(Array.isArray(rows)){store.queue.rows=rows;scheduleSaveAll();renderQueue();updateMetrics();renderCommandCenter();}}catch{}})();
     }
@@ -1364,9 +1623,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       const viewMap = {
         home: ['home'],
         cs: ['ai-intake','queue','cs','returns'],
-        sets: ['sets','streamers'],
+        sets: ['sets'],
         inventory: ['inventory','returns'],
-        reports: ['issues','weekly','ai'],
+        reports: ['issues','weekly','role-proof','ai'],
         search: ['search'],
         settings: ['settings'],
         help: ['help']
@@ -1377,7 +1636,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
         if(['ai-intake','queue','cs','returns'].includes(key)) return 'cs';
         if(['sets','streamers'].includes(key)) return 'sets';
         if(['inventory'].includes(key)) return 'inventory';
-        if(['issues','weekly','ai'].includes(key)) return 'reports';
+        if(['issues','weekly','role-proof','ai'].includes(key)) return 'reports';
         if(['search','settings','help'].includes(key)) return key;
         return 'home';
       }
@@ -1406,225 +1665,105 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
 
 
     function setupPlannerPolish(){
-      const DAY_KEYS = ['mon','tue','wed','thu','fri'];
-      const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri'];
-      const TIMES = ['9:00 AM','10:30 AM','12:00 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','4:30 PM','5:00 PM'];
-      const TASK_KEY = STORAGE_PREFIX + 'planner.customTasks.v2';
-      const PREP_KEY = STORAGE_PREFIX + 'planner.tomorrowPrepChecks.v2';
-      let plannerWeekOffset = Number(localStorage.getItem(STORAGE_PREFIX + 'planner.weekOffset') || 0);
-
-      function startOfWeek(date){
-        const d = new Date(date);
-        const day = d.getDay();
-        const diff = day === 0 ? -6 : 1 - day;
-        d.setDate(d.getDate() + diff);
-        d.setHours(0,0,0,0);
-        return d;
-      }
-
-      function fmtShort(d){
-        return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
-      }
-
-      function updateWeekLabels(){
-        const monday = startOfWeek(new Date());
-        monday.setDate(monday.getDate() + plannerWeekOffset * 7);
-        const friday = new Date(monday);
-        friday.setDate(monday.getDate() + 4);
-        const range = document.getElementById('plannerWeekRange');
-        if(range) range.textContent = `${fmtShort(monday)} – ${fmtShort(friday)}, ${friday.getFullYear()}`;
-        const today = new Date();
-        const currentMonday = startOfWeek(today).toDateString();
-        const isCurrentWeek = monday.toDateString() === currentMonday;
-        const pill = document.getElementById('plannerWeekPill');
-        if(pill) pill.textContent = isCurrentWeek ? 'Current Week' : 'Planning Week';
-
-        DAY_KEYS.forEach((key, index) => {
-          const d = new Date(monday);
-          d.setDate(monday.getDate() + index);
-          const head = document.querySelector(`[data-day-head="${key}"]`);
-          if(!head) return;
-          head.innerHTML = `${DAY_NAMES[index].toUpperCase()}<small>${fmtShort(d)}</small>`;
-          const isToday = isCurrentWeek && d.toDateString() === today.toDateString();
-          head.classList.toggle('today', isToday);
-          document.querySelectorAll(`[data-day="${key}"]`).forEach(cell => cell.classList.toggle('today', isToday));
-        });
-      }
-
-      function loadCustomTasks(){
-        try { return JSON.parse(localStorage.getItem(TASK_KEY) || '[]'); } catch { return []; }
-      }
-
-      function saveCustomTasks(tasks){
-        localStorage.setItem(TASK_KEY, JSON.stringify(tasks));
-      }
-
-      function customTaskElement(task){
-        const el = document.createElement('div');
-        el.className = `calendar-task ${task.category || 'admin'} custom-calendar-task`;
-        el.draggable = true;
-        el.dataset.taskId = task.id;
-        el.innerHTML = `<button class="custom-task-remove" type="button" title="Remove task">×</button>${escapeHtml(task.title || 'New task')}<small>Custom task</small>`;
-        el.addEventListener('dragstart', e => {
-          e.dataTransfer.setData('text/plain', task.id);
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        el.querySelector('.custom-task-remove').addEventListener('click', e => {
-          e.stopPropagation();
-          const tasks = loadCustomTasks().filter(x => x.id !== task.id);
-          saveCustomTasks(tasks);
-          renderCustomTasks();
-        });
-        return el;
-      }
-
-      function escapeHtml(value){
-        return String(value || '').replace(/[&<>"']/g, char => ({
-          '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
-        }[char]));
-      }
-
-      function renderCustomTasks(){
-        document.querySelectorAll('.custom-calendar-task').forEach(el => el.remove());
-        loadCustomTasks().forEach(task => {
-          const cell = document.querySelector(`.cal-cell[data-day="${task.day}"][data-time="${task.time}"]`);
-          if(cell) cell.appendChild(customTaskElement(task));
-        });
-      }
-
-      function addPlannerTask(){
-        const titleEl = document.getElementById('plannerTaskTitle');
-        const title = titleEl && titleEl.value.trim();
-        if(!title) return;
-        const task = {
-          id: rowId(),
-          title,
-          day: document.getElementById('plannerTaskDay')?.value || 'mon',
-          time: document.getElementById('plannerTaskTime')?.value || '9:00 AM',
-          category: document.getElementById('plannerTaskCategory')?.value || 'admin'
-        };
-        const tasks = loadCustomTasks();
-        tasks.push(task);
-        saveCustomTasks(tasks);
-        titleEl.value = '';
-        renderCustomTasks();
-        plannerSetSuggestion(`Added "${task.title}" to ${task.day.toUpperCase()} at ${task.time}. You can drag it to another calendar block if your day changes.`);
-      }
-
-      function setupDragDrop(){
-        document.querySelectorAll('.cal-cell[data-day][data-time]').forEach(cell => {
-          cell.addEventListener('dragover', e => {
-            e.preventDefault();
-            cell.classList.add('drag-over');
-          });
-          cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
-          cell.addEventListener('drop', e => {
-            e.preventDefault();
-            cell.classList.remove('drag-over');
-            const taskId = e.dataTransfer.getData('text/plain');
-            if(!taskId) return;
-            const tasks = loadCustomTasks();
-            const task = tasks.find(x => x.id === taskId);
-            if(!task) return;
-            task.day = cell.dataset.day;
-            task.time = cell.dataset.time;
-            saveCustomTasks(tasks);
-            renderCustomTasks();
-            plannerSetSuggestion(`Moved "${task.title}" to ${task.day.toUpperCase()} at ${task.time}.`);
-          });
-        });
-      }
-
-      function setupPrepChecks(){
-        let saved = {};
-        try { saved = JSON.parse(localStorage.getItem(PREP_KEY) || '{}'); } catch { saved = {}; }
-        const checks = Array.from(document.querySelectorAll('[data-prep]'));
-        function refresh(){
-          const done = checks.filter(cb => cb.checked).length;
-          const progress = document.getElementById('prepProgress');
-          if(progress) progress.textContent = `${done}/${checks.length}`;
-        }
-        checks.forEach(cb => {
-          cb.checked = !!saved[cb.dataset.prep];
-          cb.addEventListener('change', () => {
-            saved[cb.dataset.prep] = cb.checked;
-            localStorage.setItem(PREP_KEY, JSON.stringify(saved));
-            refresh();
-          });
-        });
-        refresh();
-      }
-
-      function plannerSetSuggestion(text){
-        const box = document.getElementById('plannerSuggestionText');
-        if(box) box.value = text;
-      }
-      window.plannerSetSuggestion = plannerSetSuggestion;
-
-      function plannerNextSuggestion(){
-        const urgent = typeof getUrgentHighRows === 'function' ? getUrgentHighRows() : [];
-        const review = typeof getNeedsReviewRows === 'function' ? getNeedsReviewRows() : [];
-        const follow = typeof getFollowUpRows === 'function' ? getFollowUpRows() : [];
-        if(urgent.length){
-          const item = urgent[0];
-          plannerSetSuggestion(`Start with ${urgent.length} urgent/high item${urgent.length === 1 ? '' : 's'}. First: ${item.account || 'Account'} · ${item.issueType || 'Issue'} · ${item.source || 'Source'}. Next action: ${item.nextAction || 'review and set next step'}.`);
-          return;
-        }
-        if(review.length){
-          plannerSetSuggestion(`Review ${review.length} item${review.length === 1 ? '' : 's'} marked Needs Review. Decide whether each becomes resolved, waiting, replacement, or follow-up.`);
-          return;
-        }
-        if(follow.length){
-          plannerSetSuggestion(`Clear ${follow.length} follow-up item${follow.length === 1 ? '' : 's'} before the final CS check. Keep notes short and move anything unresolved to tomorrow prep.`);
-          return;
-        }
-        plannerSetSuggestion('No major queue risks are standing out. Use this block to prep Sets, check Inventory, or document one win in Reports.');
-      }
-
-      function plannerScheduleSuggestion(){
-        plannerSetSuggestion('Suggested flow: 9:00 CS triage → 10:30 Sets/live prep → 12:00 clips → 1:00 CS sweep → 3:00 inventory/replacements → 4:30 final CS check → 5:00 tomorrow prep.');
-        if(typeof scheduleMyDay === 'function') scheduleMyDay();
-      }
-
-      function plannerRecapSuggestion(){
-        plannerSetSuggestion('Daily recap focus: resolved customer issues, Sets prepared, Inventory/replacement risks checked, tomorrow streamer schedule confirmed, and any follow-ups carried over.');
-        if(typeof assistantRecap === 'function') assistantRecap();
-        if(window.showAppView) window.showAppView('reports');
-      }
-
-      document.getElementById('plannerAddTask')?.addEventListener('click', addPlannerTask);
-      document.getElementById('plannerTaskTitle')?.addEventListener('keydown', e => {
-        if(e.key === 'Enter') addPlannerTask();
-      });
-      document.getElementById('plannerTodayBtn')?.addEventListener('click', () => {
-        plannerWeekOffset = 0;
-        localStorage.setItem(STORAGE_PREFIX + 'planner.weekOffset', '0');
-        updateWeekLabels();
-      });
-      document.getElementById('plannerPrevWeek')?.addEventListener('click', () => {
-        plannerWeekOffset -= 1;
-        localStorage.setItem(STORAGE_PREFIX + 'planner.weekOffset', String(plannerWeekOffset));
-        updateWeekLabels();
-      });
-      document.getElementById('plannerNextWeek')?.addEventListener('click', () => {
-        plannerWeekOffset += 1;
-        localStorage.setItem(STORAGE_PREFIX + 'planner.weekOffset', String(plannerWeekOffset));
-        updateWeekLabels();
-      });
-      document.getElementById('plannerNextBtn')?.addEventListener('click', plannerNextSuggestion);
-      document.getElementById('plannerScheduleBtn')?.addEventListener('click', plannerScheduleSuggestion);
-      document.getElementById('plannerRecapBtn')?.addEventListener('click', plannerRecapSuggestion);
-
-      updateWeekLabels();
-      setupDragDrop();
-      setupPrepChecks();
-      renderCustomTasks();
-      plannerNextSuggestion();
+      const DAY_KEYS=['mon','tue','wed','thu','fri','sat','sun'];
+      const DAY_NAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const TIMES=['9:00 AM','10:30 AM','12:00 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','4:30 PM','5:00 PM'];
+      const DEFAULT_BLOCKS=[
+        {time:'9:00 AM',category:'cs',title:'💬 Customer Service / Queue Triage',notes:['Triage tickets & DMs','High priority first']},
+        {time:'10:30 AM',category:'sets',title:'📦 Surprise Sets / Live Prep',notes:['Prep new sets','Check live flow']},
+        {time:'12:00 PM',category:'social',title:'🎬 Social Media / Clips',notes:['Record short clip','Post / schedule']},
+        {time:'1:00 PM',category:'cs',title:'💬 Customer Service Sweep',notes:['Clear recent DMs']},
+        {time:'1:30 PM',category:'admin',title:'📝 Admin / Catch Up',notes:['Emails & updates']},
+        {time:'2:00 PM',category:'cs',title:'💬 Customer Service Sweep',notes:['Check & respond']},
+        {time:'2:30 PM',category:'sets',title:'📦 Surprise Sets',notes:['Finalize set details']},
+        {time:'3:00 PM',category:'inventory',title:'🗃️ Inventory / Replacements / Loss Control',notes:['Review inventory','Plan replacements','Loss control check']},
+        {time:'4:30 PM',category:'cs',title:'💬 Final Customer Service Check',notes:['Last sweep of the day']},
+        {time:'5:00 PM',category:'wrap',title:'🌙 Wrap Up / Tomorrow Prep',notes:['Plan tomorrow','Document wins']}
+      ];
+      const TASK_KEY=STORAGE_PREFIX+'planner.customTasks.v3';
+      const STATIC_LAYOUT_KEY=STORAGE_PREFIX+'planner.staticTaskLayout.v3';
+      const STATIC_DELETE_KEY=STORAGE_PREFIX+'planner.staticTaskDeleted.v3';
+      const PREP_KEY=STORAGE_PREFIX+'planner.tomorrowPrepChecks.v2';
+      const ZOOM_KEY=STORAGE_PREFIX+'planner.zoom.v1';
+      let plannerWeekOffset=Number(localStorage.getItem(STORAGE_PREFIX+'planner.weekOffset')||0);
+      let rowHeight=Number(localStorage.getItem(ZOOM_KEY)||92);
+      function esc(v){return String(v||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));}
+      function load(k,f){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f));}catch{return f;}}
+      function save(k,v){localStorage.setItem(k,JSON.stringify(v));}
+      function startOfWeek(date){const d=new Date(date);const day=d.getDay();const diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);d.setHours(0,0,0,0);return d;}
+      function selectedMonday(){const m=startOfWeek(new Date());m.setDate(m.getDate()+plannerWeekOffset*7);return m;}
+      function fmtShort(d){return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});}
+      function staticId(day,block){return 'static-'+day+'-'+block.time.replace(/[^a-z0-9]/gi,'')+'-'+block.title.replace(/[^a-z0-9]/gi,'').slice(0,18);}
+      function taskHtml(t){return esc(t.title)+(t.notes||[]).map(n=>'<small>'+esc(n)+'</small>').join('');}
+      function addRemove(el,fn){const b=document.createElement('button');b.type='button';b.className=el.classList.contains('custom-calendar-task')?'custom-task-remove':'task-remove-btn';b.title='Remove block';b.textContent='×';b.addEventListener('click',e=>{e.stopPropagation();fn();});el.appendChild(b);}
+      function makeStatic(day,block){const id=staticId(day,block);const deleted=load(STATIC_DELETE_KEY,{});if(deleted[id])return null;const el=document.createElement('div');el.className='calendar-task '+block.category+' static-task';el.draggable=true;el.dataset.staticTaskId=id;el.innerHTML=taskHtml(block);addRemove(el,()=>{const d=load(STATIC_DELETE_KEY,{});d[id]=true;save(STATIC_DELETE_KEY,d);el.remove();plannerSetSuggestion('Removed a calendar block. Click any blank time slot to add a new one.');});el.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','static:'+id);e.dataTransfer.effectAllowed='move';});return el;}
+      function makeCustom(task){const el=document.createElement('div');el.className='calendar-task '+(task.category||'admin')+' custom-calendar-task';el.draggable=true;el.dataset.taskId=task.id;el.innerHTML=esc(task.title)+'<small>Custom task</small>';addRemove(el,()=>{save(TASK_KEY,load(TASK_KEY,[]).filter(x=>x.id!==task.id));renderCalendar();});el.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',task.id);e.dataTransfer.effectAllowed='move';});return el;}
+      function addCellEvents(cell){cell.addEventListener('dragover',e=>{e.preventDefault();cell.classList.add('drag-over');});cell.addEventListener('dragleave',()=>cell.classList.remove('drag-over'));cell.addEventListener('drop',e=>{e.preventDefault();cell.classList.remove('drag-over');const raw=e.dataTransfer.getData('text/plain');if(!raw)return;if(raw.startsWith('static:')){const id=raw.replace('static:','');const el=document.querySelector('[data-static-task-id="'+id+'"]');if(!el)return;cell.appendChild(el);const layout=load(STATIC_LAYOUT_KEY,{});layout[id]={day:cell.dataset.day,time:cell.dataset.time};save(STATIC_LAYOUT_KEY,layout);plannerSetSuggestion('Moved block to '+cell.dataset.day.toUpperCase()+' at '+cell.dataset.time+'.');return;}const tasks=load(TASK_KEY,[]);const task=tasks.find(x=>x.id===raw);if(!task)return;task.day=cell.dataset.day;task.time=cell.dataset.time;save(TASK_KEY,tasks);renderCalendar();plannerSetSuggestion('Moved "'+task.title+'" to '+task.day.toUpperCase()+' at '+task.time+'.');});cell.addEventListener('click',e=>{if(e.target.closest('.calendar-task'))return;const title=prompt('Add task for '+cell.dataset.day.toUpperCase()+' at '+cell.dataset.time+':');if(!title||!title.trim())return;const tasks=load(TASK_KEY,[]);tasks.push({id:rowId(),title:title.trim(),day:cell.dataset.day,time:cell.dataset.time,category:document.getElementById('plannerTaskCategory')?.value||'admin'});save(TASK_KEY,tasks);renderCalendar();plannerSetSuggestion('Added "'+title.trim()+'" to '+cell.dataset.day.toUpperCase()+' at '+cell.dataset.time+'.');});}
+      function renderCalendar(){document.documentElement.style.setProperty('--cal-row-height',rowHeight+'px');const grid=document.getElementById('plannerCalendarGrid');if(!grid)return;grid.innerHTML='';const today=new Date();const mon=selectedMonday();const sun=new Date(mon);sun.setDate(mon.getDate()+6);const isCurrent=mon.toDateString()===startOfWeek(today).toDateString();const range=document.getElementById('plannerWeekRange');if(range)range.textContent=fmtShort(mon)+' – '+fmtShort(sun)+', '+sun.getFullYear();const pill=document.getElementById('plannerWeekPill');if(pill)pill.textContent=isCurrent?'Current Week':'Planning Week';const th=document.createElement('div');th.className='cal-head';th.textContent='TIME';grid.appendChild(th);DAY_KEYS.forEach((day,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);const h=document.createElement('div');h.className='cal-head';h.innerHTML=DAY_NAMES[i].toUpperCase()+'<small>'+fmtShort(d)+'</small>';if(isCurrent&&d.toDateString()===today.toDateString())h.classList.add('today');grid.appendChild(h);});TIMES.forEach(time=>{const t=document.createElement('div');t.className='cal-time';t.textContent=time;grid.appendChild(t);DAY_KEYS.forEach((day,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);const cell=document.createElement('div');cell.className='cal-cell';cell.dataset.day=day;cell.dataset.time=time;if(isCurrent&&d.toDateString()===today.toDateString())cell.classList.add('today');grid.appendChild(cell);addCellEvents(cell);});});const layout=load(STATIC_LAYOUT_KEY,{});DEFAULT_BLOCKS.forEach(block=>DAY_KEYS.forEach(day=>{const id=staticId(day,block);const saved=layout[id];const targetDay=(saved&&saved.day)||day;const targetTime=(saved&&saved.time)||block.time;const cell=grid.querySelector('.cal-cell[data-day="'+targetDay+'"][data-time="'+targetTime+'"]');const el=makeStatic(day,block);if(cell&&el)cell.appendChild(el);}));load(TASK_KEY,[]).forEach(task=>{const cell=grid.querySelector('.cal-cell[data-day="'+task.day+'"][data-time="'+task.time+'"]');if(cell)cell.appendChild(makeCustom(task));});updateNowLine();}
+      function updateNowLine(){const line=document.getElementById('plannerNowLine');const label=document.getElementById('plannerNowLabel');if(!line)return;const now=new Date();let ratio=((now.getHours()*60+now.getMinutes())-540)/(1035-540);ratio=Math.max(0,Math.min(1,ratio));line.style.top=(52+ratio*(rowHeight*TIMES.length))+'px';line.style.display='block';if(label)label.textContent=now.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
+      function addPlannerTask(){const titleEl=document.getElementById('plannerTaskTitle');const title=titleEl&&titleEl.value.trim();if(!title)return;const task={id:rowId(),title,day:document.getElementById('plannerTaskDay')?.value||'mon',time:document.getElementById('plannerTaskTime')?.value||'9:00 AM',category:document.getElementById('plannerTaskCategory')?.value||'admin'};const tasks=load(TASK_KEY,[]);tasks.push(task);save(TASK_KEY,tasks);titleEl.value='';renderCalendar();plannerSetSuggestion('Added "'+task.title+'" to '+task.day.toUpperCase()+' at '+task.time+'. Drag it anywhere if your day changes.');}
+      function setupPrepChecks(){let saved=load(PREP_KEY,{});const checks=Array.from(document.querySelectorAll('[data-prep]'));function refresh(){const p=document.getElementById('prepProgress');if(p)p.textContent=checks.filter(cb=>cb.checked).length+'/'+checks.length;}checks.forEach(cb=>{cb.checked=!!saved[cb.dataset.prep];cb.addEventListener('change',()=>{saved[cb.dataset.prep]=cb.checked;save(PREP_KEY,saved);refresh();});});refresh();}
+      function plannerSetSuggestion(text){const box=document.getElementById('plannerSuggestionText');if(box)box.value=text;} window.plannerSetSuggestion=plannerSetSuggestion;
+      function plannerNextSuggestion(){const urgent=typeof getUrgentHighRows==='function'?getUrgentHighRows():[];const review=typeof getNeedsReviewRows==='function'?getNeedsReviewRows():[];const follow=typeof getFollowUpRows==='function'?getFollowUpRows():[];if(urgent.length){const item=urgent[0];plannerSetSuggestion('Start with '+urgent.length+' urgent/high item'+(urgent.length===1?'':'s')+'. First: '+(item.account||'Account')+' · '+(item.issueType||'Issue')+' · '+(item.source||'Source')+'. Next action: '+(item.nextAction||'review and set next step')+'.');return;}if(review.length){plannerSetSuggestion('Review '+review.length+' item'+(review.length===1?'':'s')+' marked Needs Review.');return;}if(follow.length){plannerSetSuggestion('Clear '+follow.length+' follow-up item'+(follow.length===1?'':'s')+' before the final CS check.');return;}plannerSetSuggestion('No major queue risks are standing out. Use this block to prep Sets, check Inventory, or document one win in Reports.');}
+      function plannerScheduleSuggestion(){plannerSetSuggestion('Suggested flow: 9:00 CS triage → 10:30 Sets/live prep → 12:00 clips → 1:00 CS sweep → 3:00 inventory/replacements → 4:30 final CS check → 5:00 tomorrow prep.');if(typeof scheduleMyDay==='function')scheduleMyDay();}
+      function plannerRecapSuggestion(){plannerSetSuggestion('Daily recap focus: resolved customer issues, Sets prepared, Inventory/replacement risks checked, tomorrow streamer schedule confirmed, and follow-ups carried over.');if(typeof assistantRecap==='function')assistantRecap();if(window.showAppView)window.showAppView('reports');}
+      document.getElementById('plannerAddTask')?.addEventListener('click',addPlannerTask);document.getElementById('plannerTaskTitle')?.addEventListener('keydown',e=>{if(e.key==='Enter')addPlannerTask();});document.getElementById('plannerTodayBtn')?.addEventListener('click',()=>{plannerWeekOffset=0;localStorage.setItem(STORAGE_PREFIX+'planner.weekOffset','0');renderCalendar();});document.getElementById('plannerPrevWeek')?.addEventListener('click',()=>{plannerWeekOffset-=1;localStorage.setItem(STORAGE_PREFIX+'planner.weekOffset',String(plannerWeekOffset));renderCalendar();});document.getElementById('plannerNextWeek')?.addEventListener('click',()=>{plannerWeekOffset+=1;localStorage.setItem(STORAGE_PREFIX+'planner.weekOffset',String(plannerWeekOffset));renderCalendar();});document.getElementById('plannerZoomIn')?.addEventListener('click',()=>{rowHeight=Math.min(150,rowHeight+14);localStorage.setItem(ZOOM_KEY,String(rowHeight));renderCalendar();});document.getElementById('plannerZoomOut')?.addEventListener('click',()=>{rowHeight=Math.max(62,rowHeight-14);localStorage.setItem(ZOOM_KEY,String(rowHeight));renderCalendar();});document.getElementById('plannerNextBtn')?.addEventListener('click',plannerNextSuggestion);document.getElementById('plannerScheduleBtn')?.addEventListener('click',plannerScheduleSuggestion);document.getElementById('plannerRecapBtn')?.addEventListener('click',plannerRecapSuggestion);setupPrepChecks();renderCalendar();setInterval(updateNowLine,60000);plannerNextSuggestion();
     }
 
+
+
+    function setupSetsChecklist(){
+      const key = STORAGE_PREFIX + 'sets.weeklyChecklist.v2';
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch { saved = {}; }
+      const table = document.querySelector('.ops-check-table');
+      if(table){
+        table.className = 'weekly-check-table';
+        table.innerHTML = '<thead><tr><th>Day</th><th>VR</th><th>PS</th><th>CK</th></tr></thead><tbody id="weeklySetChecklistBody"></tbody>';
+      }
+      const body = document.getElementById('weeklySetChecklistBody');
+      const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const accounts = [{key:'vr',label:'VR'},{key:'ps',label:'PS'},{key:'ck',label:'CK'}];
+      if(body){
+        body.innerHTML = days.map(day => '<tr><th>'+day+'</th>'+accounts.map(a => {
+          const base = day.toLowerCase()+'-'+a.key;
+          return '<td><div class="weekly-check-cell"><strong>'+a.label+'</strong>'+
+            '<label><input type="checkbox" data-setcheck="'+base+'-morning-event"> Morning event scheduled</label>'+
+            '<label><input type="checkbox" data-setcheck="'+base+'-morning-set"> Morning surprise set</label>'+
+            '<label><input type="checkbox" data-setcheck="'+base+'-night-event"> Night event scheduled</label>'+
+            '<label><input type="checkbox" data-setcheck="'+base+'-night-set"> Night surprise set</label>'+
+            '</div></td>';
+        }).join('')+'</tr>').join('');
+      }
+      document.querySelectorAll('[data-setcheck]').forEach(cb=>{
+        cb.checked=!!saved[cb.dataset.setcheck];
+        cb.addEventListener('change',()=>{saved[cb.dataset.setcheck]=cb.checked;localStorage.setItem(key,JSON.stringify(saved));});
+      });
+      document.querySelectorAll('[data-setnote]').forEach(cell=>{
+        const noteKey=cell.dataset.setnote;
+        cell.textContent=saved[noteKey]||'';
+        cell.addEventListener('blur',()=>{saved[noteKey]=cell.textContent;localStorage.setItem(key,JSON.stringify(saved));});
+      });
+    }
+    function setupCSTemplateCollapse(){
+      const section=document.getElementById('cs');
+      if(!section) return;
+      const panel=section.querySelector('.sheet-body');
+      if(!panel || document.getElementById('csTemplateToggle')) return;
+      panel.id='csTemplatesPanel';
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.id='csTemplateToggle';
+      btn.className='btn cs-template-toggle';
+      btn.textContent='Show / Hide CS Template Table';
+      btn.addEventListener('click',()=>panel.classList.toggle('collapsed'));
+      panel.parentElement.insertBefore(btn,panel);
+    }
     init();
     setupAppViews();
     setupPlannerPolish();
+    setupSetsChecklist();
+    setupCSTemplateCollapse();
   </script>
 </body>
 </html>
