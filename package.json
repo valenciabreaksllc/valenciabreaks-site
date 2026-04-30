@@ -7,8 +7,8 @@
     "start": "npx serve .",
     "dev": "npx serve . --listen 3000"
   },
-  "dependencies": {},
   "devDependencies": {
-    "serve": "^14.2.1"
+    "serve": "^14.2.1",
+    "supabase": "^2.95.6"
   }
 }

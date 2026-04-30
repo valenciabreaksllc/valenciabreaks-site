@@ -100,7 +100,7 @@
     #weeklyStrip .today{font-weight:900;color:var(--red-text);background:var(--red)}
     #workBlocks div{padding:4px 0;font-size:13px}
 
-    /* Clean planner app layout - ChatGPT rebuild */
+    /* Clean planner app layout - OP command center */
     html { scroll-behavior: auto; }
     body { background: #f6f7fb; }
     .app { display: grid; grid-template-columns: 92px minmax(0, 1fr); min-height: 100vh; }
@@ -631,7 +631,7 @@
     }
 
 
-    /* ChatGPT polish pass: cleaner page spacing + local tools */
+    /* OP polish pass: cleaner page spacing + local tools */
     .section { min-height: 0; padding: 16px 22px 24px; }
     #home.section { min-height: 100vh; padding: 0; }
     .section.active-page:not(#home) { padding-top: 14px; padding-bottom: 14px; }
@@ -671,7 +671,7 @@
     }
 
   
-    /* ChatGPT update: Google Calendar style interactions + cleaner page spacing */
+    /* OP update: calendar-style interactions + cleaner page spacing */
     :root { --cal-row-height: 92px; }
     .section { padding-top: 8px; padding-bottom: 14px; }
     .section + .section { border-top: 0; }
@@ -702,6 +702,594 @@
     .cs-template-toggle { margin: 8px 0 10px; }
     #csTemplatesPanel.collapsed #csTemplateTable, #csTemplatesPanel.collapsed #btnAddTemplate { display: none; }
     @media (max-width: 860px){ .calendar-grid-clean { grid-template-columns: 68px repeat(7, 136px) !important; } .task-tools { grid-template-columns: 1fr 1fr !important; } }
+
+    /* Screenshot AI Intake */
+    .screenshot-intake-card .sheet-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .screenshot-intake-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .screenshot-dropzone {
+      border: 1.5px dashed #c9d3e4;
+      background: #fbfcff;
+      border-radius: 20px;
+      padding: 18px;
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: #667085;
+      cursor: pointer;
+      transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+    .screenshot-dropzone:hover,
+    .screenshot-dropzone.drag-over {
+      background: #f3f7ff;
+      border-color: #7fa6ff;
+      box-shadow: inset 0 0 0 2px rgba(127,166,255,.12);
+    }
+    .screenshot-dropzone strong {
+      display: block;
+      color: #172033;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+    .screenshot-dropzone span {
+      display: block;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .screenshot-upload-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .screenshot-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .screenshot-preview {
+      border: 1px solid #e6e9f0;
+      border-radius: 14px;
+      background: #fff;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 8px 18px rgba(15,23,42,.04);
+    }
+    .screenshot-preview img {
+      width: 100%;
+      height: 105px;
+      object-fit: cover;
+      display: block;
+      background: #f5f7fb;
+    }
+    .screenshot-preview small {
+      display: block;
+      padding: 7px 8px;
+      color: #667085;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-top: 1px solid #f0f2f6;
+    }
+    .screenshot-remove {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      border: 0;
+      border-radius: 999px;
+      width: 22px;
+      height: 22px;
+      background: rgba(17,24,39,.78);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .screenshot-results {
+      display: grid;
+      gap: 12px;
+    }
+    .screenshot-empty-state {
+      border: 1px solid #edf0f5;
+      background: #fbfcff;
+      border-radius: 18px;
+      padding: 16px;
+      color: #667085;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .screenshot-case-card {
+      border: 1px solid #e6e9f0;
+      border-radius: 20px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(22,28,40,.05);
+      overflow: hidden;
+    }
+    .screenshot-case-card.done {
+      opacity: .62;
+      filter: saturate(.8);
+    }
+    .screenshot-case-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid #edf0f5;
+      background: #fbfcff;
+    }
+    .screenshot-case-head strong {
+      display: block;
+      font-size: 14px;
+      color: #172033;
+    }
+    .screenshot-case-head span {
+      display: block;
+      margin-top: 3px;
+      font-size: 12px;
+      color: #667085;
+    }
+    .screenshot-case-body {
+      padding: 14px;
+      display: grid;
+      gap: 11px;
+    }
+    .screenshot-detect-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 9px;
+    }
+    .screenshot-detect-grid label,
+    .screenshot-textarea-block label {
+      display: block;
+      font-size: 11px;
+      color: #667085;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .045em;
+      margin-bottom: 5px;
+    }
+    .screenshot-detect-grid input,
+    .screenshot-detect-grid select {
+      height: 36px;
+      border-radius: 12px;
+      border-color: #dfe5ef;
+      font-size: 12px;
+      background: #fff;
+    }
+    .screenshot-textarea-block textarea {
+      min-height: 92px;
+      border-radius: 14px;
+      border-color: #dfe5ef;
+      background: #fbfcff;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .screenshot-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .screenshot-card-actions .btn {
+      border-radius: 12px;
+    }
+    .screenshot-status-pill {
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 10px;
+      font-weight: 950;
+      background: #eef4ff;
+      color: #3157d9;
+      white-space: nowrap;
+    }
+    .screenshot-status-pill.ai {
+      background: #f0ebff;
+      color: #5d3fbd;
+    }
+    .screenshot-status-pill.local {
+      background: #fff5d6;
+      color: #7a5600;
+    }
+    @media (max-width: 1050px) {
+      .screenshot-intake-layout { grid-template-columns: 1fr; }
+      .screenshot-detect-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .screenshot-detect-grid { grid-template-columns: 1fr; }
+    }
+
+
+    /* OP Command Center design system: less generic, more ops-console */
+    :root {
+      --op-bg: #f4f3ee;
+      --op-surface: #ffffff;
+      --op-surface-soft: #faf9f6;
+      --op-ink: #171717;
+      --op-ink-soft: #374151;
+      --op-muted: #6b7280;
+      --op-line: #dedbd2;
+      --op-line-strong: #c9c4b8;
+      --op-black: #151515;
+      --op-blue: #255f99;
+      --op-blue-soft: #e8f1fb;
+      --op-green: #1f7a4d;
+      --op-green-soft: #e7f5ec;
+      --op-amber: #9a5b00;
+      --op-amber-soft: #fff4d8;
+      --op-red: #a33a3a;
+      --op-red-soft: #fde8e8;
+      --op-violet: #5a44a0;
+      --op-violet-soft: #f0ecff;
+      --op-radius-xs: 3px;
+      --op-radius-sm: 6px;
+      --op-radius-md: 8px;
+      --op-radius-lg: 10px;
+      --op-shadow: 0 1px 2px rgba(17, 24, 39, .05);
+      --op-shadow-lift: 0 8px 20px rgba(17, 24, 39, .07);
+    }
+
+    body {
+      background: var(--op-bg) !important;
+      color: var(--op-ink) !important;
+      font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      letter-spacing: -.006em;
+    }
+
+    h1, h2, h3,
+    .home-title-block h1,
+    .lane-page-title h2,
+    .section-title h2,
+    .calendar-top h2,
+    .planner-card h3,
+    .sheet-header,
+    .screenshot-case-head strong {
+      font-family: "DM Sans", sans-serif !important;
+      font-weight: 700 !important;
+      letter-spacing: -.035em !important;
+    }
+
+    .metric-label,
+    .pill,
+    .week-pill,
+    .status-pill,
+    .screenshot-status-pill,
+    .screenshot-detect-grid label,
+    .screenshot-textarea-block label,
+    th,
+    .cal-head,
+    .cal-time,
+    .hint,
+    .screenshot-preview small {
+      font-family: "DM Sans", sans-serif !important;
+      font-weight: 800 !important;
+      letter-spacing: .015em !important;
+    }
+
+    #home.section,
+    .priority-tool-card,
+    .rail-avatar {
+      background-image: none !important;
+    }
+
+    #home.section,
+    .section.active-page:not(#home),
+    .op-planner-app {
+      background: var(--op-bg) !important;
+    }
+
+    .sidebar {
+      background: #151515 !important;
+      box-shadow: inset -1px 0 0 rgba(255,255,255,.08) !important;
+    }
+
+    .rail-avatar,
+    .home-title-dot,
+    .profile-dot {
+      background: #ffffff !important;
+      color: #151515 !important;
+      border: 1px solid rgba(255,255,255,.18) !important;
+      border-radius: var(--op-radius-md) !important;
+      font-family: "DM Sans", sans-serif !important;
+      font-weight: 600 !important;
+    }
+
+    .rail-avatar::after {
+      background: #32c56d !important;
+      border-color: #151515 !important;
+    }
+
+    .side-link {
+      border-radius: var(--op-radius-md) !important;
+      font-weight: 500 !important;
+      color: rgba(255,255,255,.68) !important;
+    }
+
+    .side-link:hover,
+    .side-link.active {
+      background: rgba(255,255,255,.10) !important;
+      color: #fff !important;
+      transform: none !important;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08) !important;
+    }
+
+    .op-planner-header {
+      background: rgba(244,243,238,.94) !important;
+      border-bottom: 1px solid var(--op-line) !important;
+      backdrop-filter: blur(10px);
+    }
+
+    .calendar-panel,
+    .planner-card,
+    .page-card,
+    .sheet-card,
+    .screenshot-case-card,
+    .screenshot-preview,
+    .note-box,
+    .roadmap-step,
+    .setsheet-stat,
+    .setsheet-output {
+      background: var(--op-surface) !important;
+      border-color: var(--op-line) !important;
+      border-radius: var(--op-radius-lg) !important;
+      box-shadow: var(--op-shadow) !important;
+    }
+
+    .calendar-panel:hover,
+    .planner-card:hover,
+    .sheet-card:hover,
+    .screenshot-case-card:hover {
+      box-shadow: var(--op-shadow-lift) !important;
+    }
+
+    .sheet-header {
+      background: var(--op-surface) !important;
+      color: var(--op-ink) !important;
+      border-bottom: 1px solid var(--op-line) !important;
+      padding: 12px 14px !important;
+      font-size: 13px !important;
+      text-transform: uppercase;
+    }
+
+    .sheet-subheader {
+      background: var(--op-surface-soft) !important;
+      border-color: var(--op-line) !important;
+      color: var(--op-muted) !important;
+      font-weight: 500 !important;
+      text-align: left !important;
+    }
+
+    .btn,
+    button,
+    input,
+    select,
+    textarea {
+      border-radius: var(--op-radius-sm) !important;
+    }
+
+    .btn,
+    button {
+      font-weight: 500 !important;
+      letter-spacing: -.006em !important;
+      box-shadow: none !important;
+    }
+
+    .btn-dark,
+    .primary,
+    .primary-btn,
+    button[type="submit"] {
+      background: var(--op-black) !important;
+      border-color: var(--op-black) !important;
+      color: #fff !important;
+    }
+
+    .btn:hover,
+    button:hover {
+      background: #f1efe8 !important;
+    }
+
+    .btn-dark:hover,
+    .primary:hover,
+    .primary-btn:hover,
+    button[type="submit"]:hover {
+      background: #2a2a2a !important;
+      border-color: #2a2a2a !important;
+    }
+
+    input,
+    select,
+    textarea {
+      border-color: var(--op-line-strong) !important;
+      background: #fff !important;
+      color: var(--op-ink) !important;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus,
+    td[contenteditable="true"]:focus {
+      outline: 2px solid rgba(37,95,153,.18) !important;
+      border-color: var(--op-blue) !important;
+      box-shadow: none !important;
+    }
+
+    .pill,
+    .week-pill,
+    .status-pill,
+    .priority-badge,
+    .screenshot-status-pill {
+      border-radius: 999px !important;
+      border: 1px solid transparent !important;
+    }
+
+    .pill.blue,
+    .week-pill,
+    .status-pill.planned,
+    .screenshot-status-pill {
+      background: var(--op-blue-soft) !important;
+      color: var(--op-blue) !important;
+      border-color: #c9dced !important;
+    }
+
+    .pill.gray {
+      background: #eeeae1 !important;
+      color: #5d5a53 !important;
+      border-color: #dedbd2 !important;
+    }
+
+    .pill.red,
+    .priority-badge.high,
+    select.priority.high,
+    select.priority.urgent {
+      background: var(--op-red-soft) !important;
+      color: var(--op-red) !important;
+      border-color: #f2c9c9 !important;
+    }
+
+    .pill.yellow,
+    .priority-badge.med,
+    select.priority.medium {
+      background: var(--op-amber-soft) !important;
+      color: var(--op-amber) !important;
+      border-color: #efd596 !important;
+    }
+
+    .pill.green,
+    select.status.completed,
+    select.status.resolved {
+      background: var(--op-green-soft) !important;
+      color: var(--op-green) !important;
+      border-color: #bce2ca !important;
+    }
+
+    table {
+      border-collapse: separate !important;
+      border-spacing: 0 !important;
+    }
+
+    th {
+      background: var(--op-surface-soft) !important;
+      color: var(--op-muted) !important;
+      text-transform: uppercase;
+      font-size: 10px !important;
+      border-color: var(--op-line) !important;
+    }
+
+    td {
+      border-color: var(--op-line) !important;
+    }
+
+    .calendar-grid-clean {
+      background: var(--op-line) !important;
+      gap: 1px !important;
+    }
+
+    .cal-head,
+    .cal-time,
+    .cal-cell {
+      background: #fff !important;
+      border: 0 !important;
+    }
+
+    .cal-head.today,
+    .cal-cell.today {
+      background: #f2f7fb !important;
+    }
+
+    .calendar-task {
+      border-radius: var(--op-radius-md) !important;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.04) !important;
+      font-weight: 500 !important;
+    }
+
+    .calendar-task:hover {
+      transform: none !important;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.08) !important;
+    }
+
+    .screenshot-intake-card {
+      max-width: 1320px !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
+    .screenshot-intake-layout {
+      grid-template-columns: minmax(270px, 360px) minmax(0, 1fr) !important;
+      gap: 16px !important;
+    }
+
+    .screenshot-dropzone {
+      min-height: 190px !important;
+      border-radius: var(--op-radius-lg) !important;
+      border-color: #b9c7d6 !important;
+      background: #fbfaf7 !important;
+    }
+
+    .screenshot-dropzone:hover,
+    .screenshot-dropzone.drag-over {
+      background: #f3f6f8 !important;
+      border-color: var(--op-blue) !important;
+      box-shadow: inset 0 0 0 1px rgba(37,95,153,.18) !important;
+    }
+
+    .screenshot-case-head {
+      background: var(--op-surface-soft) !important;
+      border-bottom-color: var(--op-line) !important;
+    }
+
+    .screenshot-detect-grid {
+      gap: 10px !important;
+    }
+
+    .screenshot-detect-grid input,
+    .screenshot-detect-grid select {
+      height: 34px !important;
+      border-radius: var(--op-radius-sm) !important;
+    }
+
+    .screenshot-textarea-block textarea {
+      min-height: 88px !important;
+      border-radius: var(--op-radius-md) !important;
+      background: #fff !important;
+    }
+
+    .screenshot-status-pill.ai {
+      background: var(--op-violet-soft) !important;
+      color: var(--op-violet) !important;
+      border-color: #d6ccff !important;
+    }
+
+    .screenshot-status-pill.local {
+      background: var(--op-amber-soft) !important;
+      color: var(--op-amber) !important;
+      border-color: #efd596 !important;
+    }
+
+    .focus-strip,
+    .next-card,
+    .planner-suggestion-box,
+    .setsheet-local-tool textarea {
+      background: #fff !important;
+      border-color: var(--op-line) !important;
+      border-radius: var(--op-radius-lg) !important;
+    }
+
+    @media (max-width: 1050px) {
+      .screenshot-intake-layout {
+        grid-template-columns: 1fr !important;
+      }
+    }
 
   </style>
 </head>
@@ -928,56 +1516,63 @@
       </section>
 
       <section id="ai-intake" class="section">
-        <div class="section-title"><h2>AI Intake</h2><div class="view-pills"><span class="pill blue">AI-assisted</span><span class="pill gray">Manual entry</span></div></div>
-        <div class="priority-tool-card"><div><strong>Priority Tool: CS / AI Intake</strong><span>Use this lane for customer messages, queue triage, templates, refunds, replacements, and follow-ups.</span></div><a class="btn btn-dark" href="#queue">Open Work Queue</a></div>
-        <div class="sheet-card">
-          <div class="sheet-header">AI MANUAL INTAKE</div>
-          <div class="sheet-subheader">Paste customer inquiry details, classify with AI, and draft response.</div>
+        <div class="section-title">
+          <h2>CS Inquiry Screenshot Intake</h2>
+          <div class="view-pills">
+            <span class="pill blue">Vision connected</span>
+            <span class="pill gray">Batch screenshots</span>
+          </div>
+        </div>
+
+        <div class="sheet-card screenshot-intake-card">
+          <div class="sheet-header">
+            <span>SCREENSHOT BATCH INTAKE</span>
+            <span class="screenshot-status-pill">Review before action</span>
+          </div>
+          <div class="sheet-subheader">
+            Use your screenshot hotkey, batch upload customer-service screenshots, then review AI-assisted response cards. Nothing sends automatically.
+          </div>
           <div class="sheet-body">
-            <div class="grid-2">
+            <div class="screenshot-intake-layout">
               <div>
-                <label>Source</label>
-                <select id="intakeSource">
-                  <option>VR Email</option>
-                  <option>TikTok Shop Chat</option>
-                  <option>TikTok DM</option>
-                  <option>Instagram DM</option>
-                  <option>TikTok Refund</option>
-                  <option>TikTok Return</option>
-                  <option>Shopify</option>
-                  <option>Manual</option>
-                </select>
+                <input id="screenshotBatchInput" type="file" accept="image/*" multiple hidden />
+                <div id="screenshotDropZone" class="screenshot-dropzone" tabindex="0">
+                  <div>
+                    <strong>Drop screenshots here or click to upload</strong>
+                    <span>Use Ctrl + Alt + S, then select saved screenshots from Desktop\CS-Inquiry-Screenshots.</span>
+                    <span style="margin-top:8px;">You can also paste images here with Ctrl + V.</span>
+                  </div>
+                </div>
+                <div class="screenshot-upload-actions">
+                  <button class="btn btn-dark" id="btnScreenshotUpload" type="button">Select Screenshots</button>
+                  <button class="btn" id="btnAnalyzeScreenshots" type="button">Analyze Screenshots</button>
+                  <button class="btn" id="btnClearScreenshots" type="button">Clear Batch</button>
+                </div>
+                <div class="hint" style="margin-top:10px;">
+                  OpenAI Vision is connected. Review the detected fields, suggested reply, and next action before copying or adding anything to the queue.
+                </div>
+                <div id="screenshotPreviewGrid" class="screenshot-preview-grid"></div>
               </div>
+
               <div>
-                <label>Account</label>
-                <select id="intakeAccount">
-                  <option>All</option>
-                  <option>VR</option>
-                  <option>PS</option>
-                  <option>CK</option>
-                </select>
-              </div>
-              <div>
-                <label>Customer / Username</label>
-                <input type="text" id="intakeCustomer" placeholder="Customer name or username" />
-              </div>
-              <div>
-                <label>Order #</label>
-                <input type="text" id="intakeOrderNumber" placeholder="Order number if applicable" />
+                <div id="screenshotResults" class="screenshot-results">
+                  <div class="screenshot-empty-state">
+                    Upload screenshots, then click <strong>Analyze Screenshots</strong>. Detected cases will appear here with suggested replies, queue actions, and copy buttons.
+                  </div>
+                </div>
               </div>
             </div>
-            <div style="margin-top:12px;">
-              <label>Raw Message</label>
-              <textarea id="intakeRawMessage" placeholder="Paste the customer's message here"></textarea>
-            </div>
-            <div style="margin-top:12px;">
-              <label>AI Output</label>
-              <textarea id="intakeAIOutput" readonly placeholder="AI classification and draft response will appear here"></textarea>
-            </div>
-            <div class="toolbar" style="margin-top:12px;">
-              <button class="btn btn-dark" id="btnClassifyDraft">Classify + Draft</button>
-              <button class="btn" id="btnAddToQueue">Add to Live Work Queue</button>
-              <button class="btn" id="btnClearIntake">Clear Intake</button>
+
+            <div class="legacy-hooks" aria-hidden="true">
+              <select id="intakeSource"><option>TikTok Shop Chat</option><option>VR Email</option><option>TikTok DM</option><option>Instagram DM</option><option>TikTok Refund</option><option>TikTok Return</option><option>Shopify</option><option>Manual</option></select>
+              <select id="intakeAccount"><option>All</option><option>VR</option><option>PS</option><option>CK</option></select>
+              <input type="text" id="intakeCustomer" />
+              <input type="text" id="intakeOrderNumber" />
+              <textarea id="intakeRawMessage"></textarea>
+              <textarea id="intakeAIOutput" readonly></textarea>
+              <button id="btnClassifyDraft" type="button">hidden</button>
+              <button id="btnAddToQueue" type="button">hidden</button>
+              <button id="btnClearIntake" type="button">hidden</button>
             </div>
           </div>
         </div>
@@ -1619,6 +2214,339 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       (async()=>{try{const rows=await supabaseLoadWorkQueue();if(Array.isArray(rows)){store.queue.rows=rows;scheduleSaveAll();renderQueue();updateMetrics();renderCommandCenter();}}catch{}})();
     }
 
+
+    function escapeHtml(value){
+      return String(value == null ? '' : value)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#039;');
+    }
+
+    function setupScreenshotIntake(){
+      const input = $('#screenshotBatchInput');
+      const dropZone = $('#screenshotDropZone');
+      const uploadBtn = $('#btnScreenshotUpload');
+      const analyzeBtn = $('#btnAnalyzeScreenshots');
+      const clearBtn = $('#btnClearScreenshots');
+      const previewGrid = $('#screenshotPreviewGrid');
+      const results = $('#screenshotResults');
+      if(!input || !dropZone || !uploadBtn || !analyzeBtn || !clearBtn || !previewGrid || !results) return;
+
+      let files = [];
+      let cases = [];
+
+      function uniqueFiles(list){
+        const seen = new Set(files.map(f => `${f.name}:${f.size}:${f.lastModified}`));
+        const additions = [];
+        Array.from(list || []).forEach(file => {
+          if(!file || !file.type || !file.type.startsWith('image/')) return;
+          const key = `${file.name}:${file.size}:${file.lastModified}`;
+          if(seen.has(key)) return;
+          seen.add(key);
+          additions.push(file);
+        });
+        return additions;
+      }
+
+      function fileToDataUrl(file){
+        return new Promise((resolve,reject)=>{
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function renderPreviews(){
+        if(!files.length){
+          previewGrid.innerHTML = '';
+          return;
+        }
+        const cards = await Promise.all(files.map(async (file, index) => {
+          const url = await fileToDataUrl(file);
+          return `
+            <div class="screenshot-preview" data-preview-index="${index}">
+              <button class="screenshot-remove" type="button" data-remove-screenshot="${index}" title="Remove">×</button>
+              <img src="${url}" alt="${escapeHtml(file.name)}" />
+              <small>${escapeHtml(file.name)}</small>
+            </div>
+          `;
+        }));
+        previewGrid.innerHTML = cards.join('');
+        previewGrid.querySelectorAll('[data-remove-screenshot]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const index = Number(btn.dataset.removeScreenshot);
+            files.splice(index, 1);
+            renderPreviews();
+          });
+        });
+      }
+
+      function addFiles(list){
+        const additions = uniqueFiles(list);
+        if(!additions.length) return;
+        files = files.concat(additions);
+        renderPreviews();
+      }
+
+      function guessAccountFromFile(fileName){
+        const name = String(fileName || '').toLowerCase();
+        if(name.includes('card') || name.includes('ck') || name.includes('rippiez')) return 'CK';
+        if(name.includes('poke') || name.includes('ps')) return 'PS';
+        if(name.includes('vault') || name.includes('vr')) return 'VR';
+        return 'All';
+      }
+
+      function fallbackCase(file, index){
+        const account = guessAccountFromFile(file.name);
+        return {
+          id: 'shot_' + Date.now().toString(16) + '_' + index,
+          fileName: file.name,
+          source: 'TikTok Shop Chat',
+          account,
+          customer: '',
+          orderNumber: '',
+          issueType: 'General Question',
+          priority: 'Medium',
+          template: 'Order Number Request / General Review',
+          summary: 'Screenshot ready for review. Open the preview and fill in any customer/order details that are visible.',
+          nextAction: 'Review screenshot, confirm issue type, then copy the reply or add to queue.',
+          suggestedReply: 'Hello, thanks for reaching out. Could you please share the order number you are referring to so we can review this for you?',
+          confidence: 'Needs review',
+          mode: 'local'
+        };
+      }
+
+      async function analyzeWithVision(file, index){
+        if(!supabaseEnabled() || !supabaseClient.functions || typeof supabaseClient.functions.invoke !== 'function'){
+          throw new Error('Vision function unavailable');
+        }
+        const dataUrl = await fileToDataUrl(file);
+        const { data, error } = await supabaseClient.functions.invoke('ai-screenshot-intake', {
+          body: {
+            imageBase64: dataUrl.split(',')[1] || dataUrl,
+            mimeType: file.type,
+            fileName: file.name,
+            context: {
+              purpose: 'TikTok Shop Chat screenshot intake',
+              accounts: ['VR','PS','CK'],
+              expectedOutput: ['source','account','customer','orderNumber','issueType','priority','template','summary','suggestedReply','nextAction']
+            }
+          }
+        });
+        if(error) throw error;
+        const firstCase = Array.isArray(data?.cases) ? data.cases[0] : (data?.case || data);
+        if(!firstCase || typeof firstCase !== 'object') throw new Error('No detected case returned');
+        return Object.assign(fallbackCase(file, index), firstCase, {
+          id: 'shot_' + Date.now().toString(16) + '_' + index,
+          fileName: file.name,
+          mode: 'ai'
+        });
+      }
+
+      function renderCases(){
+        if(!cases.length){
+          results.innerHTML = '<div class="screenshot-empty-state">No detected cases yet. Upload screenshots, then click <strong>Analyze Screenshots</strong>.</div>';
+          return;
+        }
+        results.innerHTML = cases.map((c, index) => `
+          <div class="screenshot-case-card" data-case-index="${index}">
+            <div class="screenshot-case-head">
+              <div>
+                <strong>Case ${index + 1}: ${escapeHtml(c.customer || c.fileName || 'Screenshot')}</strong>
+                <span>${escapeHtml(c.source || 'TikTok Shop Chat')} • ${escapeHtml(c.account || 'All')} • ${escapeHtml(c.template || 'Template pending')}</span>
+              </div>
+              <span class="screenshot-status-pill ${c.mode === 'ai' ? 'ai' : 'local'}">${c.mode === 'ai' ? 'AI read' : 'Review'}</span>
+            </div>
+            <div class="screenshot-case-body">
+              <div class="screenshot-detect-grid">
+                <div>
+                  <label>Source</label>
+                  <select data-case-field="source">
+                    ${OPTIONS.source.map(o => `<option ${o === c.source ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label>Account</label>
+                  <select data-case-field="account">
+                    ${OPTIONS.account.map(o => `<option ${o === c.account ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label>Issue Type</label>
+                  <select data-case-field="issueType">
+                    ${OPTIONS.issueType.map(o => `<option ${o === c.issueType ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label>Priority</label>
+                  <select data-case-field="priority">
+                    ${OPTIONS.priority.map(o => `<option ${o === c.priority ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label>Customer</label>
+                  <input data-case-field="customer" value="${escapeHtml(c.customer || '')}" placeholder="username/name" />
+                </div>
+                <div>
+                  <label>Order #</label>
+                  <input data-case-field="orderNumber" value="${escapeHtml(c.orderNumber || '')}" placeholder="order if visible" />
+                </div>
+                <div>
+                  <label>Template</label>
+                  <input data-case-field="template" value="${escapeHtml(c.template || '')}" placeholder="recommended template" />
+                </div>
+                <div>
+                  <label>Confidence</label>
+                  <input data-case-field="confidence" value="${escapeHtml(c.confidence || '')}" placeholder="review" />
+                </div>
+              </div>
+
+              <div class="screenshot-textarea-block">
+                <label>Message Summary</label>
+                <textarea data-case-field="summary">${escapeHtml(c.summary || '')}</textarea>
+              </div>
+              <div class="screenshot-textarea-block">
+                <label>Suggested Reply</label>
+                <textarea data-case-field="suggestedReply">${escapeHtml(c.suggestedReply || '')}</textarea>
+              </div>
+              <div class="screenshot-textarea-block">
+                <label>Next Action</label>
+                <textarea data-case-field="nextAction">${escapeHtml(c.nextAction || '')}</textarea>
+              </div>
+
+              <div class="screenshot-card-actions">
+                <button class="btn btn-dark" type="button" data-case-action="copy">Copy Reply</button>
+                <button class="btn" type="button" data-case-action="queue">Add to Queue</button>
+                <button class="btn" type="button" data-case-action="redraft">Redraft</button>
+                <button class="btn" type="button" data-case-action="done">Mark Done</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+        results.querySelectorAll('.screenshot-case-card').forEach(card => {
+          const index = Number(card.dataset.caseIndex);
+          card.querySelectorAll('[data-case-field]').forEach(field => {
+            field.addEventListener('input', () => {
+              cases[index][field.dataset.caseField] = field.value;
+            });
+            field.addEventListener('change', () => {
+              cases[index][field.dataset.caseField] = field.value;
+            });
+          });
+          card.querySelectorAll('[data-case-action]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const action = btn.dataset.caseAction;
+              const c = cases[index];
+              if(action === 'copy'){
+                await navigator.clipboard.writeText(c.suggestedReply || '');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy Reply', 1200);
+              }
+              if(action === 'queue'){
+                addQueueRow({
+                  source: c.source || 'TikTok Shop Chat',
+                  account: c.account || 'All',
+                  customer: c.customer || '',
+                  orderNumber: c.orderNumber || '',
+                  issueType: c.issueType || 'General Question',
+                  priority: c.priority || 'Medium',
+                  status: 'New',
+                  nextAction: c.nextAction || 'Review screenshot and respond',
+                  sendTo: 'Daily Follow-Up',
+                  notes: `Screenshot Intake: ${c.summary || ''}\nTemplate: ${c.template || ''}\nFile: ${c.fileName || ''}`
+                });
+                btn.textContent = 'Added';
+                setTimeout(() => btn.textContent = 'Add to Queue', 1200);
+              }
+              if(action === 'redraft'){
+                c.suggestedReply = buildScreenshotRedraft(c);
+                renderCases();
+              }
+              if(action === 'done'){
+                card.classList.add('done');
+              }
+            });
+          });
+        });
+      }
+
+      function buildScreenshotRedraft(c){
+        const issue = c.issueType || 'your message';
+        if(issue === 'Missing Item'){
+          return 'Hello, thanks for reaching out. Could you please send us photos of the package, packing slip, and all contents received? Once we have those images, we can review everything and help resolve this for you.';
+        }
+        if(issue === 'Refund Request'){
+          return 'Hello, thanks for reaching out. We understand your concern. We are reviewing the order details and will follow up with the next available step as soon as possible.';
+        }
+        if(issue === 'Missing Package'){
+          return 'Hello, thanks for reaching out. If tracking shows delivered, we recommend checking the delivery area, neighbors, leasing office, parcel locker, or local post office. Please let us know if you still cannot locate it.';
+        }
+        if(issue === 'Damaged Item'){
+          return 'Hello, thanks for reaching out. Please send photos of the package and damaged item so we can review everything and determine the best next step.';
+        }
+        return 'Hello, thanks for reaching out. We are reviewing this now and will follow up with the next step as soon as possible.';
+      }
+
+      uploadBtn.addEventListener('click', () => input.click());
+      dropZone.addEventListener('click', () => input.click());
+      dropZone.addEventListener('keydown', e => {
+        if(e.key === 'Enter' || e.key === ' ') input.click();
+      });
+      input.addEventListener('change', () => addFiles(input.files));
+
+      ['dragenter','dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, e => {
+          e.preventDefault();
+          dropZone.classList.add('drag-over');
+        });
+      });
+      ['dragleave','drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, e => {
+          e.preventDefault();
+          dropZone.classList.remove('drag-over');
+        });
+      });
+      dropZone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+      dropZone.addEventListener('paste', e => {
+        const pasted = Array.from(e.clipboardData?.items || [])
+          .filter(item => item.type && item.type.startsWith('image/'))
+          .map(item => item.getAsFile())
+          .filter(Boolean);
+        addFiles(pasted);
+      });
+
+      analyzeBtn.addEventListener('click', async () => {
+        if(!files.length){
+          alert('Add screenshots first.');
+          return;
+        }
+        results.innerHTML = '<div class="screenshot-empty-state">Analyzing screenshots…</div>';
+        cases = [];
+        for(let i=0;i<files.length;i++){
+          try{
+            cases.push(await analyzeWithVision(files[i], i));
+          }catch{
+            cases.push(fallbackCase(files[i], i));
+          }
+        }
+        renderCases();
+      });
+
+      clearBtn.addEventListener('click', () => {
+        files = [];
+        cases = [];
+        input.value = '';
+        renderPreviews();
+        renderCases();
+      });
+    }
+
+
     function setupAppViews(){
       const viewMap = {
         home: ['home'],
@@ -1761,6 +2689,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     }
     init();
     setupAppViews();
+    setupScreenshotIntake();
     setupPlannerPolish();
     setupSetsChecklist();
     setupCSTemplateCollapse();
