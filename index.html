@@ -700,6 +700,8 @@
     .weekly-check-cell label { display: flex; align-items: center; gap: 6px; line-height: 1.25; }
     .weekly-check-cell input { width: 14px; height: 14px; }
     .cs-template-toggle { margin: 8px 0 10px; }
+    .cs-template-tools { margin: 0 0 10px; }
+    .cs-template-tools input { max-width: 420px; }
     #csTemplatesPanel.collapsed #csTemplateTable, #csTemplatesPanel.collapsed #btnAddTemplate { display: none; }
     @media (max-width: 860px){ .calendar-grid-clean { grid-template-columns: 68px repeat(7, 136px) !important; } .task-tools { grid-template-columns: 1fr 1fr !important; } }
 
@@ -710,18 +712,21 @@
       align-items: center;
       gap: 12px;
     }
+    .screenshot-intake-card .sheet-body {
+      padding: 12px;
+    }
     .screenshot-intake-layout {
       display: grid;
-      grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
-      gap: 14px;
+      grid-template-columns: minmax(280px, 390px) minmax(360px, 1fr);
+      gap: 12px;
       align-items: start;
     }
     .screenshot-dropzone {
       border: 1.5px dashed #c9d3e4;
       background: #fbfcff;
       border-radius: 20px;
-      padding: 18px;
-      min-height: 220px;
+      padding: 14px;
+      min-height: 160px;
       display: grid;
       place-items: center;
       text-align: center;
@@ -748,15 +753,24 @@
     }
     .screenshot-upload-actions {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
-      margin-top: 12px;
+      margin-top: 10px;
+    }
+    .screenshot-context-block {
+      margin-top: 0;
+      display: grid;
+      gap: 6px;
+    }
+    .screenshot-context-block textarea {
+      min-height: 96px;
+      resize: vertical;
     }
     .screenshot-preview-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
       gap: 10px;
-      margin-top: 12px;
+      margin-top: 10px;
     }
     .screenshot-preview {
       border: 1px solid #e6e9f0;
@@ -804,11 +818,12 @@
     .screenshot-empty-state {
       border: 1px solid #edf0f5;
       background: #fbfcff;
-      border-radius: 18px;
-      padding: 16px;
+      border-radius: 12px;
+      padding: 12px 14px;
       color: #667085;
       font-size: 13px;
       line-height: 1.55;
+      min-height: 72px;
     }
     .screenshot-case-card {
       border: 1px solid #e6e9f0;
@@ -1219,21 +1234,56 @@
     }
 
     .screenshot-intake-card {
-      max-width: 1320px !important;
+      max-width: 1480px !important;
       margin-left: auto !important;
       margin-right: auto !important;
     }
 
+    #ai-intake.section.active-page .section-title,
+    #queue.section.active-page .section-title,
+    #ai-intake.section.active-page > .sheet-card,
+    #queue.section.active-page > .sheet-card {
+      max-width: 1480px !important;
+    }
+
+    .screenshot-intake-card .sheet-body {
+      padding: 12px !important;
+    }
+
     .screenshot-intake-layout {
-      grid-template-columns: minmax(270px, 360px) minmax(0, 1fr) !important;
-      gap: 16px !important;
+      grid-template-columns: minmax(280px, 390px) minmax(360px, 1fr) !important;
+      gap: 14px !important;
     }
 
     .screenshot-dropzone {
-      min-height: 190px !important;
+      min-height: 154px !important;
+      padding: 14px !important;
       border-radius: var(--op-radius-lg) !important;
       border-color: #b9c7d6 !important;
       background: #fbfaf7 !important;
+    }
+
+    .screenshot-upload-actions {
+      gap: 6px !important;
+      margin-top: 10px !important;
+    }
+
+    .screenshot-context-block {
+      margin-top: 0 !important;
+    }
+
+    .screenshot-context-block textarea {
+      min-height: 96px !important;
+    }
+
+    .screenshot-empty-state {
+      min-height: 72px !important;
+      padding: 12px 14px !important;
+      border-radius: var(--op-radius-md) !important;
+    }
+
+    #queue.active-page {
+      padding-top: 6px !important;
     }
 
     .screenshot-dropzone:hover,
@@ -1548,13 +1598,18 @@
                   <button class="btn" id="btnAnalyzeScreenshots" type="button">Analyze Screenshots</button>
                   <button class="btn" id="btnClearScreenshots" type="button">Clear Batch</button>
                 </div>
-                <div class="hint" style="margin-top:10px;">
-                  OpenAI Vision is connected. Review the detected fields, suggested reply, and next action before copying or adding anything to the queue.
-                </div>
                 <div id="screenshotPreviewGrid" class="screenshot-preview-grid"></div>
               </div>
 
               <div>
+                <div class="screenshot-textarea-block screenshot-context-block">
+                  <label for="screenshotAiContext">Extra context for AI</label>
+                  <textarea id="screenshotAiContext" placeholder="Add anything the screenshot does not show — refund policy, what already happened, customer history, order details, or how you want the tone to sound…"></textarea>
+                  <div class="hint">Used only to guide the draft. Nothing sends automatically.</div>
+                </div>
+                <div class="hint" style="margin:8px 0 10px;">
+                  OpenAI Vision is connected. Review the detected fields, suggested reply, and next action before copying or adding anything to the queue.
+                </div>
                 <div id="screenshotResults" class="screenshot-results">
                   <div class="screenshot-empty-state">
                     Upload screenshots, then click <strong>Analyze Screenshots</strong>. Detected cases will appear here with suggested replies, queue actions, and copy buttons.
@@ -1678,7 +1733,10 @@
           <div class="sheet-header">CS TEMPLATE / DECISION TABLE</div>
           <div class="sheet-subheader">Preloaded starters. Edit + add your own (auto-saves).</div>
           <div class="sheet-body">
-            <table class="wide-table" id="csTemplateTable"><thead><tr><th>Name</th><th>Shortcut</th><th>Category</th><th>Trigger</th><th>Requires Refund?</th><th>Requires Review?</th><th>Final Action</th><th>Internal Notes</th><th>Response Starter</th><th>Delete</th></tr></thead><tbody></tbody></table>
+            <div class="toolbar cs-template-tools">
+              <input id="csTemplateSearch" type="search" placeholder="Search templates…" />
+            </div>
+            <table class="wide-table" id="csTemplateTable"><thead><tr><th>Name</th><th>Shortcut</th><th>Category</th><th>Trigger</th><th>Requires Refund?</th><th>Requires Review?</th><th>Final Action</th><th>Internal Notes</th><th>Response Starter</th><th>Copy</th><th>Delete</th></tr></thead><tbody></tbody></table>
             <button class="btn" id="btnAddTemplate">Add Template</button>
           </div>
         </div>
@@ -2023,18 +2081,44 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     const OPTIONS = {source:['VR Email','TikTok Shop Chat','TikTok DM','Instagram DM','TikTok Refund','TikTok Return','Shopify','Manual'],account:['All','VR','PS','CK'],issueType:['Missing Item','Wrong Item','Missing Package','Damaged Item','Refund Request','Return Request','Order Update','Inventory Issue','Surprise Set Issue','General Question'],priority:['Low','Medium','High','Urgent'],queueStatus:['New','In Progress','Needs Review','Follow Up','Waiting on Customer','Waiting on Team','Resolved'],sendTo:['Daily Follow-Up','Issues Caught + Resolved','Replacement / Loss Log','Inventory Exception','Weekly Review'],simpleStatus:['Not Started','In Progress','Needs Review','Follow Up','Completed'],yesNo:['No','Yes']};
     const CS_TEMPLATE_LIBRARY = [{"name":"Package Taking Too Long - Initial","shortcut":"/noscan1","category":"Shipping","trigger":"Customer says tracking only shows label created or no scan yet","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when internal system shows package handed to USPS or ready for pickup. No refund. No goodwill unless VIP or repeat issue.","responseStarter":"Hello, thanks for reaching out. According to our internal systems, your package has been picked up by USPS and is currently awaiting its initial scan. Tracking updates may take some time to appear, and USPS may take 1 to 2 business days to apply the first scan. Please let us know if you have any other questions."},{"name":"In Transit Delay - Initial","shortcut":"/transit1","category":"Shipping","trigger":"Customer says package is taking too long but tracking shows in transit","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when tracking is moving or still within expected delivery window.","responseStarter":"Hello, thanks for reaching out. According to the tracking information, your package is currently in transit with the carrier. Shipping updates can sometimes take time to appear between scans. We appreciate your patience and understanding."},{"name":"Signature Required - Initial","shortcut":"/sig1","category":"Shipping","trigger":"Customer receives notice that signature is required","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use for high-value orders. USPS still has package. No refund.","responseStarter":"Hello, thank you for reaching out. Since this is a high-value order, a signature is required for delivery. According to the notice, a delivery attempt was made but no authorized recipient was available. We recommend contacting your local post office to arrange redelivery or pick up the package directly. Please note that if the package is not claimed by [date], it will be returned to the sender. We appreciate your understanding."},{"name":"Returned Package - Monitoring","shortcut":"/return1","category":"Shipping","trigger":"Customer thinks one or more packages are being returned","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Use when waiting for returned parcel to physically arrive.","responseStarter":"Hello, thanks for following up. We will keep an eye out for any returned packages associated with your orders and will contact you as soon as we receive them or have an update."},{"name":"Chatbot Spam","shortcut":"/admin1","category":"Admin","trigger":"Customer confused by automated messages or repeated bot prompts","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use simple disengaging note.","responseStarter":"Thank you for reaching out. These messages are automatic. Have a great day."},{"name":"Stall / Internal Review","shortcut":"/admin2","category":"Admin","trigger":"Need time to investigate without promising resolution yet","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Standard holding response.","responseStarter":"Hello, thank you for providing that information. We are currently looking into this matter for you and reviewing everything on our end. Please allow some time for us to provide an update. We appreciate your patience and understanding."},{"name":"Order Number Request","shortcut":"/admin5","category":"Admin","trigger":"Customer is inquiring about order without any information provided.","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Ask customer for order number.","responseStarter":"Hello, thanks for reaching out. Could you please share the order number you are referring to?"},{"name":"Missing Items - Request Photos","shortcut":"/missing1","category":"Order Issue","trigger":"Customer says package arrived but items are missing","requiresRefund":"Yes","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Default response. Ask for package, packing slip, all contents.","responseStarter":"Hello, thanks for reaching out. Could you please send us photos of the package, the packing slip, and all of the contents you received? Once we have those images, we will review everything and investigate the situation right away to help resolve this for you."},{"name":"Opened Instead of Sealed - Under Review","shortcut":"/sealed1","category":"Order Issue","trigger":"Customer says they wanted item sealed but it was opened","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Review footage before deciding.","responseStarter":"Hello, thank you for providing that information. We are currently looking into this matter for you and reviewing everything on our end. Please allow some time for us to provide an update. We appreciate your patience and understanding."},{"name":"Surprise Set Refund - Initial","shortcut":"/ssrefund1","category":"Refund","trigger":"Customer wants cancellation or refund for surprise set order","requiresRefund":"No","requiresReview":"No","finalAction":"Direct to TikTok","internalNotes":"Use default policy response. Keep concise.","responseStarter":"Hello, thanks for reaching out. Unfortunately, due to TikTok’s guidelines, all sales on surprise sets are final in accordance with TikTok policy. Please contact TikTok directly for any further assistance. Thank you for your patience and understanding."},{"name":"Refund - Label Created","shortcut":"/refund1","category":"Refund","trigger":"Customer asks for refund but shipping label already created and item not ripped","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use only for this specific workflow. Do not use on surprise sets already opened.","responseStarter":"Hello, thanks for reaching out. Unfortunately, due to TikTok’s guidelines, once a shipping label has been created, we’re unable to process a refund at this stage. The label has already been created and we will send you an empty pack. Once it arrives, please submit a refund request through TikTok. As soon as it’s requested, we’ll promptly issue your refund. Thank you for your patience and understanding."},{"name":"Return - Already Shipped","shortcut":"/refund2","category":"Refund","trigger":"Customer wants return but item already shipped and still sealed","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Return path only if sealed and unused after arrival.","responseStarter":"Hello, we understand your concern. Once the product arrives and it is still sealed and unused, you can submit a return request through TikTok and we will promptly accept it and process the refund once it is returned. Please let us know if you have any other questions."},{"name":"Missing Package - Initial","shortcut":"/delivered1","category":"Missing Package","trigger":"Tracking shows delivered but customer says package missing","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Ask customer to check area, neighbors, leasing office, parcel locker, post office GPS scan. No replacement now.","responseStarter":"Hello, thanks for reaching out. According to the tracking information, the package was marked as delivered by the carrier. We recommend checking around the delivery area, with neighbors, or with your leasing office or mail room in case it was placed in a parcel locker or held there. You can also contact your local post office with your tracking number, as they can verify the GPS delivery scan and confirm where it was left. Please let us know if you have any other questions."},{"name":"Giveaway Winner - Request Address","shortcut":"/give1","category":"Giveaway","trigger":"Customer says they won giveaway and asks how to claim","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Basic giveaway intake.","responseStarter":"Hello, thanks for reaching out and congratulations on winning the giveaway! Please provide your shipping address, and we will get that shipped out shortly."},{"name":"Damage - Request Photos","shortcut":"/damage1","category":"Damage","trigger":"Customer says package or product arrived damaged","requiresRefund":"Yes","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Request photos first. Do not take fault.","responseStarter":"Hello, thanks for reaching out. Please send us photos of the package and the damaged item so we can review everything on our end and determine the best next step."},{"name":"Package Taking Too Long - Follow Up","shortcut":"/noscan2","category":"Shipping","trigger":"Customer follows up after 1 to 2 days with no update","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Reassure only. Do not overexplain. No compensation by default.","responseStarter":"Hello, thank you for following up. Your package is still on the way, and in some cases USPS may take additional time to complete the initial scan and update tracking. We appreciate your patience and understanding."},{"name":"In Transit Delay - Follow Up","shortcut":"/transit2","category":"Shipping","trigger":"Customer upset about delivery speed and asks for refund","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"If carrier still has package and product is collectible, do not refund by default.","responseStarter":"Hello, thank you for following up. At this time, the package remains in transit with the carrier, and we are unable to issue a refund while it is still on the way. We recommend continuing to monitor tracking for the next update."},{"name":"Signature Required - Wants Refund","shortcut":"/sig2","category":"Shipping","trigger":"Customer asks for refund because USPS has package","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"State USPS has package, not shop. No refund for collectibles or while package held by carrier.","responseStarter":"Hello, thanks for reaching out. Your order is still with USPS, and a delivery attempt was made but no authorized recipient was available. Since this is a high-value collectible, a signature is required, and refunds are not possible while the package is still being held for delivery. We recommend contacting your local post office to arrange redelivery or pickup directly. We appreciate your understanding."},{"name":"Signature Required - Move / New Address","shortcut":"/sig3","category":"Shipping","trigger":"Customer says they cannot pick up and are moving soon","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"If returned, then can assist later. Do not promise immediate reroute unless shop can do it.","responseStarter":"Hello, thank you for reaching out. If you are unable to pick up the package after a failed USPS signed delivery, it will be returned to us, and once it is returned, we can assist with shipping it to your new address."},{"name":"Returned Package - Not Yet Received","shortcut":"/return2","category":"Shipping","trigger":"Customer follows up and returned package still not at shop","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Use while still waiting on carrier return.","responseStarter":"Hello, thank you for following up. At this time, we have not yet received the returned package. We are continuing to monitor this and will update you as soon as anything arrives or if we have more information. We appreciate your patience and understanding in the meantime."},{"name":"Missing Items - Packaging Not Available","shortcut":"/missing2","category":"Order Issue","trigger":"Customer says packaging or slip was thrown away","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Investigate internally. Do not accuse. Benefit of doubt if business case makes sense.","responseStarter":"Hello, thank you for the update. We understand the packaging and packing slip may no longer be available. We will review the order on our end and investigate the situation further. Please allow some time for us to provide an update."},{"name":"Missing Items - Under Review","shortcut":"/missing3","category":"Order Issue","trigger":"Customer already sent photos","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Use while reviewing photos and order details.","responseStarter":"Hello, thank you for providing those images. We are currently reviewing everything on our end and investigating the situation. Please allow some time for us to provide an update."},{"name":"Wrong Item - Return Label Needed","shortcut":"/wrong2","category":"Order Issue","trigger":"Customer agrees to return wrong item for exchange","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Collect email for return label.","responseStarter":"Hello, thanks for reaching out. Could you please provide your current email address so we can send over your return label?"},{"name":"Opened Instead of Sealed - No Clear Request Found","shortcut":"/sealed2","category":"Order Issue","trigger":"Footage reviewed and no clear sealed request before opening","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Default no refund. Offer RIP10 only if needed or approved goodwill.","responseStarter":"Hello, thanks for reaching out. After further reviewing the footage, we were unable to find any clear request to have the item shipped sealed prior to it being opened. Based on this, the order falls under live opening guidelines and is not eligible for a refund. We apologize for any confusion or misunderstanding."},{"name":"Surprise Set Refund - Accidental Bid","shortcut":"/ssrefund2","category":"Refund","trigger":"Customer says accidental bid or unauthorized purchase","requiresRefund":"No","requiresReview":"No","finalAction":"Direct to TikTok","internalNotes":"Do not debate. Do not promise refund. Direct to TikTok.","responseStarter":"Hello, thank you for reaching out. We understand your concern. As this was a randomized surprise set, we are unable to cancel or refund the order on our end. If you believe the purchase was unauthorized, please contact TikTok directly for further review."},{"name":"Surprise Set Refund - Opened Live","shortcut":"/ssrefund3","category":"Refund","trigger":"Customer argues after products were opened live","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when reviewed footage confirms live opening. No compensation by default.","responseStarter":"Hello, thanks for reaching out. After further review, we can confirm the products were opened live during the broadcast and are therefore not eligible for a refund. We appreciate your understanding."},{"name":"Missing Package Claim - Confirm Non Receipt","shortcut":"/delivered2","category":"Missing Package","trigger":"Customer says they checked everywhere and still cannot locate it","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use to get explicit confirmation before opening claim.","responseStarter":"Hello, thank you for the update. Please confirm that you did not receive the package marked as delivered at [time] on [date]. Once confirmed, we will proceed with opening a USPS missing package claim and then discuss the next steps with you."},{"name":"Giveaway Winner - Choose Prize","shortcut":"/give2","category":"Giveaway","trigger":"Customer provided address and needs to pick prize type","requiresRefund":"No","requiresReview":"No","finalAction":"Wait on customer","internalNotes":"Use if prize requires choice.","responseStarter":"Thank you for providing your address! Could you please confirm whether you would prefer the MTG Premium Pack or the Pokémon Premium Pack for your giveaway prize?"},{"name":"Damage - Transit Likely","shortcut":"/damage2","category":"Damage","trigger":"Customer provided photos and damage appears transit related","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"Position as carrier-related. Review before replacing.","responseStarter":"Hello, thank you for providing the photos. Based on the information provided, this appears to have occurred during transit with the carrier. We are currently reviewing this on our end and will determine the best next step."},{"name":"Package Taking Too Long - Final","shortcut":"/noscan3","category":"Shipping","trigger":"Customer pushes and claims it was never shipped","requiresRefund":"No","requiresReview":"Yes","finalAction":"Investigate","internalNotes":"If reasonable and frustrated, DISCOUNT CODE only if needed. Escalate only if scan delay becomes abnormal.","responseStarter":"Hello, thank you for reaching out. After further review, we can confirm your package has been handed off and is on the way. While tracking may not yet reflect movement, USPS can take time to complete the initial scan. If there is still no update after additional time, we will review it further on our end."},{"name":"Returned Package - Unable To Locate","shortcut":"/return3","category":"Shipping","trigger":"Returned package could not be located and replacement approved","requiresRefund":"No","requiresReview":"No","finalAction":"Replace","internalNotes":"Do not say we lost it. Say unable to locate returned package.","responseStarter":"Hello, thanks for reaching out. After further review, we were unfortunately unable to locate the returned package. As a resolution, we will be shipping out a brand new [item] to you. We appreciate your patience and understanding."},{"name":"End Conversation - Soft Close","shortcut":"/admin3","category":"Admin","trigger":"Issue resolved or no further action needed","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Friendly close.","responseStarter":"Of course. If you have any other questions or concerns, please let us know."},{"name":"End Conversation - Final Close","shortcut":"/admin4","category":"Admin","trigger":"Customer repetitive, hostile, or circular and no new info","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use to disengage. No debate.","responseStarter":"Hello, we understand your concerns and appreciate you taking the time to share this information. At this time, we have provided all available details regarding your order and its status. Any further updates or decisions regarding refunds will be handled directly through TikTok. We appreciate your understanding."},{"name":"Goodwill - DISCOUNT CODE","shortcut":"/goodwill1","category":"Admin","trigger":"Minor dissatisfaction where approved to offer baseline goodwill","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Default goodwill only. Do not offer product unless clear mistake or VIP.","responseStarter":"Hello, thank you for reaching out. While we’re unable to offer a refund or replacement in this case, we’d like to offer a small gesture of goodwill. You’re welcome to use the code [DISCOUNT] for 10% off a future order. We appreciate your understanding."},{"name":"VIP Customer - Light Recovery","shortcut":"/goodwill2","category":"Admin","trigger":"Known high spender or strong repeat customer with approved exception","requiresRefund":"No","requiresReview":"Yes","finalAction":"Close","internalNotes":"Use sparingly for valuable customers. Product goodwill only if approved.","responseStarter":"Hello, thank you for reaching out. We appreciate your continued support. While we’re unable to offer a full refund or replacement in this case, we would like to offer a small gesture of goodwill. Please let us know if you have any other questions."},{"name":"Missing Items - Replacement Approved","shortcut":"/missing4","category":"Order Issue","trigger":"Internal review confirms missing items should be replaced","requiresRefund":"No","requiresReview":"No","finalAction":"Replace","internalNotes":"Use only when mistake confirmed or approved exception.","responseStarter":"Hello, thank you for your patience. After further review, we will be shipping out the following replacement: [item]. Please allow some time for tracking updates once it has been sent. We appreciate your understanding and continued support."},{"name":"Missing Items - Replacement Shipped","shortcut":"/missing5","category":"Order Issue","trigger":"Replacement already created and tracking available","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Add item and tracking. Keep simple.","responseStarter":"Hello, thanks for reaching out. Your replacement [item] has been shipped out. Please allow some time for tracking updates, as USPS may take a bit to scan packages. Here is your tracking information: [tracking]. We appreciate your understanding and continued support."},{"name":"Wrong Item - Keep As Compensation","shortcut":"/wrong1","category":"Order Issue","trigger":"Approved option to let customer keep wrong item","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when wrong item has similar or higher value and approved by team.","responseStarter":"Hello, thank you for contacting Vaulted Support. After further review, we can offer two solutions. You may keep the [product] as compensation, or you can return it and we will exchange it for a [correct product]. We apologize for the misunderstanding and appreciate your patience."},{"name":"Wrong Item - Exchange After Return","shortcut":"/wrong3","category":"Order Issue","trigger":"Return label sent and waiting for item back","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Use while waiting for return to arrive.","responseStarter":"Hello, thanks for reaching out. We’d be happy to process an exchange once we receive the original product. We will also provide a return label and send you a confirmation once the replacement has been shipped."},{"name":"Opened Instead of Sealed - Small Goodwill","shortcut":"/sealed3","category":"Order Issue","trigger":"Approved small goodwill after confusion but no refund","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Default goodwill is RIP10 unless VIP or management approves product.","responseStarter":"Hello, thanks for reaching out. After further review, the order is not eligible for a refund under live opening guidelines. As a small gesture of goodwill, you’re welcome to use the code RIP10 for 10% off a future order. We appreciate your understanding."},{"name":"Surprise Set Refund - Final Disengage","shortcut":"/ssrefund4","category":"Refund","trigger":"Customer keeps arguing, threatens bank, repeats same points","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Final response. Do not continue debate.","responseStarter":"Hello, as previously stated, orders from surprise sets opened live are not eligible for a refund under TikTok guidelines. For any further assistance, please contact TikTok Support directly. Thank you."},{"name":"Missing Package Claim - Opened","shortcut":"/delivered3","category":"Missing Package","trigger":"Customer confirms non receipt","requiresRefund":"No","requiresReview":"No","finalAction":"Investigate","internalNotes":"Open claim. Do not promise replacement or refund yet.","responseStarter":"Hello, thank you for confirming. We will proceed with opening a USPS missing package claim regarding the delivery. Once we receive an update, we will follow up with you to discuss the next steps."},{"name":"Missing Package - Claim Pending","shortcut":"/delivered4","category":"Missing Package","trigger":"Customer asks for update while claim is pending","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Keep short. USPS timeline can take a while.","responseStarter":"Hello, thank you for following up. A missing package claim has already been submitted with USPS, and we are currently waiting for an update from their investigation. We appreciate your patience and understanding."},{"name":"Missing Package - Pushes For Refund","shortcut":"/delivered5","category":"Missing Package","trigger":"Customer demands immediate replacement or refund before claim result","requiresRefund":"No","requiresReview":"Yes","finalAction":"Close","internalNotes":"Hold line. If shop policy allows refund request through platform, direct there. Otherwise keep claim path.","responseStarter":"Hello, thank you for reaching out. Since the package is marked as delivered by the carrier, we are unable to issue a replacement or refund at this stage. We are continuing to review the matter through the carrier claim process and will follow up once we have an update."},{"name":"Giveaway Winner - Tracking Sent","shortcut":"/give3","category":"Giveaway","trigger":"Prize shipped with tracking","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Send once prize ships.","responseStarter":"Hello, thanks for confirming! Here is your tracking number: [tracking]. Please allow some time for tracking updates, as USPS may take a bit to scan packages. Congratulations again on winning the giveaway, and we truly appreciate your continued support!"},{"name":"Damage - Goodwill Replacement","shortcut":"/damage3","category":"Damage","trigger":"Approved replacement as goodwill for transit damage","requiresRefund":"No","requiresReview":"No","finalAction":"Replace","internalNotes":"Use when replacing even though carrier likely caused issue.","responseStarter":"Hello, thanks for reaching out. While this appears to be related to handling during transit with USPS, as a gesture of goodwill we will be sending you a replacement [product]. We appreciate your patience and understanding. Please let us know if you have any other questions."},{"name":"Damage - Manufacturing Issue No Replacement","shortcut":"/damage4","category":"Damage","trigger":"Issue appears manufacturing-related and no replacement approved","requiresRefund":"No","requiresReview":"No","finalAction":"Close","internalNotes":"Use when sourced directly from distributor and not shop-caused.","responseStarter":"Hello, we appreciate you bringing this to our attention. Unfortunately, we are unable to make any changes or replacements as this appears to be a manufacturing issue. Thank you again for reaching out."}];
 
+    function normalizeTemplateShortcut(t){
+      return String((t && t.shortcut) || '').trim().toLowerCase();
+    }
+
     function mergeCSTemplateLibrary(){
-      if(!store || !store.templates) return;
-      const existing = new Set((store.templates.rows || []).map(t => String(t.shortcut || '').trim().toLowerCase()).filter(Boolean));
-      let added = 0;
-      CS_TEMPLATE_LIBRARY.forEach(t => {
-        const key = String(t.shortcut || '').trim().toLowerCase();
-        if(!key || existing.has(key)) return;
-        store.templates.rows.push(Object.assign({ id: rowId() }, t));
-        existing.add(key);
-        added++;
+      if(!store || !store.templates || !Array.isArray(CS_TEMPLATE_LIBRARY)) return;
+
+      const rows = store.templates.rows || [];
+      const byShortcut = new Map();
+      let changed = false;
+
+      rows.forEach(t => {
+        const key = normalizeTemplateShortcut(t);
+        if(key && !byShortcut.has(key)) byShortcut.set(key, t);
       });
-      if(added) scheduleSaveAll();
+
+      CS_TEMPLATE_LIBRARY.forEach(original => {
+        const key = normalizeTemplateShortcut(original);
+        if(!key) return;
+
+        const existing = byShortcut.get(key);
+
+        if(existing){
+          const existingId = existing.id || rowId();
+          Object.keys(existing).forEach(k => delete existing[k]);
+          Object.assign(existing, original, { id: existingId });
+          changed = true;
+        } else {
+          const fresh = Object.assign({ id: rowId() }, original);
+          rows.push(fresh);
+          byShortcut.set(key, fresh);
+          changed = true;
+        }
+      });
+
+      store.templates.rows = rows;
+
+      if(changed) scheduleSaveAll();
     }
 
     function $(s,r){return(r||document).querySelector(s)} function $all(s,r){return Array.from((r||document).querySelectorAll(s))}
@@ -2050,6 +2134,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     function makeTdNumber(val,onBlur){const td=makeTdText(val,onBlur);td.addEventListener('input',()=>{const c=td.textContent.replace(/[^\d\.\-]/g,'');if(c!==td.textContent)td.textContent=c});return td}
     function makeTdDelete(onDelete){const td=document.createElement('td');td.className='delete-btn';td.textContent='x';td.title='Delete row';td.addEventListener('click',()=>onDelete());return td}
     function download(name,text){const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(text);a.download=name;document.body.appendChild(a);a.click();a.remove()}
+    function copyToClipboard(text){const value=String(text||'');if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function')return navigator.clipboard.writeText(value);return new Promise((resolve,reject)=>{const ta=document.createElement('textarea');ta.value=value;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.top='-999px';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{const ok=document.execCommand('copy');ta.remove();ok?resolve():reject(new Error('Copy failed'));}catch(err){ta.remove();reject(err);}})}
     const store={queue:{key:'queue',rows:[]},workflowPriority:{key:'workflow.priority',rows:[]},workflowFollow:{key:'workflow.follow',rows:[]},workflowLive:{key:'workflow.live',rows:[]},workflowDone:{key:'workflow.done',rows:[]},issues:{key:'issues',rows:[]},templates:{key:'templates',rows:[]},sets:{key:'sets',rows:[]},inventory:{key:'inventory',rows:[]},returns:{key:'returns',rows:[]},social:{key:'social',rows:[]},streamerVR:{key:'streamer.vr',rows:[]},streamerPS:{key:'streamer.ps',rows:[]},streamerCK:{key:'streamer.ck',rows:[]},workLog:{key:'workLog',rows:[]},tomorrowPrep:{key:'tomorrowPrep',data:{}}};
     function loadAll(){Object.keys(store).forEach(k=>{if(k==='tomorrowPrep'){store[k].data=loadJSON(store[k].key,{surpriseSets:'',liveEvents:'',streamerSchedule:'',inventoryPrep:'',customerFollowUps:''})}else{store[k].rows=loadJSON(store[k].key,[])}})} function saveAll(){Object.keys(store).forEach(k=>{if(k==='tomorrowPrep'){saveJSON(store[k].key,store[k].data)}else{saveJSON(store[k].key,store[k].rows)}})}
     let saveTimer=null; function scheduleSaveAll(){if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>saveAll(),150)}
@@ -2057,7 +2142,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     function renderQueue(){const tb=$('#queueTable tbody');tb.innerHTML='';const showArchived=!!($('#showArchivedToggle')&&$('#showArchivedToggle').checked);store.queue.rows.forEach((r,i)=>{if(!showArchived&&r.archived)return;const tr=document.createElement('tr');tr.dataset.id=r.id;if(r.archived)tr.classList.add('archived-row');tr.addEventListener('click',()=>{selectedQueueRowId=r.id;$all('#queueTable tbody tr').forEach(x=>x.style.boxShadow='');tr.style.boxShadow='inset 0 0 0 2px #b9b9b4'});tr.appendChild(makeTdText(r.receivedTime,()=>{r.receivedTime=tr.children[0].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));let td=document.createElement('td');let s=buildSelect(OPTIONS.source,r.source,'',null);s.addEventListener('change',()=>{r.source=s.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(s);tr.appendChild(td);td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.customer,()=>{r.customer=tr.children[3].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));tr.appendChild(makeTdText(r.orderNumber,()=>{r.orderNumber=tr.children[4].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let it=buildSelect(OPTIONS.issueType,r.issueType,'',null);it.addEventListener('change',()=>{r.issueType=it.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(it);tr.appendChild(td);td=document.createElement('td');let p=buildSelect(OPTIONS.priority,r.priority,'priority',priorityClass);p.addEventListener('change',()=>{r.priority=p.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(p);tr.appendChild(td);td=document.createElement('td');let st=buildSelect(OPTIONS.queueStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(st);tr.appendChild(td);tr.appendChild(makeTdText(r.nextAction,()=>{r.nextAction=tr.children[8].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));td=document.createElement('td');let send=buildSelect(OPTIONS.sendTo,r.sendTo,'',null);send.addEventListener('change',()=>{r.sendTo=send.value;scheduleSaveAll();queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))});td.appendChild(send);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[10].textContent;queueSyncDebounced(r.id,()=>supabaseUpsertWorkQueueRow(r).catch(()=>{}))}));const actionTd=document.createElement('td');const actionWrap=document.createElement('div');actionWrap.className='queue-action-stack';const actionBtn=document.createElement('button');actionBtn.className='btn';actionBtn.style.padding='5px 8px';if(r.archived){actionBtn.textContent='Restore';actionBtn.addEventListener('click',(e)=>{e.stopPropagation();r.archived=false;r.archivedAt=null;scheduleSaveAll();renderQueue();updateMetrics();supabaseUpsertWorkQueueRow(r).catch(()=>{})});}else{actionBtn.textContent='Archive';actionBtn.addEventListener('click',(e)=>{e.stopPropagation();r.archived=true;r.archivedAt=new Date().toISOString();scheduleSaveAll();renderQueue();updateMetrics();supabaseUpsertWorkQueueRow(r).catch(()=>{})});}const trashBtn=document.createElement('button');trashBtn.className='btn trash-btn';trashBtn.style.padding='5px 8px';trashBtn.textContent='🗑';trashBtn.title='Permanently delete';trashBtn.addEventListener('click',(e)=>{e.stopPropagation();const ok=confirm('Permanently delete this queue item? This cannot be undone.');if(!ok)return;store.queue.rows=store.queue.rows.filter(x=>x.id!==r.id);if(selectedQueueRowId===r.id)selectedQueueRowId=null;scheduleSaveAll();renderQueue();updateMetrics();renderCommandCenter();supabaseDeleteWorkQueueRow(r.id).catch(()=>{})});actionWrap.appendChild(actionBtn);actionWrap.appendChild(trashBtn);actionTd.appendChild(actionWrap);tr.appendChild(actionTd);tb.appendChild(tr)})}
     function renderWorkflowTable(id,key,hasTarget){const tb=$('#'+id+' tbody');tb.innerHTML='';const rows=store[key].rows;rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.item,()=>{r.item=tr.children[0].textContent}));let td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.details,()=>{r.details=tr.children[2].textContent}));td=document.createElement('td');let st=buildSelect(OPTIONS.simpleStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics()});td.appendChild(st);tr.appendChild(td);if(hasTarget){tr.appendChild(makeTdText(r.target,()=>{r.target=tr.children[4].textContent}));tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[5].textContent}))}else{tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[4].textContent}))}tr.appendChild(makeTdDelete(()=>{rows.splice(i,1);scheduleSaveAll();renderAllTables();updateMetrics()}));tb.appendChild(tr)})}
     function renderIssues(){const tb=$('#issuesTable tbody');tb.innerHTML='';store.issues.rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.date,()=>{r.date=tr.children[0].textContent}));let td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll();updateMetrics()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.issue,()=>{r.issue=tr.children[2].textContent}));tr.appendChild(makeTdText(r.actionTaken,()=>{r.actionTaken=tr.children[3].textContent}));td=document.createElement('td');let t=buildSelect(['CS','Inventory','Replacement','Surprise Set','Studio Readiness','Other'],r.type,'',null);t.addEventListener('change',()=>{r.type=t.value;scheduleSaveAll()});td.appendChild(t);tr.appendChild(td);tr.appendChild(makeTdNumber(r.saved,()=>{r.saved=tr.children[5].textContent}));td=document.createElement('td');let fu=buildSelect(OPTIONS.yesNo,r.followUpNeeded,'',null);fu.addEventListener('change',()=>{r.followUpNeeded=fu.value;scheduleSaveAll()});td.appendChild(fu);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[7].textContent}));tr.appendChild(makeTdDelete(()=>{store.issues.rows.splice(i,1);scheduleSaveAll();renderIssues();updateMetrics()}));tb.appendChild(tr)})}
-    function renderTemplates(){const tb=$('#csTemplateTable tbody');tb.innerHTML='';const f=['name','shortcut','category','trigger','requiresRefund','requiresReview','finalAction','internalNotes','responseStarter'];store.templates.rows.forEach((r,i)=>{const tr=document.createElement('tr');f.forEach(k=>{const td=makeTdText(r[k],()=>{r[k]=td.textContent});tr.appendChild(td)});tr.appendChild(makeTdDelete(()=>{store.templates.rows.splice(i,1);scheduleSaveAll();renderTemplates()}));tb.appendChild(tr)})}
+    function getTemplateSearchTerm(){const input=$('#csTemplateSearch');return input?input.value.trim().toLowerCase():''}
+    function renderTemplates(){const tb=$('#csTemplateTable tbody');tb.innerHTML='';const f=['name','shortcut','category','trigger','requiresRefund','requiresReview','finalAction','internalNotes','responseStarter'];const term=getTemplateSearchTerm();store.templates.rows.forEach((r,i)=>{if(term&&!f.map(k=>String(r[k]||'')).join(' ').toLowerCase().includes(term))return;const tr=document.createElement('tr');f.forEach(k=>{const td=makeTdText(r[k],()=>{r[k]=td.textContent});tr.appendChild(td)});const copyTd=document.createElement('td');const copyBtn=document.createElement('button');copyBtn.type='button';copyBtn.className='btn';copyBtn.style.padding='5px 8px';copyBtn.textContent='Copy';copyBtn.addEventListener('click',async()=>{try{await copyToClipboard(r.responseStarter||'');copyBtn.textContent='Copied';setTimeout(()=>copyBtn.textContent='Copy',1200);}catch{copyBtn.textContent='Copy failed';setTimeout(()=>copyBtn.textContent='Copy',1400);}});copyTd.appendChild(copyBtn);tr.appendChild(copyTd);tr.appendChild(makeTdDelete(()=>{store.templates.rows.splice(i,1);scheduleSaveAll();renderTemplates()}));tb.appendChild(tr)})}
     function renderSets(){const tb=$('#setTable tbody');tb.innerHTML='';store.sets.rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.date,()=>{r.date=tr.children[0].textContent}));let td=document.createElement('td');let a=buildSelect(OPTIONS.account,r.account,'account',accountClass);a.addEventListener('change',()=>{r.account=a.value;scheduleSaveAll()});td.appendChild(a);tr.appendChild(td);tr.appendChild(makeTdText(r.streamer,()=>{r.streamer=tr.children[2].textContent}));tr.appendChild(makeTdText(r.products,()=>{r.products=tr.children[3].textContent}));tr.appendChild(makeTdText(r.unknownItems,()=>{r.unknownItems=tr.children[4].textContent}));td=document.createElement('td');let st=buildSelect(OPTIONS.simpleStatus,r.status,'status',statusClass);st.addEventListener('change',()=>{r.status=st.value;scheduleSaveAll();updateMetrics()});td.appendChild(st);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[6].textContent}));tr.appendChild(makeTdDelete(()=>{store.sets.rows.splice(i,1);scheduleSaveAll();renderSets();updateMetrics()}));tb.appendChild(tr)})}
     function calcVariance(r){return(Number(r.physicalQty||0)-Number(r.shopifyQty||0))}
     function renderInventory(){const tb=$('#inventoryTable tbody');tb.innerHTML='';store.inventory.rows.forEach((r,i)=>{const tr=document.createElement('tr');tr.appendChild(makeTdText(r.weekOf,()=>{r.weekOf=tr.children[0].textContent}));tr.appendChild(makeTdText(r.studio,()=>{r.studio=tr.children[1].textContent}));tr.appendChild(makeTdText(r.productName,()=>{r.productName=tr.children[2].textContent}));tr.appendChild(makeTdNumber(r.lastWeekQty,()=>{r.lastWeekQty=tr.children[3].textContent}));tr.appendChild(makeTdNumber(r.physicalQty,()=>{r.physicalQty=tr.children[4].textContent}));tr.appendChild(makeTdNumber(r.shopifyQty,()=>{r.shopifyQty=tr.children[5].textContent}));const v=document.createElement('td');v.className='center variance';v.textContent=String(calcVariance(r));tr.appendChild(v);let td=document.createElement('td');let up=buildSelect(['No','Yes','Investigate','Update Shopify'],r.updated,'',null);up.addEventListener('change',()=>{r.updated=up.value;scheduleSaveAll()});td.appendChild(up);tr.appendChild(td);tr.appendChild(makeTdText(r.notes,()=>{r.notes=tr.children[8].textContent}));tr.appendChild(makeTdDelete(()=>{store.inventory.rows.splice(i,1);scheduleSaveAll();renderInventory();updateMetrics()}));const recalc=()=>{r.physicalQty=tr.children[4].textContent;r.shopifyQty=tr.children[5].textContent;v.textContent=String(calcVariance(r));scheduleSaveAll();updateMetrics()};tr.children[4].addEventListener('blur',recalc);tr.children[5].addEventListener('blur',recalc);tb.appendChild(tr)})}
@@ -2145,7 +2231,70 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
     function resetDemoData(){const ok=confirm('Reset demo data?\\n\\nThis clears ALL locally saved OP Inventory & Operations Coordinator data in this browser.');if(!ok)return;const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf(STORAGE_PREFIX)===0)keys.push(k)}keys.forEach(k=>localStorage.removeItem(k));alert('Local data cleared. The page will reload.');location.reload()}
     function initSingletonSelects(){const daily=$('#dailyCurrentStatus');daily.innerHTML='';OPTIONS.simpleStatus.forEach(v=>{const o=document.createElement('option');o.textContent=v;daily.appendChild(o)});daily.value=loadText('dailyCurrentStatus','Not Started');daily.className='status '+statusClass(daily.value);daily.addEventListener('change',()=>{saveText('dailyCurrentStatus',daily.value);daily.className='status '+statusClass(daily.value);updateMetrics()});const weekly=$('#weeklyStatus');weekly.innerHTML='';['In Progress','Needs Review','Completed'].forEach(v=>{const o=document.createElement('option');o.textContent=v;weekly.appendChild(o)});weekly.value=loadText('weeklyStatus','In Progress');weekly.className='status '+statusClass(weekly.value);weekly.addEventListener('change',()=>{saveText('weeklyStatus',weekly.value);weekly.className='status '+statusClass(weekly.value);updateMetrics()});for(let i=1;i<=4;i++){const sel=$('#setProcessStatus'+i);sel.innerHTML='';['Not Started','In Progress','Completed'].forEach(v=>{const o=document.createElement('option');o.textContent=v;sel.appendChild(o)});sel.value=loadText('setProcessStatus'+i,'Not Started');sel.className='status '+statusClass(sel.value);sel.addEventListener('change',()=>{saveText('setProcessStatus'+i,sel.value);sel.className='status '+statusClass(sel.value);updateMetrics()})}}
     function hydrateSavedFields(){$('#todayDate').textContent=loadText('todayDate',new Date().toLocaleDateString());$('#pendingFollowUps').textContent=loadText('pendingFollowUps','0');['todayDate','pendingFollowUps','setProcess1','setProcess2','setProcess3','setProcess4','weeklyWeekOf','weeklyPreparedBy','weeklyCountsCompleted','weeklyOpenDiscrepancies','weeklyReplacements','weeklyGoodwill','weeklyEventsAhead','weeklyBiggestFix','weeklyProcessImprovement','weeklyMainIssue','weeklyActionPlan'].forEach(id=>{const el=$('#'+id);el.textContent=loadText(id,el.textContent);el.addEventListener('blur',()=>{saveText(id,el.textContent);updateMetrics()})});$('#weeklyRisk').value=loadText('weeklyRisk','On Track');$('#weeklyRisk').addEventListener('change',()=>saveText('weeklyRisk',$('#weeklyRisk').value));const sched=loadText('scheduleRows.html','');if(sched)$('#scheduleRows').innerHTML=sched;$('#scheduleRows').addEventListener('input',()=>saveText('scheduleRows.html',$('#scheduleRows').innerHTML));const acc=loadText('weeklyAccuracy.html','');if(acc)$('#weeklyAccuracy').innerHTML=acc;$('#weeklyAccuracy').addEventListener('input',()=>saveText('weeklyAccuracy.html',$('#weeklyAccuracy').innerHTML))}
-    function seedIfEmpty(){if(!store.queue.rows.length){addQueueRow({source:'VR Email',account:'VR',issueType:'Order Update',priority:'Medium',status:'New',nextAction:'Open email + confirm order details',sendTo:'Daily Follow-Up'});addQueueRow({source:'TikTok Shop Chat',account:'CK',issueType:'Missing Item',priority:'High',status:'Needs Review',nextAction:'Verify packing / evidence, decide replacement vs refund',sendTo:'Issues Caught + Resolved'})}if(!store.workflowPriority.rows.length){addWorkflowRow('workflowPriority',{item:'Customer Service sweep',account:'All',details:'refunds, chat, DMs, email',status:'Not Started',target:'10:30',notes:''});addWorkflowRow('workflowPriority',{item:'Surprise Sets / Live Prep',account:'All',details:'build sets + update uploads',status:'Not Started',target:'12:00',notes:''});addWorkflowRow('workflowPriority',{item:'Inventory check',account:'All',details:'reconcile flagged variances',status:'Not Started',target:'16:30',notes:''})}if(!store.templates.rows.length){addTemplateRow({name:'Package Taking Too Long - Initial',shortcut:'/noscan1',category:'Shipping',trigger:'Tracking shows label created / no scan',requiresRefund:'No',requiresReview:'No',finalAction:'Follow up',internalNotes:'Use when internal system shows handoff or ready.',responseStarter:'Hello! Thanks for reaching out. I’m checking the latest tracking details now and will update you shortly.'});addTemplateRow({name:'Missing Items - Initial Review',shortcut:'/missing1',category:'Order Issue',trigger:'Package arrived but items are missing',requiresRefund:'No',requiresReview:'Yes',finalAction:'Investigate',internalNotes:'Check order and packing before deciding.',responseStarter:'Hello! Thanks for the update. I’m going to review the order details and will follow up with the next step.'});addTemplateRow({name:'Wrong Item - Keep As Compensation',shortcut:'/wrong1',category:'Order Issue',trigger:'Approved: customer keeps wrong item',requiresRefund:'No',requiresReview:'No',finalAction:'Close',internalNotes:'Use when value is acceptable and approved.',responseStarter:'Hello! Thanks for your patience. You can keep the item you received, and we’ll take care of the correct resolution from here.'});addTemplateRow({name:'Damaged Item - Initial Review',shortcut:'/damage1',category:'Order Issue',trigger:'Item arrived damaged',requiresRefund:'No',requiresReview:'Yes',finalAction:'Review',internalNotes:'Request photos if needed. Decide replacement/refund.',responseStarter:'Hello! I’m sorry about that. If you can share a photo of the damage, I’ll review and help resolve this right away.'})}if(!store.streamerVR.rows.length){store.streamerVR.rows=[{id:rowId(),date:'',morning:false,night:false,notes:''}];store.streamerPS.rows=[{id:rowId(),date:'',morning:false,night:false,notes:''}];store.streamerCK.rows=[{id:rowId(),date:'',morning:false,night:false,notes:''}];scheduleSaveAll()}}
+    function seedIfEmpty(){
+      if(!store.queue.rows.length){
+        addQueueRow({
+          source:'VR Email',
+          account:'VR',
+          issueType:'Order Update',
+          priority:'Medium',
+          status:'New',
+          nextAction:'Open email + confirm order details',
+          sendTo:'Daily Follow-Up'
+        });
+
+        addQueueRow({
+          source:'TikTok Shop Chat',
+          account:'CK',
+          issueType:'Missing Item',
+          priority:'High',
+          status:'Needs Review',
+          nextAction:'Verify packing / evidence, decide replacement vs refund',
+          sendTo:'Issues Caught + Resolved'
+        });
+      }
+
+      if(!store.workflowPriority.rows.length){
+        addWorkflowRow('workflowPriority',{
+          item:'Customer Service sweep',
+          account:'All',
+          details:'refunds, chat, DMs, email',
+          status:'Not Started',
+          target:'10:30',
+          notes:''
+        });
+
+        addWorkflowRow('workflowPriority',{
+          item:'Surprise Sets / Live Prep',
+          account:'All',
+          details:'build sets + update uploads',
+          status:'Not Started',
+          target:'12:00',
+          notes:''
+        });
+
+        addWorkflowRow('workflowPriority',{
+          item:'Inventory check',
+          account:'All',
+          details:'reconcile flagged variances',
+          status:'Not Started',
+          target:'16:30',
+          notes:''
+        });
+      }
+
+      if(!store.templates.rows.length){
+        store.templates.rows = CS_TEMPLATE_LIBRARY.map(t => Object.assign({ id: rowId() }, t));
+        scheduleSaveAll();
+      }
+
+      if(!store.streamerVR.rows.length){
+        store.streamerVR.rows = [{ id:rowId(), date:'', morning:false, night:false, notes:'' }];
+        store.streamerPS.rows = [{ id:rowId(), date:'', morning:false, night:false, notes:'' }];
+        store.streamerCK.rows = [{ id:rowId(), date:'', morning:false, night:false, notes:'' }];
+        scheduleSaveAll();
+      }
+    }
     function unlockDashboard(){const input=$('#passwordInput');const err=$('#passwordError');if(input.value.trim()===PASSWORD){sessionStorage.setItem('opCommandUnlocked','true');$('#lockScreen').style.display='none';$('#appShell').classList.remove('locked-blur');err.textContent='';input.value=''}else{err.textContent='Wrong password.';input.value='';input.focus()}}
     function lockDashboard(){sessionStorage.removeItem('opCommandUnlocked');$('#lockScreen').style.display='flex';$('#appShell').classList.add('locked-blur')}
     function setupScrollSpy(){const sections=document.querySelectorAll('main section[id]');const links=document.querySelectorAll('.side-link');const obs=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=document.querySelector('.side-link[href=\"#'+e.target.id+'\"]');if(a)a.classList.add('active')}})},{root:null,rootMargin:'-25% 0px -60% 0px',threshold:0});sections.forEach(s=>obs.observe(s))}
@@ -2232,6 +2381,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       const clearBtn = $('#btnClearScreenshots');
       const previewGrid = $('#screenshotPreviewGrid');
       const results = $('#screenshotResults');
+      const contextInput = $('#screenshotAiContext');
       if(!input || !dropZone || !uploadBtn || !analyzeBtn || !clearBtn || !previewGrid || !results) return;
 
       let files = [];
@@ -2257,6 +2407,10 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
+      }
+
+      function getAiContext(){
+        return contextInput ? contextInput.value.trim() : '';
       }
 
       async function renderPreviews(){
@@ -2324,18 +2478,22 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
           throw new Error('Vision function unavailable');
         }
         const dataUrl = await fileToDataUrl(file);
-        const { data, error } = await supabaseClient.functions.invoke('ai-screenshot-intake', {
-          body: {
-            imageBase64: dataUrl.split(',')[1] || dataUrl,
-            mimeType: file.type,
-            fileName: file.name,
-            context: {
-              purpose: 'TikTok Shop Chat screenshot intake',
-              accounts: ['VR','PS','CK'],
-              expectedOutput: ['source','account','customer','orderNumber','issueType','priority','template','summary','suggestedReply','nextAction']
-            }
+        const requestBody = {
+          imageBase64: dataUrl.split(',')[1] || dataUrl,
+          mimeType: file.type,
+          fileName: file.name,
+          context: {
+            purpose: 'TikTok Shop Chat screenshot intake',
+            accounts: ['VR','PS','CK'],
+            expectedOutput: ['source','account','customer','orderNumber','issueType','priority','template','summary','suggestedReply','nextAction']
           }
-        });
+        };
+        const extraContext = getAiContext();
+        if(extraContext){
+          requestBody.extraContext = extraContext;
+          requestBody.context.extraContext = extraContext;
+        }
+        const { data, error } = await supabaseClient.functions.invoke('ai-screenshot-intake', { body: requestBody });
         if(error) throw error;
         const firstCase = Array.isArray(data?.cases) ? data.cases[0] : (data?.case || data);
         if(!firstCase || typeof firstCase !== 'object') throw new Error('No detected case returned');
@@ -2476,19 +2634,24 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
 
       function buildScreenshotRedraft(c){
         const issue = c.issueType || 'your message';
+        const extraContext = getAiContext();
+        const lowerContext = extraContext.toLowerCase();
+        const opener = lowerContext.includes('warm') || lowerContext.includes('apolog') ? 'Hello, thanks for reaching out, and I’m sorry for the trouble.' : 'Hello, thanks for reaching out.';
+        const reviewTarget = extraContext ? 'the screenshot and the extra details provided' : 'everything';
+        const policyTarget = lowerContext.includes('policy') || lowerContext.includes('refund') ? 'the applicable policy and order details' : reviewTarget;
         if(issue === 'Missing Item'){
-          return 'Hello, thanks for reaching out. Could you please send us photos of the package, packing slip, and all contents received? Once we have those images, we can review everything and help resolve this for you.';
+          return opener + ' Could you please send us photos of the package, packing slip, and all contents received? Once we have those images, we can review ' + reviewTarget + ' and help resolve this for you.';
         }
         if(issue === 'Refund Request'){
-          return 'Hello, thanks for reaching out. We understand your concern. We are reviewing the order details and will follow up with the next available step as soon as possible.';
+          return opener + ' We understand your concern. We are reviewing ' + policyTarget + ' and will follow up with the next available step as soon as possible.';
         }
         if(issue === 'Missing Package'){
-          return 'Hello, thanks for reaching out. If tracking shows delivered, we recommend checking the delivery area, neighbors, leasing office, parcel locker, or local post office. Please let us know if you still cannot locate it.';
+          return opener + ' If tracking shows delivered, we recommend checking the delivery area, neighbors, leasing office, parcel locker, or local post office. Please let us know if you still cannot locate it.';
         }
         if(issue === 'Damaged Item'){
-          return 'Hello, thanks for reaching out. Please send photos of the package and damaged item so we can review everything and determine the best next step.';
+          return opener + ' Please send photos of the package and damaged item so we can review ' + reviewTarget + ' and determine the best next step.';
         }
-        return 'Hello, thanks for reaching out. We are reviewing this now and will follow up with the next step as soon as possible.';
+        return opener + ' We are reviewing ' + (extraContext ? 'the details provided' : 'this') + ' now and will follow up with the next step as soon as possible.';
       }
 
       uploadBtn.addEventListener('click', () => input.click());
@@ -2687,12 +2850,18 @@ const SUPABASE_ANON_KEY = "sb_publishable_Rk0zjTFK64qdqbvbyg_utw_Sc82svKB";
       btn.addEventListener('click',()=>panel.classList.toggle('collapsed'));
       panel.parentElement.insertBefore(btn,panel);
     }
+    function setupCSTemplateSearch(){
+      const input=document.getElementById('csTemplateSearch');
+      if(!input) return;
+      input.addEventListener('input',renderTemplates);
+    }
     init();
     setupAppViews();
     setupScreenshotIntake();
     setupPlannerPolish();
     setupSetsChecklist();
     setupCSTemplateCollapse();
+    setupCSTemplateSearch();
   </script>
 </body>
 </html>
