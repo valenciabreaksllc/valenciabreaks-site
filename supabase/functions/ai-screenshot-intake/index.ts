@@ -20,6 +20,11 @@ function safeString(value, fallback = "Unknown") {
   return trimmed || fallback;
 }
 
+function safeOptionalString(value, maxLength = 2000) {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, maxLength);
+}
+
 function normalizeCase(raw, fileName) {
   const priority = ["Low", "Medium", "High"].includes(raw?.priority)
     ? raw.priority
@@ -93,6 +98,12 @@ Deno.serve(async (req) => {
 
     const fileName = safeString(body?.fileName, "screenshot.png");
     const mimeType = safeString(body?.mimeType, "image/png");
+    const extraContext =
+      safeOptionalString(body?.extraContext) ||
+      safeOptionalString(body?.context?.extraContext);
+    const extraContextText = extraContext
+      ? `\n\nAdditional operator context, not visible in the screenshot:\n${extraContext}\n\nUse this only to guide tone, policy awareness, known order history, and next-step judgment. Do not invent visible facts.`
+      : "";
 
     let imageUrl = "";
 
@@ -125,7 +136,7 @@ Deno.serve(async (req) => {
           content: [
             {
               type: "input_text",
-              text: `${promptText}\n\nAnalyze this screenshot file: ${fileName}`,
+              text: `${promptText}\n\nAnalyze this screenshot file: ${fileName}${extraContextText}`,
             },
             {
               type: "input_image",
