@@ -2,13 +2,24 @@
   "name": "valenciabreaks-site",
   "version": "1.0.0",
   "description": "Valencia Breaks Site - OP Inventory & Operations Coordinator",
-  "main": "index.html",
+  "private": true,
   "scripts": {
-    "start": "npx serve .",
-    "dev": "npx serve . --listen 3000"
+    "start": "vite --host 0.0.0.0 --port 3000",
+    "dev": "vite --host 0.0.0.0 --port 3000",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 3000"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.4.1",
+    "vite": "^6.3.5",
+    "typescript": "^5.8.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "lucide-react": "^0.507.0"
   },
   "devDependencies": {
-    "serve": "^14.2.1",
-    "supabase": "^2.95.6"
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17"
   }
 }
