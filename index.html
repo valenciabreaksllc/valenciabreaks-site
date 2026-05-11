@@ -1,103 +1,167 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jonny Ops Command Center</title>
     <style>
-      html, body, #root { min-height: 100%; margin: 0; }
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f3f4f6; }
-      .gate-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-      .gate-card { width: 100%; max-width: 390px; background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 28px; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
-      .gate-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
-      .gate-logo { width: 42px; height: 42px; border-radius: 12px; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; }
-      .gate-title { font-size: 20px; font-weight: 800; color: #111827; margin: 0; }
-      .gate-subtitle { font-size: 12px; color: #9ca3af; margin: 2px 0 0; }
-      .gate-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: #6b7280; margin-bottom: 6px; }
-      .gate-input { width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 10px; padding: 11px 12px; font-size: 14px; outline: none; }
-      .gate-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
-      .gate-button { width: 100%; margin-top: 14px; border: 0; border-radius: 10px; background: #2563eb; color: white; padding: 11px 12px; font-size: 14px; font-weight: 800; cursor: pointer; }
-      .gate-button:hover { background: #1d4ed8; }
-      .gate-error { display: none; color: #dc2626; font-size: 13px; margin: 10px 0 0; }
-      .gate-note { font-size: 11px; line-height: 1.45; color: #9ca3af; margin-top: 16px; }
-      .lock-button { position: fixed; right: 16px; bottom: 16px; z-index: 9999; border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 20px rgba(15, 23, 42, .12); }
-      .lock-button:hover { background: #f9fafb; }
+      html, body, #root {
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f3f4f6;
+      }
+
+      #password-screen {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .gate-card {
+        width: 100%;
+        max-width: 390px;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 28px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      }
+
+      .gate-logo {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: #111827;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+      }
+
+      .gate-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        padding: 11px 12px;
+        font-size: 14px;
+        outline: none;
+      }
+
+      .gate-input:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+      }
+
+      .gate-button {
+        width: 100%;
+        margin-top: 14px;
+        border: 0;
+        border-radius: 10px;
+        background: #2563eb;
+        color: white;
+        padding: 11px 12px;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .gate-error {
+        display: none;
+        color: #dc2626;
+        font-size: 13px;
+        margin: 10px 0 0;
+      }
+
+      .lock-button {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 9999;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #374151;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+      }
     </style>
   </head>
+
   <body>
-    <div id="password-screen" class="gate-wrap">
+    <div id="password-screen">
       <form id="password-form" class="gate-card">
-        <div class="gate-brand">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:22px;">
           <div class="gate-logo">JV</div>
           <div>
-            <h1 class="gate-title">Jonny Ops</h1>
-            <p class="gate-subtitle">Command Center access</p>
+            <h1 style="font-size:20px; font-weight:800; color:#111827; margin:0;">Jonny Ops</h1>
+            <p style="font-size:12px; color:#9ca3af; margin:2px 0 0;">Command Center access</p>
           </div>
         </div>
 
-        <label class="gate-label" for="password-input">Password</label>
-        <input id="password-input" class="gate-input" type="password" placeholder="Enter password" autocomplete="current-password" autofocus />
-        <p id="password-error" class="gate-error">Wrong password. Try again.</p>
-        <button class="gate-button" type="submit">Unlock Command Center</button>
+        <label for="password-input" style="display:block; font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:#6b7280; margin-bottom:6px;">
+          Password
+        </label>
 
-        <p class="gate-note">
-          Casual privacy gate. For true production security later, use Vercel Password Protection,
-          Cloudflare Access, or proper authentication.
-        </p>
+        <input id="password-input" class="gate-input" type="password" placeholder="Enter password" autofocus />
+        <p id="password-error" class="gate-error">Wrong password. Try again.</p>
+
+        <button class="gate-button" type="submit">Unlock Command Center</button>
       </form>
     </div>
 
-    <div id="root" style="display: none;"></div>
+    <div id="root" style="display:none;"></div>
 
     <script>
-      // Change this before deploying.
       const SHELL_PASSWORD = "opcomics";
-      const SHELL_KEY = "jonny_ops_shell_unlocked_v1";
+      const SHELL_KEY = "jonny_ops_shell_unlocked_v3";
 
-      function bootApp() {
+      function showApp() {
         document.getElementById("password-screen").style.display = "none";
         document.getElementById("root").style.display = "block";
 
-        const existing = document.querySelector('script[data-app-entry="true"]');
-        if (!existing) {
-          const script = document.createElement("script");
-          script.type = "module";
-          script.src = "/src/main.jsx";
-          script.dataset.appEntry = "true";
-          document.body.appendChild(script);
+        if (!document.getElementById("shell-lock-button")) {
+          const btn = document.createElement("button");
+          btn.id = "shell-lock-button";
+          btn.className = "lock-button";
+          btn.textContent = "Lock";
+          btn.onclick = () => {
+            localStorage.removeItem(SHELL_KEY);
+            location.reload();
+          };
+          document.body.appendChild(btn);
         }
-
-        setTimeout(() => {
-          if (!document.getElementById("shell-lock-button")) {
-            const btn = document.createElement("button");
-            btn.id = "shell-lock-button";
-            btn.className = "lock-button";
-            btn.textContent = "Lock";
-            btn.onclick = () => {
-              localStorage.removeItem(SHELL_KEY);
-              location.reload();
-            };
-            document.body.appendChild(btn);
-          }
-        }, 500);
       }
 
       if (localStorage.getItem(SHELL_KEY) === "yes") {
-        bootApp();
+        showApp();
       }
 
       document.getElementById("password-form").addEventListener("submit", function (e) {
         e.preventDefault();
+
         const value = document.getElementById("password-input").value;
         const error = document.getElementById("password-error");
 
         if (value === SHELL_PASSWORD) {
           localStorage.setItem(SHELL_KEY, "yes");
-          bootApp();
+          showApp();
         } else {
           error.style.display = "block";
         }
       });
     </script>
+
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
