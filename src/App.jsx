@@ -1224,7 +1224,7 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
 
 // ─── PASSWORD GATE ────────────────────────────────────────────────────────────
 // Change this value to your private password before deploying.
-const APP_PASSWORD = "opcomics";
+const APP_PASSWORD = "CHANGE_THIS_PASSWORD";
 
 function PasswordGate({ onUnlock }) {
   const [password, setPassword] = useState("");
@@ -1234,7 +1234,7 @@ function PasswordGate({ onUnlock }) {
     e.preventDefault();
 
     if (password === APP_PASSWORD) {
-      localStorage.setItem("jonny_ops_unlocked", "yes");
+      localStorage.setItem("jonny_ops_gate_v3", "yes");
       onUnlock();
     } else {
       setError("Wrong password. Try again.");
@@ -1284,7 +1284,7 @@ function PasswordGate({ onUnlock }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-export default function JonnyOpsCommandCenter() {
+function JonnyOpsCommandCenter() {
   // Load from localStorage on mount, fallback to demo data
   const loadInitial = (key, fallback) => {
     const saved = loadFromLS();
@@ -1300,9 +1300,7 @@ export default function JonnyOpsCommandCenter() {
   const [raiseScores, setRaiseScores] = useState(() => loadInitial("raiseScores", { consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 }));
   const [sidebar, setSidebar] = useState(true);
 
-  const [unlocked, setUnlocked] = useState(
-    () => localStorage.getItem("jonny_ops_unlocked") === "yes"
-  );
+  const [unlocked, setUnlocked] = useState(true);
 
   if (!unlocked) {
     return <PasswordGate onUnlock={() => setUnlocked(true)} />;
@@ -1392,7 +1390,7 @@ export default function JonnyOpsCommandCenter() {
             </div>
             <button
               onClick={() => {
-                localStorage.removeItem("jonny_ops_unlocked");
+                localStorage.removeItem("jonny_ops_gate_v3");
                 setUnlocked(false);
               }}
               className="text-xs font-semibold text-gray-500 hover:text-gray-900 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-50"
@@ -1409,4 +1407,9 @@ export default function JonnyOpsCommandCenter() {
       </div>
     </div>
   );
+}
+
+// ─── APP EXPORT WRAPPER ──────────────────────────────────────────────────────
+export default function App() {
+  return <JonnyOpsCommandCenter />;
 }
