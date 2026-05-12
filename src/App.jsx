@@ -1260,9 +1260,10 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────────────────────────
 const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setTickets, setReplacements, setStudios, setSurpriseSets, raiseScores }) => {
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [importErr, setImportErr] = useState("");
-  const [saved, setSaved] = useState(false);
+const [confirmClear, setConfirmClear] = useState(false);
+const [importErr, setImportErr] = useState("");
+const [clearErr, setClearErr] = useState("");
+const [saved, setSaved] = useState(false);
 
   const dl = (data, name, type) => {
     const b = new Blob([data], { type }); const u = URL.createObjectURL(b);
@@ -1308,10 +1309,29 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
     e.target.value = "";
   };
 
-  const clearAll = () => {
-    setTickets([]); setReplacements([]); setStudios(FRESH_STUDIOS); setSurpriseSets([]);
+const clearAll = async () => {
+  setClearErr("");
+
+  try {
+    if (supabase) {
+      const { error } = await supabase
+        .from("tickets")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+
+      if (error) throw error;
+    }
+
+    setTickets([]);
+    setReplacements([]);
+    setStudios(FRESH_STUDIOS);
+    setSurpriseSets([]);
     setConfirmClear(false);
-  };
+  } catch (err) {
+    console.error("Clear all failed:", err);
+    setClearErr(`Clear failed: ${err.message || "Unknown Supabase error"}`);
+  }
+};
 
   const resetFresh = () => {
     setTickets([]);
@@ -1326,7 +1346,8 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
       <div><h2 className="text-2xl font-bold text-gray-900">Data Management</h2><p className="text-xs text-gray-400 mt-0.5">Export, import, and manage your ops data</p></div>
 
       {saved && <div className="bg-green-50 border border-green-300 rounded-lg px-4 py-3 text-green-800 text-sm font-medium">Data imported successfully.</div>}
-      {importErr && <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{importErr}</div>}
+{importErr && <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{importErr}</div>}
+{clearErr && <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{clearErr}</div>}
 
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-4">
