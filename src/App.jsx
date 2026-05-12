@@ -43,6 +43,10 @@ const KANBAN_COLS = ["New", "In Progress", "Waiting on Customer", "Backend Looku
 const TONES = ["Friendly", "Firm", "Apology", "Investigation", "Final-sale policy"];
 const ROOT_CAUSES = ["Carrier delay", "Lost in transit", "Wrong item packed", "Missing item in pack", "Damaged in shipping", "Customer error", "Warehouse error", "Surprise set dispute", "Other"];
 
+// ─── AUTO-ARCHIVE AGE THRESHOLDS (req 6) ─────────────────────────────────────
+const RESOLVED_MAX_DAYS = 7;
+const ESCALATED_MAX_DAYS = 14;
+
 // ─── SUPABASE DATA HELPERS ───────────────────────────────────────────────────
 const normalizeBrandForApp = (brand, brandCode) => {
   const value = (brand || brandCode || "").toString().trim();
@@ -123,6 +127,10 @@ const appTicketToDbRow = (ticket = {}) => {
   };
 };
 
+// ─── PATCH 1: fetchTicketsFromSupabase — active-only + auto-archive filter ───
+// Fetches only rows where archived_at IS NULL.
+// Resolved tickets older than 7 days and Escalated tickets older than 14 days
+// are excluded client-side so they silently age out without touching Supabase.
 const fetchTicketsFromSupabase = async () => {
   if (!supabase) {
     console.warn("Supabase env vars missing. Showing an empty ticket queue.");
@@ -132,6 +140,7 @@ const fetchTicketsFromSupabase = async () => {
   const { data, error } = await supabase
     .from("tickets")
     .select("*")
+    .is("archived_at", null)          // active-only: archived rows excluded
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -139,7 +148,17 @@ const fetchTicketsFromSupabase = async () => {
     return { data: [], error };
   }
 
-  return { data: (data || []).map(mapDbTicketToApp), error: null };
+  const now = Date.now();
+  const active = (data || [])
+    .map(mapDbTicketToApp)
+    .filter(t => {
+      const ageDays = (now - new Date(t.createdAt).getTime()) / 86400000;
+      if (t.status === "Resolved"  && ageDays > RESOLVED_MAX_DAYS)  return false;
+      if (t.status === "Escalated" && ageDays > ESCALATED_MAX_DAYS) return false;
+      return true;
+    });
+
+  return { data: active, error: null };
 };
 
 const insertTicketToSupabase = async (ticket) => {
@@ -176,6 +195,20 @@ const updateTicketStatusInSupabase = async (id, status) => {
   return { error };
 };
 
+// ─── PATCH 2: archiveTicketInSupabase helper ──────────────────────────────────
+const archiveTicketInSupabase = async (id, reason) => {
+  if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
+  const { error } = await supabase
+    .from("tickets")
+    .update({
+      archived_at: nowISO(),
+      archived_reason: reason || "manual archive",
+      updated_at: nowISO(),
+    })
+    .eq("id", id);
+  if (error) console.error("Supabase archive error:", error);
+  return { error };
+};
 
 const STATUS_STYLE = {
   "New": "bg-blue-50 text-blue-700 border-blue-200",
@@ -351,6 +384,33 @@ const Chk = ({ checked, onChange, label }) => (
   </label>
 );
 const FL = ({ children }) => <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{children}</p>;
+
+// ─── PATCH 3: ArchiveBtn — reusable trash icon button ────────────────────────
+const ArchiveBtn = ({ ticketId, setTickets }) => {
+  const handleArchive = async () => {
+    const confirmed = window.confirm("Archive this ticket from the active queue?");
+    if (!confirmed) return;
+    const { error } = await archiveTicketInSupabase(ticketId, "manual archive");
+    if (error) {
+      alert(`Archive failed: ${error.message || "Unknown Supabase error"}`);
+      return;
+    }
+    setTickets(prev => prev.filter(t => t.id !== ticketId));
+  };
+
+  return (
+    <button
+      onClick={handleArchive}
+      title="Archive ticket"
+      className="flex-shrink-0 text-gray-300 hover:text-red-400 transition-colors cursor-pointer p-0.5 rounded"
+    >
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <path d="M1.5 3.5h10M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M2.5 3.5l.5 7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1l.5-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M5 6v3M8 6v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      </svg>
+    </button>
+  );
+};
 
 // ─── SIDEBAR NAV ICONS ────────────────────────────────────────────────────────
 const ICONS = {
@@ -615,6 +675,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
               <BtnPrimary size="sm" onClick={() => setShowForm(true)}>+ New Ticket</BtnPrimary>
             </div>
             <div className="overflow-auto">
+              {/* ── PATCH 4a: Archive button column added to Dashboard table ── */}
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
@@ -622,6 +683,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
                     <th className="text-left px-2 py-2.5 font-semibold text-gray-500">Issue Type</th>
                     <th className="text-left px-2 py-2.5 font-semibold text-gray-500 w-28">Status</th>
                     <th className="text-left px-2 py-2.5 font-semibold text-gray-500 w-20">SLA</th>
+                    <th className="w-8" />
                   </tr>
                 </thead>
                 <tbody>
@@ -642,6 +704,9 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
                           {showSla
                             ? <span className={`font-mono font-bold ${cd.urgent ? "text-red-600" : cd.warning ? "text-amber-500" : "text-gray-500"}`}>{cd.display}</span>
                             : <span className="text-gray-300 font-mono">—</span>}
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <ArchiveBtn ticketId={t.id} setTickets={setTickets} />
                         </td>
                       </tr>
                     );
@@ -795,16 +860,20 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   };
   const filtered = tickets.filter(t => (!filter.brand || t.brand === filter.brand) && (!filter.status || t.status === filter.status) && (!filter.priority || t.priority === filter.priority));
 
+  // ── PATCH 4b: TCard gets archive button in top-right corner ──────────────
   const TCard = ({ ticket: t }) => {
     const cd = slaDisplay(t.createdAt);
     const showSla = t.slaRisk === "Yes" && t.status !== "Resolved";
     return (
       <div draggable onDragStart={() => setDrag(t)} className="bg-white border border-gray-200 rounded-lg p-3 mb-2 cursor-grab hover:border-blue-300 hover:shadow-sm transition-all">
-        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-          <BrandPip brand={t.brand} /><span className="text-[10px] font-semibold text-gray-700">{BRAND_SHORT[t.brand]}</span>
-          <PriorityBadge priority={t.priority} />
-          {showSla && cd.urgent && <Badge label="SLA CRITICAL" className="bg-red-600 text-white border-red-700 animate-pulse" />}
-          {showSla && !cd.urgent && cd.warning && <Badge label="SLA RISK" className="bg-amber-50 text-amber-700 border-amber-200" />}
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <BrandPip brand={t.brand} /><span className="text-[10px] font-semibold text-gray-700">{BRAND_SHORT[t.brand]}</span>
+            <PriorityBadge priority={t.priority} />
+            {showSla && cd.urgent && <Badge label="SLA CRITICAL" className="bg-red-600 text-white border-red-700 animate-pulse" />}
+            {showSla && !cd.urgent && cd.warning && <Badge label="SLA RISK" className="bg-amber-50 text-amber-700 border-amber-200" />}
+          </div>
+          <ArchiveBtn ticketId={t.id} setTickets={setTickets} />
         </div>
         <p className="text-xs font-semibold text-gray-900 mb-1">{t.issueType}</p>
         <p className="text-[10px] text-gray-400 mb-1">{t.channel} · {fmtDate(t.createdAt)}</p>
@@ -1309,19 +1378,17 @@ const [saved, setSaved] = useState(false);
     e.target.value = "";
   };
 
+// ── req 7: Clear All deletes every ticket from Supabase (hard delete) ──
 const clearAll = async () => {
   setClearErr("");
-
   try {
     if (supabase) {
       const { error } = await supabase
         .from("tickets")
         .delete()
         .neq("id", "00000000-0000-0000-0000-000000000000");
-
       if (error) throw error;
     }
-
     setTickets([]);
     setReplacements([]);
     setStudios(FRESH_STUDIOS);
@@ -1496,7 +1563,6 @@ const getSidekickTicketFromHash = () => {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function JonnyOpsCommandCenter() {
   const [activeView, setActiveView] = useState("dashboard");
-  // ── CHANGE 3: Start with empty array; Supabase fetch populates on mount ──
   const [tickets, setTickets] = useState([]);
   const [replacements, setReplacements] = useState([]);
   const [studios, setStudios] = useState(FRESH_STUDIOS);
@@ -1505,7 +1571,7 @@ export default function JonnyOpsCommandCenter() {
   const [sidebar, setSidebar] = useState(true);
   const [sidekickToast, setSidekickToast] = useState(false);
 
-  // Fetch all tickets from Supabase on mount, ordered by created_at desc
+  // Fetch active tickets from Supabase on mount (archived_at IS NULL, auto-age filter applied inside)
   useEffect(() => {
     const fetchTickets = async () => {
       const { data } = await fetchTicketsFromSupabase();
@@ -1534,8 +1600,6 @@ export default function JonnyOpsCommandCenter() {
 
     insertSidekickTicket();
   }, []);
-
-  // ── CHANGE 6: No localStorage save/load anywhere in this file ──
 
   const openCount = tickets.filter(t => t.status !== "Resolved").length;
   const criticalSlaCount = tickets.filter(isActiveSlaRisk).length;
