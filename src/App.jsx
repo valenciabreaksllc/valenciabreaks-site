@@ -125,8 +125,8 @@ const appTicketToDbRow = (ticket = {}) => {
 
 const fetchTicketsFromSupabase = async () => {
   if (!supabase) {
-    console.warn("Supabase env vars missing. Falling back to demo tickets.");
-    return { data: DEMO_TICKETS, error: null };
+    console.warn("Supabase env vars missing. Showing an empty ticket queue.");
+    return { data: [], error: null };
   }
 
   const { data, error } = await supabase
@@ -136,7 +136,7 @@ const fetchTicketsFromSupabase = async () => {
 
   if (error) {
     console.error("Supabase fetch error:", error);
-    return { data: DEMO_TICKETS, error };
+    return { data: [], error };
   }
 
   return { data: (data || []).map(mapDbTicketToApp), error: null };
@@ -214,6 +214,14 @@ const DEMO_STUDIOS = [
   { id: "TT-02", countCompleted: true, fullyStocked: true, discrepanciesLogged: 3, discrepanciesResolved: 3, streamReady: true, notes: "Booster boxes restocked. All discrepancies resolved." },
   { id: "TT-03", countCompleted: true, fullyStocked: true, discrepanciesLogged: 0, discrepanciesResolved: 0, streamReady: true, notes: "Clean count. No issues." },
   { id: "TT-04", countCompleted: false, fullyStocked: false, discrepanciesLogged: 2, discrepanciesResolved: 0, streamReady: false, notes: "Count not started. Restock pending. Two open discrepancies." },
+];
+
+// Fresh starter state: keeps the 4 studio stations visible, but with no fake completed work.
+const FRESH_STUDIOS = [
+  { id: "TT-01", countCompleted: false, fullyStocked: false, discrepanciesLogged: 0, discrepanciesResolved: 0, streamReady: false, notes: "" },
+  { id: "TT-02", countCompleted: false, fullyStocked: false, discrepanciesLogged: 0, discrepanciesResolved: 0, streamReady: false, notes: "" },
+  { id: "TT-03", countCompleted: false, fullyStocked: false, discrepanciesLogged: 0, discrepanciesResolved: 0, streamReady: false, notes: "" },
+  { id: "TT-04", countCompleted: false, fullyStocked: false, discrepanciesLogged: 0, discrepanciesResolved: 0, streamReady: false, notes: "" },
 ];
 
 const DEMO_SETS = [
@@ -1299,13 +1307,15 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
   };
 
   const clearAll = () => {
-    setTickets([]); setReplacements([]); setStudios(DEMO_STUDIOS); setSurpriseSets([]);
+    setTickets([]); setReplacements([]); setStudios(FRESH_STUDIOS); setSurpriseSets([]);
     setConfirmClear(false);
   };
 
-  const resetDemo = () => {
-    setTickets(DEMO_TICKETS); setReplacements(DEMO_REPLACEMENTS);
-    setStudios(DEMO_STUDIOS); setSurpriseSets(DEMO_SETS);
+  const resetFresh = () => {
+    setTickets([]);
+    setReplacements([]);
+    setStudios(FRESH_STUDIOS);
+    setSurpriseSets([]);
     setConfirmClear(false);
   };
 
@@ -1357,7 +1367,7 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
         <p className="text-sm font-bold text-gray-900 mb-3">Reset &amp; Clear</p>
         {!confirmClear ? (
           <div className="flex gap-2">
-            <BtnSecondary onClick={resetDemo} size="md">Reset to Demo Data</BtnSecondary>
+            <BtnSecondary onClick={resetFresh} size="md">Reset to Fresh Data</BtnSecondary>
             <BtnDanger onClick={() => setConfirmClear(true)} size="md">Clear All Data</BtnDanger>
           </div>
         ) : (
@@ -1465,9 +1475,9 @@ export default function JonnyOpsCommandCenter() {
   const [activeView, setActiveView] = useState("dashboard");
   // ── CHANGE 3: Start with empty array; Supabase fetch populates on mount ──
   const [tickets, setTickets] = useState([]);
-  const [replacements, setReplacements] = useState(DEMO_REPLACEMENTS);
-  const [studios, setStudios] = useState(DEMO_STUDIOS);
-  const [surpriseSets, setSurpriseSets] = useState(DEMO_SETS);
+  const [replacements, setReplacements] = useState([]);
+  const [studios, setStudios] = useState(FRESH_STUDIOS);
+  const [surpriseSets, setSurpriseSets] = useState([]);
   const [raiseScores, setRaiseScores] = useState({ consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 });
   const [sidebar, setSidebar] = useState(true);
   const [sidekickToast, setSidekickToast] = useState(false);
