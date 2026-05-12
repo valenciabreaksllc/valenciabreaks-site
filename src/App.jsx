@@ -147,17 +147,23 @@ const insertTicketToSupabase = async (ticket) => {
   const row = appTicketToDbRow(appTicket);
 
   if (!supabase) {
-    console.warn("Supabase env vars missing. Ticket kept in local state only.");
-    return { data: appTicket, error: null };
+    const error = { message: "Supabase env vars are missing. Check .env.local, then restart npm run start." };
+    console.error("Supabase insert error:", error);
+    return { data: null, error };
   }
 
-  const { error } = await supabase.from("tickets").insert([row]);
+  const { data, error } = await supabase
+    .from("tickets")
+    .insert([row])
+    .select("*")
+    .single();
+
   if (error) {
     console.error("Supabase insert error:", error);
     return { data: null, error };
   }
 
-  return { data: appTicket, error: null };
+  return { data: mapDbTicketToApp(data), error: null };
 };
 
 const updateTicketStatusInSupabase = async (id, status) => {
@@ -499,14 +505,13 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const [form, setForm] = useState(emptyF);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
-  // Supabase insert, then refresh list
+  // Supabase insert, then add the inserted row to the visible queue
   const addTicket = async () => {
-    if (!form.brand || !form.issueType) return;
-    const newTicket = { id: `CC-${uid()}`, ...form, createdAt: nowISO(), source: "command-center" };
-    const { error } = await insertTicketToSupabase(newTicket);
-    if (error) return;
-    const { data } = await fetchTicketsFromSupabase();
-    if (data) setTickets(data);
+    if (!form.brand || !form.issueType) return alert("Pick a brand and issue type first.");
+    const newTicket = { ...form, createdAt: nowISO(), source: "command-center" };
+    const { data, error } = await insertTicketToSupabase(newTicket);
+    if (error) return alert(`Ticket save failed: ${error.message || "Unknown Supabase error"}`);
+    setTickets(prev => [data, ...prev]);
     setForm(emptyF);
     setShowForm(false);
   };
@@ -773,14 +778,13 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   const [drag, setDrag] = useState(null);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
-  // Supabase insert, then refresh list
+  // Supabase insert, then add the inserted row to the visible queue
   const add = async () => {
-    if (!form.brand || !form.issueType) return;
-    const newTicket = { id: `CC-${uid()}`, ...form, createdAt: nowISO(), source: "command-center" };
-    const { error } = await insertTicketToSupabase(newTicket);
-    if (error) return;
-    const { data } = await fetchTicketsFromSupabase();
-    if (data) setTickets(data);
+    if (!form.brand || !form.issueType) return alert("Pick a brand and issue type first.");
+    const newTicket = { ...form, createdAt: nowISO(), source: "command-center" };
+    const { data, error } = await insertTicketToSupabase(newTicket);
+    if (error) return alert(`Ticket save failed: ${error.message || "Unknown Supabase error"}`);
+    setTickets(prev => [data, ...prev]);
     setForm(emptyF);
     setShowForm(false);
   };
@@ -910,11 +914,10 @@ const CSTemplateView = ({ setTickets }) => {
 
   const copy = () => { navigator.clipboard.writeText(tpl); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
-  // Supabase insert, then refresh
+  // Supabase insert, then add the inserted row to the visible queue
   const createTicket = async () => {
     if (!brand || !issue || !tpl) return;
     const newTicket = {
-      id: `CS-${uid()}`,
       brand,
       channel: "Shop Chat",
       issueType: issue,
@@ -926,10 +929,9 @@ const CSTemplateView = ({ setTickets }) => {
       createdAt: nowISO(),
       source: "cs-template",
     };
-    const { error } = await insertTicketToSupabase(newTicket);
-    if (error) return;
-    const { data } = await fetchTicketsFromSupabase();
-    if (data) setTickets(data);
+    const { data, error } = await insertTicketToSupabase(newTicket);
+    if (error) return alert(`Ticket save failed: ${error.message || "Unknown Supabase error"}`);
+    setTickets(prev => [data, ...prev]);
     setTicketCreated(true);
   };
 
@@ -1497,10 +1499,12 @@ export default function JonnyOpsCommandCenter() {
     if (!ticket) return;
 
     const insertSidekickTicket = async () => {
-      const { error } = await insertTicketToSupabase({ ...ticket, source: "OP Sidekick" });
-      if (error) return;
-      const { data } = await fetchTicketsFromSupabase();
-      if (data) setTickets(data);
+      const { data, error } = await insertTicketToSupabase({ ...ticket, source: "OP Sidekick" });
+      if (error) {
+        alert(`Sidekick ticket save failed: ${error.message || "Unknown Supabase error"}`);
+        return;
+      }
+      setTickets(prev => [data, ...prev]);
       setActiveView("tickets");
       setSidekickToast(true);
       setTimeout(() => setSidekickToast(false), 3500);
