@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from '@supabase/supabase-js';
 
 // ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -38,6 +42,134 @@ const PRIORITIES = ["High", "Medium", "Low"];
 const KANBAN_COLS = ["New", "In Progress", "Waiting on Customer", "Backend Lookup", "Resolved", "Escalated"];
 const TONES = ["Friendly", "Firm", "Apology", "Investigation", "Final-sale policy"];
 const ROOT_CAUSES = ["Carrier delay", "Lost in transit", "Wrong item packed", "Missing item in pack", "Damaged in shipping", "Customer error", "Warehouse error", "Surprise set dispute", "Other"];
+
+// ─── SUPABASE DATA HELPERS ───────────────────────────────────────────────────
+const normalizeBrandForApp = (brand, brandCode) => {
+  const value = (brand || brandCode || "").toString().trim();
+  const upper = value.toUpperCase();
+  if (upper === "VR" || value === "Vaulted Rarities") return "Vaulted Rarities";
+  if (upper === "CK47" || upper === "CK" || value === "CardKing47") return "CardKing47";
+  if (upper === "PS" || value === "PokeSpins") return "PokeSpins";
+  if (upper === "PM" || value === "Pokiemart") return "Pokiemart";
+  return BRANDS.includes(value) ? value : "Vaulted Rarities";
+};
+
+const normalizeYesNo = (value) => {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  const raw = (value || "No").toString().trim().toLowerCase();
+  return ["yes", "true", "1", "high", "sla"].includes(raw) ? "Yes" : "No";
+};
+
+const normalizeTicketStatus = (status) => {
+  const raw = (status || "New").toString().trim();
+  return KANBAN_COLS.includes(raw) ? raw : "New";
+};
+
+const normalizeTicketPriority = (priority) => {
+  const raw = (priority || "Medium").toString().trim();
+  return PRIORITIES.includes(raw) ? raw : "Medium";
+};
+
+const normalizeTicketIssue = (issueType) => {
+  const raw = (issueType || "Other").toString().trim();
+  const withoutQuestion = raw.replace(/\?$/, "");
+  if (ISSUE_TYPES.includes(raw)) return raw;
+  if (ISSUE_TYPES.includes(withoutQuestion)) return withoutQuestion;
+  return "Other";
+};
+
+const mapDbTicketToApp = (row = {}) => {
+  const brand = normalizeBrandForApp(row.brand, row.brand_code || row.brandCode || row.brandcode);
+  const createdAt = row.created_at || row.createdAt || nowISO();
+  return {
+    id: row.id || `DB-${uid()}`,
+    source: row.source || "supabase",
+    brand,
+    brandCode: row.brand_code || row.brandCode || row.brandcode || BRAND_SHORT[brand],
+    channel: row.channel || "TikTok Shop",
+    issueType: normalizeTicketIssue(row.issue_type || row.issueType || row.issuetype),
+    priority: normalizeTicketPriority(row.priority),
+    slaRisk: normalizeYesNo(row.sla_risk ?? row.slaRisk ?? row.slarisk),
+    status: normalizeTicketStatus(row.status),
+    orderNumber: row.order_number || row.orderNumber || row.ordernumber || "",
+    customerName: row.customer_name || row.customerName || row.customername || "",
+    notes: row.notes || "",
+    nextAction: row.next_action || row.nextAction || row.nextaction || "",
+    createdAt,
+    updatedAt: row.updated_at || row.updatedAt || createdAt,
+  };
+};
+
+const appTicketToDbRow = (ticket = {}) => {
+  const brand = normalizeBrandForApp(ticket.brand, ticket.brandCode || ticket.brand_code);
+  const createdAt = ticket.createdAt || ticket.created_at || nowISO();
+  return {
+    // Let Supabase generate the UUID primary key. Do not send local/string ids.
+    source: ticket.source || "command-center",
+    brand,
+    brand_code: ticket.brandCode || ticket.brand_code || BRAND_SHORT[brand],
+    channel: ticket.channel || "TikTok Shop",
+    issue_type: normalizeTicketIssue(ticket.issueType || ticket.issue_type),
+    priority: normalizeTicketPriority(ticket.priority),
+    sla_risk: normalizeYesNo(ticket.slaRisk ?? ticket.sla_risk),
+    status: normalizeTicketStatus(ticket.status),
+    order_number: ticket.orderNumber || ticket.order_number || "",
+    customer_name: ticket.customerName || ticket.customer_name || "",
+    notes: ticket.notes || "",
+    next_action: ticket.nextAction || ticket.next_action || "",
+    created_at: createdAt,
+    updated_at: nowISO(),
+  };
+};
+
+const fetchTicketsFromSupabase = async () => {
+  if (!supabase) {
+    console.warn("Supabase env vars missing. Falling back to demo tickets.");
+    return { data: DEMO_TICKETS, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from("tickets")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Supabase fetch error:", error);
+    return { data: DEMO_TICKETS, error };
+  }
+
+  return { data: (data || []).map(mapDbTicketToApp), error: null };
+};
+
+const insertTicketToSupabase = async (ticket) => {
+  const appTicket = mapDbTicketToApp(ticket);
+  const row = appTicketToDbRow(appTicket);
+
+  if (!supabase) {
+    console.warn("Supabase env vars missing. Ticket kept in local state only.");
+    return { data: appTicket, error: null };
+  }
+
+  const { error } = await supabase.from("tickets").insert([row]);
+  if (error) {
+    console.error("Supabase insert error:", error);
+    return { data: null, error };
+  }
+
+  return { data: appTicket, error: null };
+};
+
+const updateTicketStatusInSupabase = async (id, status) => {
+  if (!supabase || !id) return { error: null };
+  const { error } = await supabase
+    .from("tickets")
+    .update({ status: normalizeTicketStatus(status), updated_at: nowISO() })
+    .eq("id", id);
+  if (error) console.error("Supabase status update error:", error);
+  return { error };
+};
+
 
 const STATUS_STYLE = {
   "New": "bg-blue-50 text-blue-700 border-blue-200",
@@ -359,13 +491,13 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const [form, setForm] = useState(emptyF);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
-  // ── CHANGE 4 (Dashboard): INSERT into Supabase, then refresh list ──
+  // Supabase insert, then refresh list
   const addTicket = async () => {
     if (!form.brand || !form.issueType) return;
-    const newTicket = { ...form, created_at: nowISO() };
-    const { error } = await supabase.from("tickets").insert([newTicket]);
-    if (error) { console.error("Supabase insert error:", error); return; }
-    const { data } = await supabase.from("tickets").select("*").order("created_at", { ascending: false });
+    const newTicket = { id: `CC-${uid()}`, ...form, createdAt: nowISO(), source: "command-center" };
+    const { error } = await insertTicketToSupabase(newTicket);
+    if (error) return;
+    const { data } = await fetchTicketsFromSupabase();
     if (data) setTickets(data);
     setForm(emptyF);
     setShowForm(false);
@@ -633,19 +765,22 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   const [drag, setDrag] = useState(null);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
-  // ── CHANGE 4 (Kanban): INSERT into Supabase, then refresh list ──
+  // Supabase insert, then refresh list
   const add = async () => {
     if (!form.brand || !form.issueType) return;
-    const newTicket = { ...form, created_at: nowISO() };
-    const { error } = await supabase.from("tickets").insert([newTicket]);
-    if (error) { console.error("Supabase insert error:", error); return; }
-    const { data } = await supabase.from("tickets").select("*").order("created_at", { ascending: false });
+    const newTicket = { id: `CC-${uid()}`, ...form, createdAt: nowISO(), source: "command-center" };
+    const { error } = await insertTicketToSupabase(newTicket);
+    if (error) return;
+    const { data } = await fetchTicketsFromSupabase();
     if (data) setTickets(data);
     setForm(emptyF);
     setShowForm(false);
   };
 
-  const upd = (id, status) => setTickets(p => p.map(t => t.id === id ? { ...t, status } : t));
+  const upd = async (id, status) => {
+    setTickets(p => p.map(t => t.id === id ? { ...t, status } : t));
+    await updateTicketStatusInSupabase(id, status);
+  };
   const filtered = tickets.filter(t => (!filter.brand || t.brand === filter.brand) && (!filter.status || t.status === filter.status) && (!filter.priority || t.priority === filter.priority));
 
   const TCard = ({ ticket: t }) => {
@@ -767,16 +902,25 @@ const CSTemplateView = ({ setTickets }) => {
 
   const copy = () => { navigator.clipboard.writeText(tpl); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
-  // ── CHANGE 4 (CS Templates): INSERT into Supabase, then refresh ──
+  // Supabase insert, then refresh
   const createTicket = async () => {
     if (!brand || !issue || !tpl) return;
     const newTicket = {
-      brand, channel: "Shop Chat", issueType: issue, priority: "Medium", slaRisk: "No",
-      status: "New", notes: `Template sent: ${issue}`, nextAction: "Awaiting customer response", created_at: nowISO()
+      id: `CS-${uid()}`,
+      brand,
+      channel: "Shop Chat",
+      issueType: issue,
+      priority: "Medium",
+      slaRisk: "No",
+      status: "New",
+      notes: `Template sent: ${issue}`,
+      nextAction: "Awaiting customer response",
+      createdAt: nowISO(),
+      source: "cs-template",
     };
-    const { error } = await supabase.from("tickets").insert([newTicket]);
-    if (error) { console.error("Supabase insert error:", error); return; }
-    const { data } = await supabase.from("tickets").select("*").order("created_at", { ascending: false });
+    const { error } = await insertTicketToSupabase(newTicket);
+    if (error) return;
+    const { data } = await fetchTicketsFromSupabase();
     if (data) setTickets(data);
     setTicketCreated(true);
   };
@@ -1328,57 +1472,32 @@ export default function JonnyOpsCommandCenter() {
   const [sidebar, setSidebar] = useState(true);
   const [sidekickToast, setSidekickToast] = useState(false);
 
-  // ── CHANGE 3: Fetch all tickets from Supabase on mount, ordered by created_at desc ──
+  // Fetch all tickets from Supabase on mount, ordered by created_at desc
   useEffect(() => {
     const fetchTickets = async () => {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) {
-        console.error("Supabase fetch error:", error);
-        return;
-      }
+      const { data } = await fetchTicketsFromSupabase();
       if (data) setTickets(data);
     };
     fetchTickets();
   }, []);
 
-  // ── CHANGE 5: OP Sidekick — INSERT into Supabase, then refresh list ──
+  // OP Sidekick — INSERT into Supabase, then refresh list
   useEffect(() => {
     const ticket = getSidekickTicketFromHash();
     if (!ticket) return;
 
     const insertSidekickTicket = async () => {
-      const payload = {
-        brand: ticket.brand,
-        channel: ticket.channel,
-        issueType: ticket.issueType,
-        priority: ticket.priority,
-        slaRisk: ticket.slaRisk,
-        status: ticket.status,
-        notes: ticket.notes,
-        nextAction: ticket.nextAction,
-        created_at: ticket.createdAt,
-        source: ticket.source,
-      };
-      const { error } = await supabase.from("tickets").insert([payload]);
-      if (error) {
-        console.error("Supabase Sidekick insert error:", error);
-        return;
-      }
-      const { data } = await supabase
-        .from("tickets")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const { error } = await insertTicketToSupabase({ ...ticket, source: "OP Sidekick" });
+      if (error) return;
+      const { data } = await fetchTicketsFromSupabase();
       if (data) setTickets(data);
+      setActiveView("tickets");
+      setSidekickToast(true);
+      setTimeout(() => setSidekickToast(false), 3500);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
     };
 
     insertSidekickTicket();
-    setActiveView("tickets");
-    setSidekickToast(true);
-    setTimeout(() => setSidekickToast(false), 3500);
-    window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []);
 
   // ── CHANGE 6: No localStorage save/load anywhere in this file ──
