@@ -28,7 +28,7 @@ const BRAND_SHORT = { "Vaulted Rarities": "VR", "CardKing47": "CK47", "PokeSpins
 // Exact brand colors per spec
 const BRAND_DOT = { "Vaulted Rarities": "#FACC15", "CardKing47": "#2563EB", "PokeSpins": "#DC2626", "Pokiemart": "#16A34A" };
 
-const CHANNELS = ["Refund / Return", "Shop Chat", "TikTok DM", "Instagram DM", "Email"];
+const CHANNELS = ["TikTok Shop", "Refund / Return", "Shop Chat", "TikTok DM", "Instagram DM", "Email"];
 const ISSUE_TYPES = ["Where is my order", "Refund request", "Return request", "Surprise set dispute", "Missing item", "Damaged item", "Wrong item", "Label created / no scan", "Hostile customer", "Other"];
 const PRIORITIES = ["High", "Medium", "Low"];
 const KANBAN_COLS = ["New", "In Progress", "Waiting on Customer", "Backend Lookup", "Resolved", "Escalated"];
@@ -1222,69 +1222,104 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
   );
 };
 
-// ─── PASSWORD GATE ────────────────────────────────────────────────────────────
-// Change this value to your private password before deploying.
-const APP_PASSWORD = "CHANGE_THIS_PASSWORD";
+// ─── OP SIDEKICK HASH BRIDGE ─────────────────────────────────────────────────
+const normalizeSidekickBrand = (brand, brandCode) => {
+  const value = (brand || brandCode || "").toString().trim();
+  const upper = value.toUpperCase();
 
-function PasswordGate({ onUnlock }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  if (upper === "VR" || value === "Vaulted Rarities") return "Vaulted Rarities";
+  if (upper === "CK47" || upper === "CK" || value === "CardKing47") return "CardKing47";
+  if (upper === "PS" || value === "PokeSpins") return "PokeSpins";
+  if (upper === "PM" || value === "Pokiemart") return "Pokiemart";
 
-  const submit = (e) => {
-    e.preventDefault();
+  return BRANDS.includes(value) ? value : "Vaulted Rarities";
+};
 
-    if (password === APP_PASSWORD) {
-      localStorage.setItem("jonny_ops_gate_v3", "yes");
-      onUnlock();
-    } else {
-      setError("Wrong password. Try again.");
-    }
+const normalizeSidekickIssue = (issueType) => {
+  const raw = (issueType || "Other").toString().trim();
+  const withoutQuestion = raw.replace(/\?$/, "");
+
+  if (ISSUE_TYPES.includes(raw)) return raw;
+  if (ISSUE_TYPES.includes(withoutQuestion)) return withoutQuestion;
+
+  return "Other";
+};
+
+const normalizeSidekickStatus = (status) => {
+  const raw = (status || "New").toString().trim();
+  return KANBAN_COLS.includes(raw) ? raw : "New";
+};
+
+const normalizeSidekickPriority = (priority) => {
+  const raw = (priority || "Medium").toString().trim();
+  return PRIORITIES.includes(raw) ? raw : "Medium";
+};
+
+const normalizeSidekickSlaRisk = (slaRisk) => {
+  if (slaRisk === true) return "Yes";
+  if (slaRisk === false) return "No";
+
+  const raw = (slaRisk || "No").toString().trim().toLowerCase();
+  return ["yes", "true", "1", "high", "sla"].includes(raw) ? "Yes" : "No";
+};
+
+const decodeSidekickPayload = (encoded) => {
+  if (!encoded) return null;
+
+  const cleaned = encoded.trim();
+
+  // Preferred format: encodeURIComponent(JSON.stringify(ticket))
+  try {
+    return JSON.parse(decodeURIComponent(cleaned));
+  } catch (err) {
+    // Continue to base64/base64url fallback below.
+  }
+
+  // Fallback format: base64url(JSON.stringify(ticket))
+  try {
+    const base64 = cleaned.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    return JSON.parse(decodeURIComponent(escape(window.atob(padded))));
+  } catch (err) {
+    return null;
+  }
+};
+
+const getSidekickTicketFromHash = () => {
+  const hash = window.location.hash || "";
+  if (!hash.includes("sidekick_ticket=")) return null;
+
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const rawTicket = decodeSidekickPayload(params.get("sidekick_ticket"));
+  if (!rawTicket || typeof rawTicket !== "object") return null;
+
+  const brand = normalizeSidekickBrand(rawTicket.brand, rawTicket.brandCode);
+  const orderNumber = rawTicket.orderNumber || rawTicket.orderNum || rawTicket.order || "";
+  const customerName = rawTicket.customerName || rawTicket.customer || rawTicket.customer_name || "";
+  const issueType = normalizeSidekickIssue(rawTicket.issueType || rawTicket.type);
+  const notes = rawTicket.notes || rawTicket.description || rawTicket.message || "";
+  const nextAction = rawTicket.nextAction || rawTicket.next_action || "Review in TikTok Seller Center and update status.";
+
+  return {
+    id: rawTicket.id || `SK-${uid()}`,
+    brand,
+    brandCode: BRAND_SHORT[brand],
+    channel: rawTicket.channel || "TikTok Shop",
+    issueType,
+    priority: normalizeSidekickPriority(rawTicket.priority),
+    slaRisk: normalizeSidekickSlaRisk(rawTicket.slaRisk),
+    status: normalizeSidekickStatus(rawTicket.status),
+    orderNumber,
+    customerName,
+    notes,
+    nextAction,
+    createdAt: rawTicket.createdAt || nowISO(),
+    source: "OP Sidekick",
   };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
-      <form onSubmit={submit} className="w-full max-w-sm bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-lg bg-gray-900 flex items-center justify-center">
-            <span className="text-white text-sm font-bold">JV</span>
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">Jonny Ops</h1>
-            <p className="text-xs text-gray-400">Command Center access</p>
-          </div>
-        </div>
-
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-          Password
-        </label>
-        <input
-          autoFocus
-          type="password"
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            setError("");
-          }}
-          placeholder="Enter password"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 mb-3"
-        />
-
-        {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-
-        <button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 font-semibold transition-colors">
-          Unlock Command Center
-        </button>
-
-        <p className="text-[11px] text-gray-400 mt-4 leading-relaxed">
-          This is a front-end access gate for casual privacy. For true production security, use Vercel password protection, Cloudflare Access, or proper authentication.
-        </p>
-      </form>
-    </div>
-  );
-}
+};
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-function JonnyOpsCommandCenter() {
+export default function JonnyOpsCommandCenter() {
   // Load from localStorage on mount, fallback to demo data
   const loadInitial = (key, fallback) => {
     const saved = loadFromLS();
@@ -1299,13 +1334,20 @@ function JonnyOpsCommandCenter() {
   const [surpriseSets, setSurpriseSets] = useState(() => loadInitial("surpriseSets", DEMO_SETS));
   const [raiseScores, setRaiseScores] = useState(() => loadInitial("raiseScores", { consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 }));
   const [sidebar, setSidebar] = useState(true);
+  const [sidekickToast, setSidekickToast] = useState(false);
 
-  const [unlocked, setUnlocked] = useState(true);
+  // OP Sidekick — ingest ticket from URL hash bridge
+  useEffect(() => {
+    const ticket = getSidekickTicketFromHash();
+    if (!ticket) return;
 
-  if (!unlocked) {
-    return <PasswordGate onUnlock={() => setUnlocked(true)} />;
-  }
+    setTickets(prev => [ticket, ...prev]);
+    setActiveView("tickets");
+    setSidekickToast(true);
+    setTimeout(() => setSidekickToast(false), 3500);
 
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
 
   // Auto-save to localStorage whenever any data changes
   useEffect(() => {
@@ -1334,6 +1376,16 @@ function JonnyOpsCommandCenter() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+      {sidekickToast && (
+        <div
+          className="fixed right-6 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-green-700 bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-lg"
+          role="status"
+        >
+          <span>✓</span>
+          <span>Ticket pushed from OP Sidekick.</span>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside style={{ width: sidebar ? 224 : 56, transition: "width .2s" }} className="flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
@@ -1388,16 +1440,6 @@ function JonnyOpsCommandCenter() {
               </button>
               {openCount > 0 && <span className="absolute -top-1 -right-1 text-[9px] bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">{openCount > 9 ? "9+" : openCount}</span>}
             </div>
-            <button
-              onClick={() => {
-                localStorage.removeItem("jonny_ops_gate_v3");
-                setUnlocked(false);
-              }}
-              className="text-xs font-semibold text-gray-500 hover:text-gray-900 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-50"
-              title="Lock command center"
-            >
-              Lock
-            </button>
             <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"><span className="text-xs font-bold text-gray-600">JV</span></div>
           </div>
         </header>
@@ -1407,9 +1449,4 @@ function JonnyOpsCommandCenter() {
       </div>
     </div>
   );
-}
-
-// ─── APP EXPORT WRAPPER ──────────────────────────────────────────────────────
-export default function App() {
-  return <JonnyOpsCommandCenter />;
 }
