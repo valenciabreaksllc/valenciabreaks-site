@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { createClient } from '@supabase/supabase-js';
+
+// ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -141,21 +145,6 @@ const generateTemplate = (brand, issueType, tone, orderNum, customerName) => {
     "Hostile customer": `${greeting}\n\nThank you for reaching out. I understand you're frustrated and I assure you that we take your concern seriously.\n\nI am reviewing ${oNum} now and will respond with a complete update by end of day. We are committed to resolving this professionally and fairly.\n\nIf you'd prefer to continue this conversation through another channel, please let me know.${sign}`,
   };
   return templates[issueType] || `${greeting}\n\nThank you for reaching out about ${oNum}. I'm reviewing your case now and will follow up with an update shortly.${sign}`;
-};
-
-// ─── localStorage PERSISTENCE ─────────────────────────────────────────────────
-const LS_KEY = "jonny_ops_v1";
-
-const saveToLS = (data) => {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (e) { console.warn("localStorage write failed", e); }
-};
-
-const loadFromLS = () => {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) { return null; }
 };
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
@@ -364,20 +353,25 @@ ${new Date().toLocaleString()}`.trim();
 };
 
 // ─── DASHBOARD VIEW ───────────────────────────────────────────────────────────
-const DashboardView = ({ tickets, replacements, studios, surpriseSets, raiseScores, setTickets }) => {
+const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSets, raiseScores }) => {
   const [showForm, setShowForm] = useState(false);
   const emptyF = { brand: "", channel: "", issueType: "", priority: "Medium", slaRisk: "No", status: "New", notes: "", nextAction: "" };
   const [form, setForm] = useState(emptyF);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
-  const addTicket = () => {
+  // ── CHANGE 4 (Dashboard): INSERT into Supabase, then refresh list ──
+  const addTicket = async () => {
     if (!form.brand || !form.issueType) return;
-    setTickets(p => [{ id: uid(), ...form, createdAt: nowISO() }, ...p]);
-    setForm(emptyF); setShowForm(false);
+    const newTicket = { ...form, created_at: nowISO() };
+    const { error } = await supabase.from("tickets").insert([newTicket]);
+    if (error) { console.error("Supabase insert error:", error); return; }
+    const { data } = await supabase.from("tickets").select("*").order("created_at", { ascending: false });
+    if (data) setTickets(data);
+    setForm(emptyF);
+    setShowForm(false);
   };
 
   const open = tickets.filter(t => t.status !== "Resolved").length;
-  // Critical SLA = < 2h remaining, not resolved, slaRisk=Yes
   const criticalSla = tickets.filter(isActiveSlaRisk);
   const totalLoss = replacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
   const studioReady = studios.filter(s => s.streamReady).length;
@@ -548,7 +542,7 @@ const DashboardView = ({ tickets, replacements, studios, surpriseSets, raiseScor
             </div>
           </Card>
 
-          {/* Weekly report preview — real data, no fake text */}
+          {/* Weekly report preview — real data */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-bold text-gray-900">Weekly Report Preview</p>
@@ -638,7 +632,19 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   const [showForm, setShowForm] = useState(false);
   const [drag, setDrag] = useState(null);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
-  const add = () => { if (!form.brand || !form.issueType) return; setTickets(p => [{ id: uid(), ...form, createdAt: nowISO() }, ...p]); setForm(emptyF); setShowForm(false); };
+
+  // ── CHANGE 4 (Kanban): INSERT into Supabase, then refresh list ──
+  const add = async () => {
+    if (!form.brand || !form.issueType) return;
+    const newTicket = { ...form, created_at: nowISO() };
+    const { error } = await supabase.from("tickets").insert([newTicket]);
+    if (error) { console.error("Supabase insert error:", error); return; }
+    const { data } = await supabase.from("tickets").select("*").order("created_at", { ascending: false });
+    if (data) setTickets(data);
+    setForm(emptyF);
+    setShowForm(false);
+  };
+
   const upd = (id, status) => setTickets(p => p.map(t => t.id === id ? { ...t, status } : t));
   const filtered = tickets.filter(t => (!filter.brand || t.brand === filter.brand) && (!filter.status || t.status === filter.status) && (!filter.priority || t.priority === filter.priority));
 
@@ -761,12 +767,17 @@ const CSTemplateView = ({ setTickets }) => {
 
   const copy = () => { navigator.clipboard.writeText(tpl); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
-  const createTicket = () => {
+  // ── CHANGE 4 (CS Templates): INSERT into Supabase, then refresh ──
+  const createTicket = async () => {
     if (!brand || !issue || !tpl) return;
-    setTickets(p => [{
-      id: uid(), brand, channel: "Shop Chat", issueType: issue, priority: "Medium", slaRisk: "No",
-      status: "New", notes: `Template sent: ${issue}`, nextAction: "Awaiting customer response", createdAt: nowISO()
-    }, ...p]);
+    const newTicket = {
+      brand, channel: "Shop Chat", issueType: issue, priority: "Medium", slaRisk: "No",
+      status: "New", notes: `Template sent: ${issue}`, nextAction: "Awaiting customer response", created_at: nowISO()
+    };
+    const { error } = await supabase.from("tickets").insert([newTicket]);
+    if (error) { console.error("Supabase insert error:", error); return; }
+    const { data } = await supabase.from("tickets").select("*").order("created_at", { ascending: false });
+    if (data) setTickets(data);
     setTicketCreated(true);
   };
 
@@ -1034,7 +1045,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   const [improvements, setImprovements] = useState("");
   const [risks, setRisks] = useState("");
   const [nextFocus, setNextFocus] = useState("");
-  const [mode, setMode] = useState("full"); // "full" | "slack"
+  const [mode, setMode] = useState("full");
   const [copied, setCopied] = useState(false);
 
   const data = { tickets, replacements, studios, surpriseSets, raiseScores, improvements, risks, nextFocus };
@@ -1145,7 +1156,7 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
 
   const clearAll = () => {
     setTickets([]); setReplacements([]); setStudios(DEMO_STUDIOS); setSurpriseSets([]);
-    localStorage.removeItem(LS_KEY); setConfirmClear(false);
+    setConfirmClear(false);
   };
 
   const resetDemo = () => {
@@ -1158,7 +1169,7 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
     <div className="space-y-4">
       <div><h2 className="text-2xl font-bold text-gray-900">Data Management</h2><p className="text-xs text-gray-400 mt-0.5">Export, import, and manage your ops data</p></div>
 
-      {saved && <div className="bg-green-50 border border-green-300 rounded-lg px-4 py-3 text-green-800 text-sm font-medium">Data imported and auto-saved to localStorage.</div>}
+      {saved && <div className="bg-green-50 border border-green-300 rounded-lg px-4 py-3 text-green-800 text-sm font-medium">Data imported successfully.</div>}
       {importErr && <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{importErr}</div>}
 
       <div className="grid grid-cols-2 gap-4">
@@ -1215,8 +1226,8 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
       </Card>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm font-bold text-blue-800 mb-1">localStorage Auto-Save Active</p>
-        <p className="text-xs text-blue-700">All data is automatically saved to your browser's localStorage after every change. Your data will persist across page refreshes. Export a JSON backup regularly for off-device safety.</p>
+        <p className="text-sm font-bold text-blue-800 mb-1">Supabase Sync Active</p>
+        <p className="text-xs text-blue-700">All ticket data is read from and written to your Supabase <code className="font-mono bg-blue-100 px-1 rounded">tickets</code> table. Export a JSON backup regularly for off-database safety.</p>
       </div>
     </div>
   );
@@ -1226,22 +1237,18 @@ const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setT
 const normalizeSidekickBrand = (brand, brandCode) => {
   const value = (brand || brandCode || "").toString().trim();
   const upper = value.toUpperCase();
-
   if (upper === "VR" || value === "Vaulted Rarities") return "Vaulted Rarities";
   if (upper === "CK47" || upper === "CK" || value === "CardKing47") return "CardKing47";
   if (upper === "PS" || value === "PokeSpins") return "PokeSpins";
   if (upper === "PM" || value === "Pokiemart") return "Pokiemart";
-
   return BRANDS.includes(value) ? value : "Vaulted Rarities";
 };
 
 const normalizeSidekickIssue = (issueType) => {
   const raw = (issueType || "Other").toString().trim();
   const withoutQuestion = raw.replace(/\?$/, "");
-
   if (ISSUE_TYPES.includes(raw)) return raw;
   if (ISSUE_TYPES.includes(withoutQuestion)) return withoutQuestion;
-
   return "Other";
 };
 
@@ -1258,24 +1265,16 @@ const normalizeSidekickPriority = (priority) => {
 const normalizeSidekickSlaRisk = (slaRisk) => {
   if (slaRisk === true) return "Yes";
   if (slaRisk === false) return "No";
-
   const raw = (slaRisk || "No").toString().trim().toLowerCase();
   return ["yes", "true", "1", "high", "sla"].includes(raw) ? "Yes" : "No";
 };
 
 const decodeSidekickPayload = (encoded) => {
   if (!encoded) return null;
-
   const cleaned = encoded.trim();
-
-  // Preferred format: encodeURIComponent(JSON.stringify(ticket))
   try {
     return JSON.parse(decodeURIComponent(cleaned));
-  } catch (err) {
-    // Continue to base64/base64url fallback below.
-  }
-
-  // Fallback format: base64url(JSON.stringify(ticket))
+  } catch (err) { /* fall through */ }
   try {
     const base64 = cleaned.replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
@@ -1288,7 +1287,6 @@ const decodeSidekickPayload = (encoded) => {
 const getSidekickTicketFromHash = () => {
   const hash = window.location.hash || "";
   if (!hash.includes("sidekick_ticket=")) return null;
-
   const params = new URLSearchParams(hash.replace(/^#/, ""));
   const rawTicket = decodeSidekickPayload(params.get("sidekick_ticket"));
   if (!rawTicket || typeof rawTicket !== "object") return null;
@@ -1320,39 +1318,70 @@ const getSidekickTicketFromHash = () => {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function JonnyOpsCommandCenter() {
-  // Load from localStorage on mount, fallback to demo data
-  const loadInitial = (key, fallback) => {
-    const saved = loadFromLS();
-    if (saved && saved[key]) return saved[key];
-    return fallback;
-  };
-
   const [activeView, setActiveView] = useState("dashboard");
-  const [tickets, setTickets] = useState(() => loadInitial("tickets", DEMO_TICKETS));
-  const [replacements, setReplacements] = useState(() => loadInitial("replacements", DEMO_REPLACEMENTS));
-  const [studios, setStudios] = useState(() => loadInitial("studios", DEMO_STUDIOS));
-  const [surpriseSets, setSurpriseSets] = useState(() => loadInitial("surpriseSets", DEMO_SETS));
-  const [raiseScores, setRaiseScores] = useState(() => loadInitial("raiseScores", { consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 }));
+  // ── CHANGE 3: Start with empty array; Supabase fetch populates on mount ──
+  const [tickets, setTickets] = useState([]);
+  const [replacements, setReplacements] = useState(DEMO_REPLACEMENTS);
+  const [studios, setStudios] = useState(DEMO_STUDIOS);
+  const [surpriseSets, setSurpriseSets] = useState(DEMO_SETS);
+  const [raiseScores, setRaiseScores] = useState({ consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 });
   const [sidebar, setSidebar] = useState(true);
   const [sidekickToast, setSidekickToast] = useState(false);
 
-  // OP Sidekick — ingest ticket from URL hash bridge
+  // ── CHANGE 3: Fetch all tickets from Supabase on mount, ordered by created_at desc ──
+  useEffect(() => {
+    const fetchTickets = async () => {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Supabase fetch error:", error);
+        return;
+      }
+      if (data) setTickets(data);
+    };
+    fetchTickets();
+  }, []);
+
+  // ── CHANGE 5: OP Sidekick — INSERT into Supabase, then refresh list ──
   useEffect(() => {
     const ticket = getSidekickTicketFromHash();
     if (!ticket) return;
 
-    setTickets(prev => [ticket, ...prev]);
+    const insertSidekickTicket = async () => {
+      const payload = {
+        brand: ticket.brand,
+        channel: ticket.channel,
+        issueType: ticket.issueType,
+        priority: ticket.priority,
+        slaRisk: ticket.slaRisk,
+        status: ticket.status,
+        notes: ticket.notes,
+        nextAction: ticket.nextAction,
+        created_at: ticket.createdAt,
+        source: ticket.source,
+      };
+      const { error } = await supabase.from("tickets").insert([payload]);
+      if (error) {
+        console.error("Supabase Sidekick insert error:", error);
+        return;
+      }
+      const { data } = await supabase
+        .from("tickets")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (data) setTickets(data);
+    };
+
+    insertSidekickTicket();
     setActiveView("tickets");
     setSidekickToast(true);
     setTimeout(() => setSidekickToast(false), 3500);
-
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []);
 
-  // Auto-save to localStorage whenever any data changes
-  useEffect(() => {
-    saveToLS({ tickets, replacements, studios, surpriseSets, raiseScores });
-  }, [tickets, replacements, studios, surpriseSets, raiseScores]);
+  // ── CHANGE 6: No localStorage save/load anywhere in this file ──
 
   const openCount = tickets.filter(t => t.status !== "Resolved").length;
   const criticalSlaCount = tickets.filter(isActiveSlaRisk).length;
