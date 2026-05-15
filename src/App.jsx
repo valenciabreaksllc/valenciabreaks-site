@@ -600,7 +600,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
       {opsError && <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{opsError}</div>}
 
       {/* Count chips */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: "Open",         count: openCount,     cls: "border-l-blue-500"  },
           { label: "Due Today",    count: dueTodayCount, cls: "border-l-amber-500" },
@@ -615,7 +615,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 no-scrollbar">
         {ACTION_FILTERS.map(opt => (
           <button key={opt} onClick={() => setActiveFilter(opt)}
             className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
@@ -1490,7 +1490,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       )}
 
       {/* Count chips */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: "Needs Reply",    count: needsReply,    cls: "border-l-blue-500"   },
           { label: "In Progress",    count: inProgress,    cls: "border-l-purple-500" },
@@ -1505,7 +1505,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 no-scrollbar">
         {INBOX_FILTER_OPTIONS.map(opt => (
           <button
             key={opt}
@@ -2196,7 +2196,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
       />
 
       {/* Metrics */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Open Tickets</p>
           <p className="text-4xl font-bold text-gray-900 mt-1">{open}</p>
@@ -2238,8 +2238,8 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         </div>
       )}
 
-      {/* 2-col layout */}
-      <div className="flex gap-4">
+      {/* 2-col layout — stacks on mobile */}
+      <div className="flex flex-col md:flex-row gap-4">
         {/* Ticket table */}
         <div className="flex-1 min-w-0">
           <Card className="flex flex-col">
@@ -2291,7 +2291,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         </div>
 
         {/* Right rail */}
-        <div className="w-72 flex-shrink-0 flex flex-col gap-4">
+        <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-4">
           <Card className="p-4">
             <p className="text-sm font-bold text-gray-900 mb-3">Surprise Set Tracker</p>
             {surpriseSets.map(s => {
@@ -2773,7 +2773,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
       )}
 
       {/* Metric chips */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{replacements.length}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p><p className="text-3xl font-bold text-red-600 mt-1">${loss.toFixed(2)}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-amber-600 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{replacements.length > 0 ? Math.round((prev / replacements.length) * 100) : 0}% of total</p></Card>
@@ -2813,7 +2813,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
       )}
 
       {/* Filter bar */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 no-scrollbar">
         {REPLACEMENT_FILTERS.map(opt => (
           <button key={opt} onClick={() => setActiveFilter(opt)}
             className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
@@ -3478,20 +3478,92 @@ export default function JonnyOpsCommandCenter() {
     }
   };
 
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Current page label for mobile top bar
+  const PAGE_LABELS = {
+    dashboard: "Dashboard", inbox: "Command Inbox", actions: "Next Actions",
+    daily: "Daily Command Board", tickets: "Tickets", replacements: "Replacements",
+    studio: "Inventory", sets: "Surprise Sets", browser: "Browser Profiles",
+    cs: "CS Templates", weekly: "Report", data: "Settings",
+  };
+
+  // Nav click: close mobile drawer then switch view
+  const handleNavClick = (id) => {
+    setActiveView(id);
+    setMobileNavOpen(false);
+  };
+
+  // Shared nav content rendered inside both the desktop sidebar and the mobile drawer
+  const NavContent = ({ showLabels }) => (
+    <>
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+        {NAV.map((section, si) => (
+          <div key={si}>
+            {section.section && showLabels && (
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-1">{section.section}</p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map(item => (
+                <NavItem key={item.id} {...item} active={activeView === item.id} onClick={handleNavClick}
+                  badge={item.id === "tickets" ? criticalSlaCount : item.id === "inbox" ? inboxNeedsReplyCount : item.id === "actions" ? opsOpenCount : 0} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+      <div className="border-t border-gray-100 px-3 py-3 flex-shrink-0">
+        {showLabels ? (
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0"><span className="text-xs font-bold text-gray-600">JV</span></div>
+            <div className="overflow-hidden"><p className="text-xs font-semibold text-gray-700 truncate">Jonny Valencia</p><p className="text-[10px] text-gray-400 truncate">Outerplanesgames</p></div>
+          </div>
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center mx-auto"><span className="text-xs font-bold text-gray-600">JV</span></div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+      {/* Sidekick toast */}
       {sidekickToast && (
-        <div
-          className="fixed right-6 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-green-700 bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-lg"
-          role="status"
-        >
+        <div className="fixed right-4 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-green-700 bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-lg" role="status">
           <span>✓</span>
           <span>Ticket pushed from OP Sidekick.</span>
         </div>
       )}
 
-      {/* Sidebar */}
-      <aside style={{ width: sidebar ? 224 : 56, transition: "width .2s" }} className="flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+      {/* ── MOBILE DRAWER BACKDROP ── */}
+      {mobileNavOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      {/* ── MOBILE SLIDE-OUT DRAWER ── */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-72 bg-white flex flex-col shadow-xl transition-transform duration-200 md:hidden ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        {/* Drawer header */}
+        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="1.4"/><path d="M8 5.5v2.5l1.5 1.5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <p className="text-sm font-bold text-gray-900">Jonny Ops</p>
+            <p className="text-[10px] text-gray-400">Command Center v1.1</p>
+          </div>
+          <button onClick={() => setMobileNavOpen(false)} className="text-gray-400 hover:text-gray-700 text-xl leading-none p-1">×</button>
+        </div>
+        <NavContent showLabels={true} />
+      </div>
+
+      {/* ── DESKTOP SIDEBAR (hidden on mobile) ── */}
+      <aside
+        style={{ width: sidebar ? 224 : 56, transition: "width .2s" }}
+        className="hidden md:flex flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden"
+      >
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="1.4"/><path d="M8 5.5v2.5l1.5 1.5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -3524,9 +3596,45 @@ export default function JonnyOpsCommandCenter() {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── MAIN CONTENT ── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
+
+        {/* ── MOBILE TOP BAR (hidden on desktop) ── */}
+        <div className="flex md:hidden items-center justify-between bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            {/* Hamburger */}
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              className="text-gray-600 hover:text-gray-900 p-1 -ml-1"
+              aria-label="Open menu"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </button>
+            <div>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Jonny Ops</p>
+              <p className="text-[10px] text-gray-400 leading-tight">{PAGE_LABELS[activeView] || activeView}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {criticalSlaCount > 0 && (
+              <button onClick={() => handleNavClick("tickets")} className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-lg px-2 py-1 cursor-pointer">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-[10px] font-bold text-red-700">{criticalSlaCount}</span>
+              </button>
+            )}
+            {inboxNeedsReplyCount > 0 && (
+              <button onClick={() => handleNavClick("inbox")} className="relative text-gray-500">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2a5 5 0 0 1 5 5v3l2 2H2l2-2V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M7 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                <span className="absolute -top-1 -right-1 text-[9px] bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">{inboxNeedsReplyCount > 9 ? "9+" : inboxNeedsReplyCount}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── DESKTOP TOP BAR (hidden on mobile) ── */}
+        <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
           <p className="text-sm font-bold text-gray-900">Jonny Ops Command Center</p>
           <div className="flex items-center gap-3">
             {criticalSlaCount > 0 && (
@@ -3547,10 +3655,48 @@ export default function JonnyOpsCommandCenter() {
             <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"><span className="text-xs font-bold text-gray-600">JV</span></div>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto" style={{ background: "#f3f4f6" }}>
-          <div className="max-w-screen-xl mx-auto px-6 py-5">{renderView()}</div>
+
+        {/* ── PAGE CONTENT ── */}
+        <main className="flex-1 overflow-y-auto pb-16 md:pb-0" style={{ background: "#f3f4f6" }}>
+          <div className="max-w-screen-xl mx-auto px-3 md:px-6 py-4 md:py-5">{renderView()}</div>
         </main>
+
+        {/* ── MOBILE BOTTOM QUICK NAV ── */}
+        <nav className="flex md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 safe-area-inset-bottom">
+          {[
+            { id: "dashboard", label: "Home",        badge: 0,
+              icon: <path d="M2 2h5v5H2zm7 0h5v5H9zM2 9h5v5H2zm7 0h5v5H9z" fill="currentColor" opacity=".7" /> },
+            { id: "inbox",     label: "Inbox",       badge: inboxNeedsReplyCount,
+              icon: <><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></> },
+            { id: "actions",   label: "Actions",     badge: opsOpenCount,
+              icon: <><path d="M2 4h9M2 8h7M2 12h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M14.5 13.5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></> },
+            { id: "replacements", label: "Reship",   badge: 0,
+              icon: <><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></> },
+            { id: "tickets",   label: "Tickets",     badge: criticalSlaCount,
+              icon: <><path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 7h6M5 10h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></> },
+          ].map(item => {
+            const isActive = activeView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavClick(item.id)}
+                className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative transition-colors ${isActive ? "text-blue-600" : "text-gray-400 hover:text-gray-700"}`}
+              >
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className={isActive ? "text-blue-600" : "text-gray-400"}>
+                  {item.icon}
+                </svg>
+                <span className="text-[9px] font-medium leading-tight">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="absolute top-1.5 right-1/4 translate-x-1/2 bg-red-500 text-white text-[8px] font-bold rounded-full min-w-[14px] h-3.5 flex items-center justify-center px-0.5">
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
 }
+
