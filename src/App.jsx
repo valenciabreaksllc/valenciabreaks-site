@@ -702,6 +702,57 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
   };
 
+  const [draftBusyId, setDraftBusyId] = useState(null);   // separate from action busyId
+  const [copiedDraftId, setCopiedDraftId] = useState(null);
+
+  const handleGenerateDraft = async (msg, instruction = null) => {
+    setDraftBusyId(msg.id);
+    try {
+      const body = { message_id: msg.id };
+      if (instruction) body.instruction = instruction;
+      const { data, error } = await supabase.functions.invoke("draft-inbound-reply", { body });
+      if (error) throw error;
+      const updated = data?.message;
+      if (updated) {
+        setInboundMessages(prev => prev.map(m => m.id === msg.id ? { ...m, ...updated } : m));
+      }
+    } catch (err) {
+      alert(`Draft failed: ${err?.message || "Unknown error. Check Supabase Edge Function logs."}`);
+    } finally {
+      setDraftBusyId(null);
+    }
+  };
+
+  const handleApproveDraft = async (msg) => {
+    if (!msg.ai_draft) return;
+    const now = nowISO();
+    // 1. Update inbound_messages: copy draft → approved_reply, set draft_status
+    const { error: updateErr } = await supabase
+      .from("inbound_messages")
+      .update({ approved_reply: msg.ai_draft, draft_status: "Approved", updated_at: now })
+      .eq("id", msg.id);
+    if (updateErr) { alert(`Approve failed: ${updateErr.message}`); return; }
+
+    // 2. Insert into reply_examples for future few-shot context
+    const { displayBody } = getDisplayInboundMessage(msg);
+    await supabase.from("reply_examples").insert([{
+      brand:            msg.brand           || null,
+      channel:          msg.channel         || null,
+      issue_type:       msg.issue_type      || null,
+      customer_message: displayBody         || msg.message_body || null,
+      triage_summary:   msg.triage_summary  || null,
+      ai_draft:         msg.ai_draft,
+      approved_reply:   msg.ai_draft,
+      tone_notes:       msg.tone_notes      || null,
+      created_at:       now,
+    }]);
+
+    // 3. Update local state
+    setInboundMessages(prev => prev.map(m =>
+      m.id === msg.id ? { ...m, approved_reply: msg.ai_draft, draft_status: "Approved" } : m
+    ));
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -796,6 +847,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const showName = displayName || msg.sender_name || msg.customer_name;
         const untriaged = isUntriaged(msg);
 
+        const isDraftBusy = draftBusyId === msg.id;
+
         return (
           <Card key={msg.id} className="p-4">
             {/* Card header row */}
@@ -807,11 +860,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {msg.label    && <span className="text-[10px] text-gray-500 border border-gray-200 bg-gray-50 rounded px-1.5 py-0.5">{msg.label}</span>}
                 {msg.priority && <Badge label={msg.priority} className={priorityStyle} />}
                 {msg.status   && <Badge label={msg.status}   className={statusStyle}   />}
-                {/* Triage status badge — show "Untriaged" when blank */}
                 {untriaged
                   ? <Badge label="Untriaged" className="bg-gray-100 text-gray-400 border-gray-200" />
                   : <Badge label={msg.triage_status} className={triageStyle} />
                 }
+                {msg.draft_status === "Approved" && (
+                  <Badge label="Draft Approved" className="bg-green-50 text-green-700 border-green-200" />
+                )}
                 {msg.needs_human_review === true || msg.needs_human_review === "true"
                   ? <Badge label="Human Review" className="bg-orange-50 text-orange-700 border-orange-200" />
                   : null
@@ -847,7 +902,6 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             {(msg.issue_type || msg.customer_intent || msg.risk_level || msg.triage_summary || msg.next_action || msg.recommended_reply_type || msg.confidence_score != null) && (
               <div className="border border-gray-100 rounded-lg bg-gray-50 px-3 py-2.5 mb-3 space-y-1.5">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Triage</p>
-
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                   {msg.issue_type && (
                     <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Issue:</span> {msg.issue_type}</span>
@@ -868,13 +922,92 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                     <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Confidence:</span> {msg.confidence_score}%</span>
                   )}
                 </div>
-
                 {msg.triage_summary && (
                   <p className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Summary:</span> {msg.triage_summary}</p>
                 )}
                 {msg.next_action && (
                   <p className="text-[11px] text-blue-600">→ {msg.next_action}</p>
                 )}
+              </div>
+            )}
+
+            {/* ── AI Draft box ── */}
+            {msg.ai_draft && (
+              <div className="border border-blue-100 rounded-lg bg-blue-50 px-3 py-2.5 mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">AI Draft</p>
+                  {msg.draft_status && (
+                    <Badge
+                      label={msg.draft_status}
+                      className={msg.draft_status === "Approved"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : "bg-blue-100 text-blue-600 border-blue-200"}
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
+
+                {/* Draft action buttons */}
+                <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-blue-100">
+                  {/* Copy Draft */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(msg.ai_draft);
+                      setCopiedDraftId(msg.id);
+                      setTimeout(() => setCopiedDraftId(null), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors"
+                  >
+                    {copiedDraftId === msg.id ? "Copied!" : "Copy Draft"}
+                  </button>
+
+                  {/* Approve Draft */}
+                  {msg.draft_status !== "Approved" && (
+                    <button
+                      disabled={isDraftBusy || isBusy}
+                      onClick={() => handleApproveDraft(msg)}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors"
+                    >
+                      ✓ Approve Draft
+                    </button>
+                  )}
+
+                  {/* Redraft */}
+                  <button
+                    disabled={isDraftBusy || isBusy}
+                    onClick={() => handleGenerateDraft(msg, "redraft")}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
+                  >
+                    {isDraftBusy ? "…" : "↺ Redraft"}
+                  </button>
+
+                  {/* Make Shorter */}
+                  <button
+                    disabled={isDraftBusy || isBusy}
+                    onClick={() => handleGenerateDraft(msg, "make_shorter")}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
+                  >
+                    Shorter
+                  </button>
+
+                  {/* Make Warmer */}
+                  <button
+                    disabled={isDraftBusy || isBusy}
+                    onClick={() => handleGenerateDraft(msg, "make_warmer")}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
+                  >
+                    Warmer
+                  </button>
+
+                  {/* Make Firmer */}
+                  <button
+                    disabled={isDraftBusy || isBusy}
+                    onClick={() => handleGenerateDraft(msg, "make_firmer")}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
+                  >
+                    Firmer
+                  </button>
+                </div>
               </div>
             )}
 
@@ -919,10 +1052,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {isBusy ? "Triaging…" : "⚡ Run Triage"}
               </button>
 
-              {/* AI Draft placeholder */}
-              <button disabled title="AI draft generation coming soon"
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60">
-                ✦ AI Draft Soon
+              {/* Generate Draft */}
+              <button
+                disabled={isDraftBusy || isBusy}
+                onClick={() => handleGenerateDraft(msg)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors"
+              >
+                {isDraftBusy ? "Drafting…" : "✦ Generate Draft"}
               </button>
 
               {/* Archive */}
