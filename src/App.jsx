@@ -834,6 +834,41 @@ const archiveInboundInSupabase = async (id) => {
   return { error };
 };
 
+// ─── REPLACEMENTS SUPABASE HELPERS ───────────────────────────────────────────
+
+const fetchReplacementsFromSupabase = async () => {
+  if (!supabase) return { data: [], error: { message: "No Supabase client." } };
+  const { data, error } = await supabase
+    .from("replacements")
+    .select("id, date, brand, customer_name, order_number, reason, root_cause, replacement_items, notes, value, preventable, follow_up, status, archived_at, created_at, updated_at")
+    .is("archived_at", null)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Supabase replacements fetch error:", error);
+    return { data: [], error };
+  }
+  // Normalise snake_case DB columns → camelCase used by the UI
+  const rows = (data || []).map(r => ({
+    id:                r.id,
+    date:              r.date              || r.created_at?.slice(0, 10) || "",
+    brand:             r.brand             || "",
+    customerName:      r.customer_name     || "",
+    orderNum:          r.order_number      || "",
+    reason:            r.reason            || "",
+    rootCause:         r.root_cause        || "",
+    replacementItems:  r.replacement_items || "",
+    notes:             r.notes             || "",
+    marketValue:       parseFloat(r.value  || 0),
+    preventable:       r.preventable       || "No",
+    followUp:          r.follow_up         || "No",
+    status:            r.status            || "Open",
+    archived_at:       r.archived_at,
+    created_at:        r.created_at,
+    updated_at:        r.updated_at,
+  }));
+  return { data: rows, error: null };
+};
+
 // ─── TIKTOK SHOP CHAT EMAIL NORMALIZER ───────────────────────────────────────
 // Cleans TikTok Seller Assistant email boilerplate for display only.
 // Raw message_body in Supabase is NEVER modified.
@@ -2609,39 +2644,151 @@ const CSTemplateView = ({ setTickets }) => {
 };
 
 // ─── REPLACEMENT LOG ──────────────────────────────────────────────────────────
-const ReplacementLogView = ({ replacements, setReplacements }) => {
-  const emptyF = { date: todayDate(), brand: "", orderNum: "", reason: "", rootCause: "", marketValue: "", preventable: "No", followUp: "No", notes: "" };
-  const [form, setForm] = useState(emptyF);
-  const [show, setShow] = useState(false);
-  const f = k => v => setForm(p => ({ ...p, [k]: v }));
+const REPLACEMENT_STATUS_OPTIONS = ["Open", "Reshipped", "Refunded", "Resolved", "Pending"];
+const REPLACEMENT_FILTERS = ["All", "CardKing47", "Vaulted Rarities", "PokeSpins", "Pokiemart", "Follow-Up Needed"];
+
+const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading, replacementsError, onRefresh }) => {
+  const emptyF = {
+    date: todayDate(), brand: "", orderNum: "", customerName: "",
+    reason: "", rootCause: "", replacementItems: "", marketValue: "",
+    preventable: "No", followUp: "No", notes: "", status: "Open",
+  };
+  const [form, setForm]         = useState(emptyF);
+  const [show, setShow]         = useState(false);
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [editRow, setEditRow]   = useState(null);   // row being edited
+  const [editForm, setEditForm] = useState({});
+  const [savingId, setSavingId] = useState(null);
+  const f  = k => v => setForm(p => ({ ...p, [k]: v }));
+  const ef = k => v => setEditForm(p => ({ ...p, [k]: v }));
+
+  // ── Add new row (local-only until Supabase migration of replacements table) ──
   const add = () => {
     if (!form.brand || !form.orderNum) return;
-    setReplacements(p => [{ id: uid(), ...form, marketValue: parseFloat(form.marketValue) || 0 }, ...p]);
+    setReplacements(p => [{
+      id: uid(), ...form,
+      marketValue: parseFloat(form.marketValue) || 0,
+    }, ...p]);
     setForm(emptyF); setShow(false);
   };
+
+  // ── Archive row (soft-delete via Supabase, fall back to local remove) ──────
+  const handleArchive = async (row) => {
+    if (!window.confirm(`Archive replacement case ${row.orderNum || row.id}? It will be hidden but not deleted.`)) return;
+    if (supabase && row.id && !/^[a-z0-9]{7}$/.test(row.id)) {
+      // Only call Supabase for UUID-format ids (real rows); skip local uid() rows
+      const { error } = await supabase
+        .from("replacements")
+        .update({ archived_at: nowISO(), updated_at: nowISO() })
+        .eq("id", row.id);
+      if (error) { alert(`Archive failed: ${error.message}`); return; }
+    }
+    setReplacements(prev => prev.filter(r => r.id !== row.id));
+  };
+
+  // ── Save inline edit ────────────────────────────────────────────────────────
+  const handleSaveEdit = async () => {
+    const updated = {
+      ...editForm,
+      marketValue: parseFloat(editForm.marketValue) || 0,
+      updated_at: nowISO(),
+    };
+    setSavingId(editRow);
+    if (supabase && editRow && !/^[a-z0-9]{7}$/.test(editRow)) {
+      const { error } = await supabase
+        .from("replacements")
+        .update({
+          order_number:       updated.orderNum         || null,
+          customer_name:      updated.customerName     || null,
+          reason:             updated.reason           || null,
+          root_cause:         updated.rootCause        || null,
+          replacement_items:  updated.replacementItems || null,
+          notes:              updated.notes            || null,
+          market_value:       updated.marketValue      || 0,
+          preventable:        updated.preventable      || "No",
+          follow_up:          updated.followUp         || "No",
+          status:             updated.status           || "Open",
+          updated_at:         updated.updated_at,
+        })
+        .eq("id", editRow);
+      if (error) { alert(`Save failed: ${error.message}`); setSavingId(null); return; }
+    }
+    setReplacements(prev => prev.map(r => r.id === editRow ? { ...r, ...updated } : r));
+    setEditRow(null);
+    setEditForm({});
+    setSavingId(null);
+  };
+
+  // ── Filter + derived stats ──────────────────────────────────────────────────
+  const displayRows = replacements.filter(r => {
+    if (activeFilter === "All")             return true;
+    if (activeFilter === "Follow-Up Needed") return r.followUp === "Yes";
+    return r.brand === activeFilter;
+  });
+
   const loss = replacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
   const prev = replacements.filter(r => r.preventable === "Yes").length;
-  const fu = replacements.filter(r => r.followUp === "Yes").length;
-  const rc = ROOT_CAUSES.map(c => ({ c, n: replacements.filter(r => r.rootCause === c).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
+  const fu   = replacements.filter(r => r.followUp === "Yes").length;
+  const rc   = ROOT_CAUSES.map(c => ({ c, n: replacements.filter(r => r.rootCause === c).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-gray-900">Shipping Replacement &amp; Loss Log</h2><p className="text-xs text-gray-400 mt-0.5">Track every replacement case and estimated loss</p></div>
-        <BtnPrimary onClick={() => setShow(s => !s)} size="md">{show ? "✕ Close" : "+ Log Replacement"}</BtnPrimary>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Shipping Replacement &amp; Loss Log</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Track every replacement case and estimated loss</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            disabled={replacementsLoading}
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={replacementsLoading ? "animate-spin" : ""}>
+              <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {replacementsLoading ? "Loading…" : "Refresh"}
+          </button>
+          <BtnPrimary onClick={() => setShow(s => !s)} size="md">{show ? "✕ Close" : "+ Log Replacement"}</BtnPrimary>
+        </div>
       </div>
+
+      {/* Error banner */}
+      {replacementsError && (
+        <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{replacementsError}</div>
+      )}
+
+      {/* Loading skeleton */}
+      {replacementsLoading && replacements.length === 0 && (
+        <div className="space-y-2">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 animate-pulse">
+              <div className="h-3 bg-gray-200 rounded w-1/3 mb-2" />
+              <div className="h-3 bg-gray-100 rounded w-2/3" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Metric chips */}
       <div className="grid grid-cols-4 gap-3">
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{replacements.length}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p><p className="text-3xl font-bold text-red-600 mt-1">${loss.toFixed(2)}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-amber-600 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{replacements.length > 0 ? Math.round((prev / replacements.length) * 100) : 0}% of total</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Follow-Up Needed</p><p className="text-3xl font-bold text-blue-600 mt-1">{fu}</p></Card>
       </div>
+
+      {/* Root cause breakdown */}
       {rc.length > 0 && (
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-3">Root Cause Breakdown</p>
           <div className="space-y-2">{rc.slice(0, 5).map(({ c, n }) => <div key={c} className="flex items-center gap-3"><span className="text-xs text-gray-500 w-44 truncate">{c}</span><div className="flex-1"><ProgressBar pct={(n / replacements.length) * 100} color="bg-red-400" /></div><span className="text-xs text-gray-400 w-6 text-right">{n}</span></div>)}</div>
         </Card>
       )}
+
+      {/* New entry form */}
       {show && (
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-3">Log New Replacement Case</p>
@@ -2649,37 +2796,138 @@ const ReplacementLogView = ({ replacements, setReplacements }) => {
             <div><FL>Date</FL><Inp type="date" value={form.date} onChange={f("date")} /></div>
             <div><FL>Brand *</FL><Sel value={form.brand} onChange={f("brand")} options={BRANDS} placeholder="Select..." /></div>
             <div><FL>Order # *</FL><Inp value={form.orderNum} onChange={f("orderNum")} placeholder="e.g. VR-10291" /></div>
+            <div><FL>Customer Name</FL><Inp value={form.customerName} onChange={f("customerName")} placeholder="e.g. John Doe" /></div>
             <div><FL>Market Value ($)</FL><Inp type="number" value={form.marketValue} onChange={f("marketValue")} placeholder="0.00" /></div>
+            <div><FL>Status</FL><Sel value={form.status} onChange={f("status")} options={REPLACEMENT_STATUS_OPTIONS} placeholder="" /></div>
             <div className="col-span-2"><FL>Replacement Reason</FL><Inp value={form.reason} onChange={f("reason")} placeholder="e.g. Missing item in sealed pack" /></div>
             <div><FL>Root Cause</FL><Sel value={form.rootCause} onChange={f("rootCause")} options={ROOT_CAUSES} placeholder="Select..." /></div>
             <div className="grid grid-cols-2 gap-2">
               <div><FL>Preventable</FL><Sel value={form.preventable} onChange={f("preventable")} options={["Yes", "No"]} placeholder="" /></div>
               <div><FL>Follow-Up</FL><Sel value={form.followUp} onChange={f("followUp")} options={["Yes", "No"]} placeholder="" /></div>
             </div>
+            <div className="col-span-2"><FL>Replacement Items</FL><Inp value={form.replacementItems} onChange={f("replacementItems")} placeholder="e.g. 1x Holo Pack, 1x Booster" /></div>
             <div className="col-span-2"><FL>Notes</FL><Txt value={form.notes} onChange={f("notes")} rows={2} /></div>
           </div>
           <BtnPrimary onClick={add} size="md">Log Replacement</BtnPrimary>
         </Card>
       )}
+
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {REPLACEMENT_FILTERS.map(opt => (
+          <button key={opt} onClick={() => setActiveFilter(opt)}
+            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+              activeFilter === opt
+                ? "bg-blue-600 text-white border-blue-700"
+                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-700"
+            }`}>
+            {opt}
+          </button>
+        ))}
+        <span className="text-[10px] text-gray-400 ml-1">{displayRows.length} shown</span>
+      </div>
+
+      {/* Table */}
       <Card>
         <p className="text-sm font-bold text-gray-900 px-4 pt-4 pb-2">Replacement Cases</p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead><tr className="bg-gray-50 border-y border-gray-100">{["Date", "Brand", "Order #", "Reason", "Root Cause", "Value", "Prev.", "Follow-Up"].map(h => <th key={h} className="text-left px-4 py-2.5 font-semibold text-gray-500">{h}</th>)}</tr></thead>
+            <thead>
+              <tr className="bg-gray-50 border-y border-gray-100">
+                {["Date","Brand","Customer","Order #","Reason","Items","Notes","Value","Prev.","Follow-Up","Status","Actions"].map(h => (
+                  <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {replacements.map(r => (
-                <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-4 py-2.5 text-gray-500">{r.date}</td>
-                  <td className="px-4 py-2.5"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{r.brand}</span></div></td>
-                  <td className="px-4 py-2.5 font-mono text-gray-800">{r.orderNum}</td>
-                  <td className="px-4 py-2.5 text-gray-600 max-w-[140px] truncate">{r.reason}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{r.rootCause}</td>
-                  <td className="px-4 py-2.5 text-green-700 font-bold">${parseFloat(r.marketValue || 0).toFixed(2)}</td>
-                  <td className="px-4 py-2.5"><Badge label={r.preventable} className={r.preventable === "Yes" ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
-                  <td className="px-4 py-2.5"><Badge label={r.followUp} className={r.followUp === "Yes" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
-                </tr>
-              ))}
-              {replacements.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-gray-300">No replacement cases logged</td></tr>}
+              {displayRows.map(r => {
+                const isEditing = editRow === r.id;
+                return (
+                  <tr key={r.id} className={`border-b border-gray-50 ${isEditing ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                    {isEditing ? (
+                      /* ── Inline edit row ── */
+                      <>
+                        <td className="px-3 py-2">{r.date}</td>
+                        <td className="px-3 py-2"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{BRAND_SHORT[r.brand] || r.brand}</span></div></td>
+                        <td className="px-3 py-2"><Inp value={editForm.customerName || ""} onChange={ef("customerName")} placeholder="Customer" className="w-28" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.orderNum || ""} onChange={ef("orderNum")} placeholder="Order #" className="w-24" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.reason || ""} onChange={ef("reason")} placeholder="Reason" className="w-32" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.replacementItems || ""} onChange={ef("replacementItems")} placeholder="Items" className="w-36" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.notes || ""} onChange={ef("notes")} placeholder="Notes" className="w-36" /></td>
+                        <td className="px-3 py-2"><Inp type="number" value={editForm.marketValue ?? ""} onChange={ef("marketValue")} placeholder="0.00" className="w-16" /></td>
+                        <td className="px-3 py-2">
+                          <select value={editForm.preventable || "No"} onChange={e => ef("preventable")(e.target.value)} className="bg-white border border-gray-300 rounded text-xs px-1.5 py-1 w-14">
+                            <option>Yes</option><option>No</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <select value={editForm.followUp || "No"} onChange={e => ef("followUp")(e.target.value)} className="bg-white border border-gray-300 rounded text-xs px-1.5 py-1 w-14">
+                            <option>Yes</option><option>No</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <select value={editForm.status || "Open"} onChange={e => ef("status")(e.target.value)} className="bg-white border border-gray-300 rounded text-xs px-1.5 py-1 w-24">
+                            {REPLACEMENT_STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <button disabled={savingId === r.id} onClick={handleSaveEdit}
+                              className="text-[10px] font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-2 py-0.5 rounded cursor-pointer">
+                              {savingId === r.id ? "…" : "Save"}
+                            </button>
+                            <button onClick={() => { setEditRow(null); setEditForm({}); }}
+                              className="text-[10px] text-gray-500 hover:text-gray-800 cursor-pointer px-1">
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      /* ── Read row ── */
+                      <>
+                        <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.date}</td>
+                        <td className="px-3 py-2.5"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{BRAND_SHORT[r.brand] || r.brand}</span></div></td>
+                        <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{r.customerName || r.customer_name || "—"}</td>
+                        <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{r.orderNum || r.order_number || "—"}</td>
+                        <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">{r.reason || "—"}</td>
+                        <td className="px-3 py-2.5 text-gray-500 max-w-[120px] truncate">{r.replacementItems || r.replacement_items || "—"}</td>
+                        <td className="px-3 py-2.5 text-gray-400 max-w-[120px] truncate">{r.notes || "—"}</td>
+                        <td className="px-3 py-2.5 text-green-700 font-bold whitespace-nowrap">${parseFloat(r.marketValue || r.market_value || 0).toFixed(2)}</td>
+                        <td className="px-3 py-2.5"><Badge label={r.preventable} className={r.preventable === "Yes" ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
+                        <td className="px-3 py-2.5"><Badge label={r.followUp || r.follow_up} className={(r.followUp === "Yes" || r.follow_up === "Yes") ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
+                        <td className="px-3 py-2.5">
+                          {r.status
+                            ? <Badge label={r.status} className={r.status === "Reshipped" || r.status === "Resolved" ? "bg-green-50 text-green-700 border-green-200" : r.status === "Open" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
+                            : <span className="text-gray-300">—</span>
+                          }
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {/* Edit */}
+                            <button
+                              title="Edit this row"
+                              onClick={() => { setEditRow(r.id); setEditForm({ ...r }); }}
+                              className="text-gray-400 hover:text-blue-600 cursor-pointer text-sm leading-none"
+                            >✎</button>
+                            {/* Archive */}
+                            <button
+                              title="Archive this row"
+                              onClick={() => handleArchive(r)}
+                              className="text-gray-300 hover:text-red-500 cursor-pointer text-sm leading-none"
+                            >🗑</button>
+                          </div>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+              {displayRows.length === 0 && (
+                <tr><td colSpan={12} className="text-center py-8 text-gray-300">
+                  {activeFilter === "All" ? "No replacement cases logged" : `No cases match "${activeFilter}"`}
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -3142,6 +3390,19 @@ export default function JonnyOpsCommandCenter() {
   const [automationRulesLoading, setAutomationRulesLoading] = useState(false);
   const [automationRulesError, setAutomationRulesError]     = useState("");
 
+  // ── Replacements state ────────────────────────────────────────────────────────
+  const [replacementsLoading, setReplacementsLoading] = useState(false);
+  const [replacementsError,   setReplacementsError]   = useState("");
+
+  const refreshReplacements = async () => {
+    setReplacementsLoading(true);
+    setReplacementsError("");
+    const { data, error } = await fetchReplacementsFromSupabase();
+    setReplacementsLoading(false);
+    if (error) { setReplacementsError(`Replacements fetch failed: ${error.message}`); return; }
+    setReplacements(data);
+  };
+
   // Fetch active tickets from Supabase on mount (archived_at IS NULL, auto-age filter applied inside)
   useEffect(() => {
     const fetchTickets = async () => {
@@ -3156,6 +3417,9 @@ export default function JonnyOpsCommandCenter() {
 
   // Fetch ops actions on mount
   useEffect(() => { refreshOpsActions(); }, []);
+
+  // Fetch replacements on mount
+  useEffect(() => { refreshReplacements(); }, []);
 
   // Fetch automation rules on mount (non-blocking — queue falls back to safe defaults on error)
   useEffect(() => {
@@ -3205,7 +3469,7 @@ export default function JonnyOpsCommandCenter() {
       case "tickets": return <TicketQueueView tickets={tickets} setTickets={setTickets} />;
       case "browser": return <BrowserProfileView />;
       case "cs": return <CSTemplateView setTickets={setTickets} />;
-      case "replacements": return <ReplacementLogView replacements={replacements} setReplacements={setReplacements} />;
+      case "replacements": return <ReplacementLogView replacements={replacements} setReplacements={setReplacements} replacementsLoading={replacementsLoading} replacementsError={replacementsError} onRefresh={refreshReplacements} />;
       case "studio": return <StudioReadinessView studios={studios} setStudios={setStudios} />;
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
       case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} />;
