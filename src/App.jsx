@@ -424,6 +424,7 @@ const ICONS = {
   sets: <path d="M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5L8 1z" stroke="currentColor" strokeWidth="1.2" fill="none"/>,
   weekly: <path d="M2 12l3-5 3 2 3-6 3 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
   data: <><ellipse cx="8" cy="4" rx="5" ry="2" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M3 4v4c0 1.1 2.24 2 5 2s5-.9 5-2V4" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M3 8v4c0 1.1 2.24 2 5 2s5-.9 5-2V8" stroke="currentColor" strokeWidth="1.3" fill="none"/></>,
+  inbox: <><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></>,
 };
 const NavItem = ({ id, label, active, onClick, badge }) => (
   <button onClick={() => onClick(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${active ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
@@ -434,13 +435,495 @@ const NavItem = ({ id, label, active, onClick, badge }) => (
 );
 
 const NAV = [
-  { section: null, items: [{ id: "dashboard", label: "Dashboard" }] },
+  { section: null, items: [{ id: "dashboard", label: "Dashboard" }, { id: "inbox", label: "Command Inbox" }] },
   { section: "Operations", items: [{ id: "daily", label: "Daily Command Board" }, { id: "tickets", label: "Tickets" }, { id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }] },
   { section: "Content", items: [{ id: "sets", label: "Surprise Sets" }, { id: "browser", label: "Browser Profiles" }, { id: "cs", label: "CS Templates" }] },
   { section: "Reporting", items: [{ id: "weekly", label: "Report" }, { id: "data", label: "Settings" }] },
 ];
 
-// ─── REPORT GENERATION ────────────────────────────────────────────────────────
+// ─── INBOUND MESSAGE SUPABASE HELPERS ────────────────────────────────────────
+
+const fetchInboundMessagesFromSupabase = async () => {
+  if (!supabase) return { data: [], error: { message: "No Supabase client." } };
+  const { data, error } = await supabase
+    .from("inbound_messages")
+    .select("*")
+    .is("archived_at", null)
+    .order("received_at", { ascending: false });
+  if (error) { console.error("Supabase inbound fetch error:", error); return { data: [], error }; }
+  return { data: data || [], error: null };
+};
+
+const updateInboundStatusInSupabase = async (id, status) => {
+  if (!supabase || !id) return { error: null };
+  const { error } = await supabase
+    .from("inbound_messages")
+    .update({ status, updated_at: nowISO() })
+    .eq("id", id);
+  if (error) console.error("Supabase inbound status update error:", error);
+  return { error };
+};
+
+const archiveInboundInSupabase = async (id) => {
+  if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
+  const { error } = await supabase
+    .from("inbound_messages")
+    .update({ archived_at: nowISO(), updated_at: nowISO() })
+    .eq("id", id);
+  if (error) console.error("Supabase inbound archive error:", error);
+  return { error };
+};
+
+// ─── TIKTOK SHOP CHAT EMAIL NORMALIZER ───────────────────────────────────────
+// Cleans TikTok Seller Assistant email boilerplate for display only.
+// Raw message_body in Supabase is NEVER modified.
+
+const isTikTokShopMessage = (msg) =>
+  msg.channel === "TikTok Shop" ||
+  (msg.subject || "").toLowerCase().includes("a new message from tiktok shop customer");
+
+// Extract username from subject: "A new message from TikTok Shop customer <username>"
+const extractTikTokCustomerName = (subject) => {
+  const m = (subject || "").match(/tiktok shop customer\s+(\S+)/i);
+  return m ? m[1].trim() : null;
+};
+
+// Phrases that mark the END of the new-message section (history boundary).
+// The first line matching any of these terminates extraction.
+const TIKTOK_HISTORY_BOUNDARIES = [
+  /^reply in chat\s*$/i,
+  /^you can also respond by directly replying to this email/i,
+  /^if you think this message doesn't need a response/i,
+  /^your previous chat with\b/i,
+];
+
+// Phrases that mark the START of the new-message section.
+const TIKTOK_NEW_MSG_START = /^you have received new messages from\s*:?\s*$/i;
+
+// Returns true for lines that are junk within the new-message window.
+const isTikTokJunkLine = (line, username) => {
+  if (!line) return true;
+  // Lone username repetition
+  if (username && line.toLowerCase() === username.toLowerCase()) return true;
+  // Pure digits e.g. "96"
+  if (/^\d+$/.test(line)) return true;
+  // Pure symbols / pipes
+  if (/^[|/\\–—\-=*~`]+$/.test(line)) return true;
+  // Timestamp lines e.g. "1:03PM, May 14"
+  if (/^\d{1,2}:\d{2}\s*(AM|PM),?\s+\w+\.?\s+\d{1,2}$/i.test(line)) return true;
+  // Snapshot note
+  if (/note:\s*the information seen in this email is snapshot data/i.test(line)) return true;
+  // Bare URLs
+  if (/^https?:\/\/\S+$/i.test(line)) return true;
+  // Markdown links
+  if (/^\[.*\]\(https?:\/\/.*\)$/.test(line)) return true;
+  return false;
+};
+
+// Core parser: isolates the new-message section then strips junk lines.
+const cleanTikTokBody = (raw, username) => {
+  if (!raw) return "";
+
+  const allLines = raw.split(/\r?\n/).map(l => l.trim());
+
+  // ── Step 1: find start of new-message section ──────────────────────────────
+  let start = 0;
+  for (let i = 0; i < allLines.length; i++) {
+    if (TIKTOK_NEW_MSG_START.test(allLines[i])) {
+      start = i + 1; // section begins on the line AFTER the header
+      break;
+    }
+  }
+
+  // ── Step 2: find end of new-message section (history boundary) ─────────────
+  let end = allLines.length;
+  for (let i = start; i < allLines.length; i++) {
+    if (TIKTOK_HISTORY_BOUNDARIES.some(re => re.test(allLines[i]))) {
+      end = i;
+      break;
+    }
+  }
+
+  // ── Step 3: slice to new-message window, strip junk ─────────────────────────
+  const window = allLines.slice(start, end);
+  const kept = window.filter(line => !isTikTokJunkLine(line, username));
+
+  return kept.join("\n").trim();
+};
+
+// Public entry point — returns { displayName, displayBody, hasHistory }.
+// hasHistory = true when a "Your previous chat with" boundary was found,
+// used to show the optional collapsed note in the card.
+// Non-TikTok messages pass through unchanged.
+const getDisplayInboundMessage = (msg) => {
+  if (!isTikTokShopMessage(msg)) {
+    return { displayName: null, displayBody: msg.message_body || "", hasHistory: false };
+  }
+
+  const nameFromSubject = extractTikTokCustomerName(msg.subject);
+
+  // Detect history presence before cleaning
+  const rawLines = (msg.message_body || "").split(/\r?\n/).map(l => l.trim());
+  const hasHistory = rawLines.some(l => /^your previous chat with\b/i.test(l));
+
+  const displayBody = cleanTikTokBody(msg.message_body, nameFromSubject);
+
+  // Username fallback: first non-empty line after new-message header
+  let nameFromBody = null;
+  for (let i = 0; i < rawLines.length; i++) {
+    if (TIKTOK_NEW_MSG_START.test(rawLines[i])) {
+      for (let j = i + 1; j < rawLines.length; j++) {
+        if (rawLines[j]) { nameFromBody = rawLines[j]; break; }
+      }
+      break;
+    }
+  }
+
+  const displayName =
+    nameFromSubject || nameFromBody || msg.customer_name || msg.sender_name || null;
+
+  return { displayName, displayBody, hasHistory };
+};
+
+
+// ─── INBOX PRIORITY / STATUS STYLES ──────────────────────────────────────────
+const INBOX_PRIORITY_STYLE = {
+  "High":   "bg-red-50 text-red-700 border-red-200",
+  "Medium": "bg-amber-50 text-amber-700 border-amber-200",
+  "Low":    "bg-gray-100 text-gray-600 border-gray-200",
+};
+const INBOX_STATUS_STYLE = {
+  "Needs Reply":    "bg-blue-50 text-blue-700 border-blue-200",
+  "In Progress":   "bg-purple-50 text-purple-700 border-purple-200",
+  "Ticket Created":"bg-cyan-50 text-cyan-700 border-cyan-200",
+  "Closed":        "bg-green-50 text-green-700 border-green-200",
+};
+const TRIAGE_STATUS_STYLE = {
+  "Untriaged":          "bg-gray-100 text-gray-500 border-gray-200",
+  "Triaged":            "bg-teal-50 text-teal-700 border-teal-200",
+  "Needs Human Review": "bg-orange-50 text-orange-700 border-orange-200",
+  "Noise / Not CS":     "bg-gray-100 text-gray-400 border-gray-200",
+  "High Priority":      "bg-red-50 text-red-700 border-red-200",
+};
+const RISK_LEVEL_STYLE = {
+  "High":   "bg-red-50 text-red-700 border-red-200",
+  "Medium": "bg-amber-50 text-amber-700 border-amber-200",
+  "Low":    "bg-gray-100 text-gray-500 border-gray-200",
+};
+const INBOX_FILTER_OPTIONS = ["All", "Untriaged", "Needs Human Review", "High Priority", "Noise / Not CS"];
+
+// ─── COMMAND INBOX VIEW ───────────────────────────────────────────────────────
+const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets }) => {
+  const [copiedId, setCopiedId] = useState(null);
+  const [busyId, setBusyId]     = useState(null);
+  const [activeFilter, setActiveFilter] = useState("All");
+
+  const needsReply    = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
+  const inProgress    = inboundMessages.filter(m => m.status === "In Progress").length;
+  const ticketCreated = inboundMessages.filter(m => m.status === "Ticket Created").length;
+  const closed        = inboundMessages.filter(m => m.status === "Closed").length;
+
+  // ── filter logic ─────────────────────────────────────────────────────────────
+  const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
+  const filtered = inboundMessages.filter(m => {
+    if (activeFilter === "All")                 return true;
+    if (activeFilter === "Untriaged")           return isUntriaged(m);
+    if (activeFilter === "Needs Human Review")  return m.needs_human_review === true || m.needs_human_review === "true" || m.triage_status === "Needs Human Review";
+    if (activeFilter === "High Priority")       return m.risk_level === "High" || m.priority === "High" || m.triage_status === "High Priority";
+    if (activeFilter === "Noise / Not CS")      return m.triage_status === "Noise / Not CS";
+    return true;
+  });
+
+  // ── handlers ──────────────────────────────────────────────────────────────────
+  const handleArchive = async (id) => {
+    if (!window.confirm("Archive this message from the inbox?")) return;
+    setBusyId(id);
+    const { error } = await archiveInboundInSupabase(id);
+    setBusyId(null);
+    if (error) { alert(`Archive failed: ${error.message}`); return; }
+    setInboundMessages(prev => prev.filter(m => m.id !== id));
+  };
+
+  const handleStatus = async (id, status) => {
+    setBusyId(id);
+    const { error } = await updateInboundStatusInSupabase(id, status);
+    setBusyId(null);
+    if (error) { alert(`Update failed: ${error.message}`); return; }
+    setInboundMessages(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+  };
+
+  const handleCreateTicket = async (msg) => {
+    setBusyId(msg.id);
+    const { displayName, displayBody } = getDisplayInboundMessage(msg);
+    const newTicket = {
+      brand: normalizeBrandForApp(msg.brand),
+      channel: msg.channel || "Shop Chat",
+      issueType: normalizeTicketIssue(msg.issue_type),
+      priority: normalizeTicketPriority(msg.priority),
+      slaRisk: "No",
+      status: "New",
+      notes: [msg.subject, displayBody].filter(Boolean).join("\n\n"),
+      nextAction: msg.next_action || "",
+      orderNumber: msg.order_number || "",
+      customerName: displayName || msg.customer_name || msg.sender_name || "",
+      createdAt: nowISO(),
+      source: "command-inbox",
+    };
+    const { data, error } = await insertTicketToSupabase(newTicket);
+    if (error) { setBusyId(null); alert(`Ticket create failed: ${error.message}`); return; }
+    setTickets(prev => [data, ...prev]);
+    await updateInboundStatusInSupabase(msg.id, "Ticket Created");
+    setBusyId(null);
+    setInboundMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: "Ticket Created" } : m));
+  };
+
+  const handleCopy = (id, msg) => {
+    const { displayBody } = getDisplayInboundMessage(msg);
+    navigator.clipboard.writeText(displayBody || "");
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Command Inbox</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Active inbound messages — {inboundMessages.length} unarchived</p>
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={inboundLoading}
+          className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={inboundLoading ? "animate-spin" : ""}>
+            <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {inboundLoading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {/* Error banner */}
+      {inboundError && (
+        <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{inboundError}</div>
+      )}
+
+      {/* Count chips */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: "Needs Reply",    count: needsReply,    cls: "border-l-blue-500"   },
+          { label: "In Progress",    count: inProgress,    cls: "border-l-purple-500" },
+          { label: "Ticket Created", count: ticketCreated, cls: "border-l-cyan-500"   },
+          { label: "Closed",         count: closed,        cls: "border-l-green-500"  },
+        ].map(({ label, count, cls }) => (
+          <Card key={label} className={`p-4 border-l-4 ${cls}`}>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{count}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {INBOX_FILTER_OPTIONS.map(opt => (
+          <button
+            key={opt}
+            onClick={() => setActiveFilter(opt)}
+            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+              activeFilter === opt
+                ? "bg-blue-600 text-white border-blue-700"
+                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-700"
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+        <span className="text-[10px] text-gray-400 ml-1">{filtered.length} shown</span>
+      </div>
+
+      {/* Loading skeleton */}
+      {inboundLoading && inboundMessages.length === 0 && (
+        <div className="space-y-3">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 animate-pulse">
+              <div className="h-3 bg-gray-200 rounded w-1/4 mb-2" />
+              <div className="h-3 bg-gray-100 rounded w-3/4" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!inboundLoading && filtered.length === 0 && !inboundError && (
+        <div className="text-center py-16 text-gray-300">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" className="mx-auto mb-3 text-gray-200">
+            <rect x="4" y="8" width="32" height="24" rx="3" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+            <path d="M4 14l16 10 16-10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+          <p className="text-sm font-medium">{activeFilter === "All" ? "Inbox is clear" : `No messages match "${activeFilter}"`}</p>
+          <p className="text-xs mt-1">{activeFilter === "All" ? "No active inbound messages." : "Try a different filter."}</p>
+        </div>
+      )}
+
+      {/* Message cards */}
+      {filtered.map(msg => {
+        const isBusy = busyId === msg.id;
+        const statusStyle   = INBOX_STATUS_STYLE[msg.status]       || "bg-gray-100 text-gray-500 border-gray-200";
+        const priorityStyle = INBOX_PRIORITY_STYLE[msg.priority]   || "bg-gray-100 text-gray-500 border-gray-200";
+        const triageStyle   = TRIAGE_STATUS_STYLE[msg.triage_status] || "bg-gray-100 text-gray-500 border-gray-200";
+        const riskStyle     = RISK_LEVEL_STYLE[msg.risk_level]      || "bg-gray-100 text-gray-500 border-gray-200";
+        const { displayName, displayBody, hasHistory } = getDisplayInboundMessage(msg);
+        const showName = displayName || msg.sender_name || msg.customer_name;
+        const untriaged = isUntriaged(msg);
+
+        return (
+          <Card key={msg.id} className="p-4">
+            {/* Card header row */}
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <BrandPip brand={msg.brand} />
+                <span className="text-xs font-semibold text-gray-700">{msg.brand || "—"}</span>
+                {msg.channel  && <span className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{msg.channel}</span>}
+                {msg.label    && <span className="text-[10px] text-gray-500 border border-gray-200 bg-gray-50 rounded px-1.5 py-0.5">{msg.label}</span>}
+                {msg.priority && <Badge label={msg.priority} className={priorityStyle} />}
+                {msg.status   && <Badge label={msg.status}   className={statusStyle}   />}
+                {/* Triage status badge — show "Untriaged" when blank */}
+                {untriaged
+                  ? <Badge label="Untriaged" className="bg-gray-100 text-gray-400 border-gray-200" />
+                  : <Badge label={msg.triage_status} className={triageStyle} />
+                }
+                {msg.needs_human_review === true || msg.needs_human_review === "true"
+                  ? <Badge label="Human Review" className="bg-orange-50 text-orange-700 border-orange-200" />
+                  : null
+                }
+              </div>
+              <span className="text-[10px] text-gray-400 flex-shrink-0 whitespace-nowrap">{msg.received_at ? fmtDate(msg.received_at) : "—"}</span>
+            </div>
+
+            {/* Sender / subject */}
+            <div className="mb-2 space-y-0.5">
+              {showName && (
+                <p className="text-xs text-gray-600">
+                  <span className="font-semibold text-gray-800">{showName}</span>
+                  {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">· {msg.sender_email}</span>}
+                </p>
+              )}
+              {msg.subject && <p className="text-xs font-semibold text-gray-900">{msg.subject}</p>}
+            </div>
+
+            {/* Message body */}
+            {displayBody && (
+              <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 mb-2">
+                <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-5">{displayBody}</p>
+              </div>
+            )}
+
+            {/* History note */}
+            {hasHistory && (
+              <p className="text-[10px] text-gray-400 italic mb-2">Conversation history saved in raw email.</p>
+            )}
+
+            {/* ── Triage fields ── */}
+            {(msg.issue_type || msg.customer_intent || msg.risk_level || msg.triage_summary || msg.next_action || msg.recommended_reply_type || msg.confidence_score != null) && (
+              <div className="border border-gray-100 rounded-lg bg-gray-50 px-3 py-2.5 mb-3 space-y-1.5">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Triage</p>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {msg.issue_type && (
+                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Issue:</span> {msg.issue_type}</span>
+                  )}
+                  {msg.customer_intent && (
+                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Intent:</span> {msg.customer_intent}</span>
+                  )}
+                  {msg.risk_level && (
+                    <span className="inline-flex items-center gap-1 text-[11px]">
+                      <span className="font-semibold text-gray-700">Risk:</span>
+                      <Badge label={msg.risk_level} className={riskStyle} />
+                    </span>
+                  )}
+                  {msg.recommended_reply_type && (
+                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Reply type:</span> {msg.recommended_reply_type}</span>
+                  )}
+                  {msg.confidence_score != null && (
+                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Confidence:</span> {msg.confidence_score}%</span>
+                  )}
+                </div>
+
+                {msg.triage_summary && (
+                  <p className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Summary:</span> {msg.triage_summary}</p>
+                )}
+                {msg.next_action && (
+                  <p className="text-[11px] text-blue-600">→ {msg.next_action}</p>
+                )}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2">
+              {/* Mark In Progress */}
+              {msg.status !== "In Progress" && msg.status !== "Closed" && msg.status !== "Ticket Created" && (
+                <button disabled={isBusy} onClick={() => handleStatus(msg.id, "In Progress")}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 cursor-pointer transition-colors">
+                  In Progress
+                </button>
+              )}
+
+              {/* Mark Closed */}
+              {msg.status !== "Closed" && (
+                <button disabled={isBusy} onClick={() => handleStatus(msg.id, "Closed")}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 cursor-pointer transition-colors">
+                  Mark Closed
+                </button>
+              )}
+
+              {/* Create Ticket */}
+              {msg.status !== "Ticket Created" && (
+                <button disabled={isBusy} onClick={() => handleCreateTicket(msg)}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 cursor-pointer transition-colors">
+                  Create Ticket
+                </button>
+              )}
+
+              {/* Copy Message */}
+              <button onClick={() => handleCopy(msg.id, msg)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+                {copiedId === msg.id ? "Copied!" : "Copy Message"}
+              </button>
+
+              {/* Run Triage placeholder */}
+              <button
+                onClick={() => alert("Triage backend coming next.")}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 cursor-pointer transition-colors"
+              >
+                ⚡ Run Triage
+              </button>
+
+              {/* AI Draft placeholder */}
+              <button disabled title="AI draft generation coming soon"
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60">
+                ✦ AI Draft Soon
+              </button>
+
+              {/* Archive */}
+              <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 disabled:opacity-50 cursor-pointer transition-colors ml-auto">
+                <svg width="11" height="11" viewBox="0 0 13 13" fill="none">
+                  <path d="M1.5 3.5h10M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M2.5 3.5l.5 7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1l.5-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M5 6v3M8 6v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
+                Archive
+              </button>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+};
+
+
 const buildSlackSummary = ({ tickets, replacements, studios, surpriseSets, raiseScores }) => {
   const open = tickets.filter(t => t.status !== "Resolved" && t.status !== "Escalated");
   const resolved = tickets.filter(t => t.status === "Resolved");
@@ -1571,6 +2054,20 @@ export default function JonnyOpsCommandCenter() {
   const [sidebar, setSidebar] = useState(true);
   const [sidekickToast, setSidekickToast] = useState(false);
 
+  // ── Inbox state ──────────────────────────────────────────────────────────────
+  const [inboundMessages, setInboundMessages] = useState([]);
+  const [inboundLoading, setInboundLoading] = useState(false);
+  const [inboundError, setInboundError] = useState("");
+
+  const refreshInbox = async () => {
+    setInboundLoading(true);
+    setInboundError("");
+    const { data, error } = await fetchInboundMessagesFromSupabase();
+    setInboundLoading(false);
+    if (error) { setInboundError(`Inbox fetch failed: ${error.message}`); return; }
+    setInboundMessages(data);
+  };
+
   // Fetch active tickets from Supabase on mount (archived_at IS NULL, auto-age filter applied inside)
   useEffect(() => {
     const fetchTickets = async () => {
@@ -1579,6 +2076,9 @@ export default function JonnyOpsCommandCenter() {
     };
     fetchTickets();
   }, []);
+
+  // Fetch inbound messages on mount
+  useEffect(() => { refreshInbox(); }, []);
 
   // OP Sidekick — INSERT into Supabase, then refresh list
   useEffect(() => {
@@ -1603,11 +2103,13 @@ export default function JonnyOpsCommandCenter() {
 
   const openCount = tickets.filter(t => t.status !== "Resolved").length;
   const criticalSlaCount = tickets.filter(isActiveSlaRisk).length;
+  const inboxNeedsReplyCount = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
 
   const renderView = () => {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores };
     switch (activeView) {
       case "dashboard": return <DashboardView {...common} />;
+      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} />;
       case "daily": return <DailyCommandView tickets={tickets} />;
       case "tickets": return <TicketQueueView tickets={tickets} setTickets={setTickets} />;
       case "browser": return <BrowserProfileView />;
@@ -1649,7 +2151,7 @@ export default function JonnyOpsCommandCenter() {
               <div className="space-y-0.5">
                 {section.items.map(item => (
                   <NavItem key={item.id} {...item} active={activeView === item.id} onClick={setActiveView}
-                    badge={item.id === "tickets" ? criticalSlaCount : 0} />
+                    badge={item.id === "tickets" ? criticalSlaCount : item.id === "inbox" ? inboxNeedsReplyCount : 0} />
                 ))}
               </div>
             </div>
