@@ -425,6 +425,7 @@ const ICONS = {
   weekly: <path d="M2 12l3-5 3 2 3-6 3 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
   data: <><ellipse cx="8" cy="4" rx="5" ry="2" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M3 4v4c0 1.1 2.24 2 5 2s5-.9 5-2V4" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M3 8v4c0 1.1 2.24 2 5 2s5-.9 5-2V8" stroke="currentColor" strokeWidth="1.3" fill="none"/></>,
   inbox: <><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></>,
+  actions: <><path d="M2 4h9M2 8h7M2 12h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M14.5 13.5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></>,
 };
 const NavItem = ({ id, label, active, onClick, badge }) => (
   <button onClick={() => onClick(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${active ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
@@ -436,10 +437,298 @@ const NavItem = ({ id, label, active, onClick, badge }) => (
 
 const NAV = [
   { section: null, items: [{ id: "dashboard", label: "Dashboard" }, { id: "inbox", label: "Command Inbox" }] },
-  { section: "Operations", items: [{ id: "daily", label: "Daily Command Board" }, { id: "tickets", label: "Tickets" }, { id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }] },
+  { section: "Operations", items: [{ id: "actions", label: "Next Actions" }, { id: "daily", label: "Daily Command Board" }, { id: "tickets", label: "Tickets" }, { id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }] },
   { section: "Content", items: [{ id: "sets", label: "Surprise Sets" }, { id: "browser", label: "Browser Profiles" }, { id: "cs", label: "CS Templates" }] },
   { section: "Reporting", items: [{ id: "weekly", label: "Report" }, { id: "data", label: "Settings" }] },
 ];
+
+// ─── OPS ACTIONS SUPABASE HELPERS ────────────────────────────────────────────
+
+const ACTION_PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
+const fetchOpsActionsFromSupabase = async () => {
+  if (!supabase) return { data: [], error: { message: "No Supabase client." } };
+  const { data, error } = await supabase
+    .from("ops_actions")
+    .select("*")
+    .neq("status", "Completed")
+    .order("due_at",    { ascending: true,  nullsFirst: false })
+    .order("created_at",{ ascending: true });
+  if (error) { console.error("ops_actions fetch error:", error); return { data: [], error }; }
+  // Client-side priority sort on top of Supabase ordering
+  const sorted = (data || []).slice().sort((a, b) => {
+    const pa = ACTION_PRIORITY_ORDER[a.priority] ?? 9;
+    const pb = ACTION_PRIORITY_ORDER[b.priority] ?? 9;
+    return pa - pb;
+  });
+  return { data: sorted, error: null };
+};
+
+const updateOpsActionStatusInSupabase = async (id, status) => {
+  if (!supabase || !id) return { error: null };
+  const payload = { status, updated_at: nowISO() };
+  if (status === "Completed") payload.completed_at = nowISO();
+  const { error } = await supabase.from("ops_actions").update(payload).eq("id", id);
+  if (error) console.error("ops_actions status update error:", error);
+  return { error };
+};
+
+const insertOpsActionToSupabase = async (row) => {
+  if (!supabase) return { data: null, error: { message: "No Supabase client." } };
+  const { data, error } = await supabase.from("ops_actions").insert([row]).select("*").single();
+  if (error) console.error("ops_actions insert error:", error);
+  return { data, error };
+};
+
+// Deterministic due_at from priority
+const defaultDueAt = (priority) => {
+  const d = new Date();
+  if (priority === "Critical" || priority === "High") {
+    d.setHours(23, 59, 59, 0); // end of today
+    return d.toISOString();
+  }
+  if (priority === "Medium") {
+    d.setDate(d.getDate() + 1);
+    d.setHours(23, 59, 59, 0);
+    return d.toISOString();
+  }
+  return null; // Low — no due date
+};
+
+// Derive action_type from triage fields
+const deriveActionType = (msg) => {
+  const rt = (msg.recommended_reply_type || "").toLowerCase();
+  const it = (msg.issue_type || "").toLowerCase();
+  if (rt === "archive_noise" || it === "noise / not cs") return "Noise / Archive";
+  if (it.includes("missing package"))    return "Investigate Shipment";
+  if (it.includes("missing item"))       return "Replacement Needed";
+  if (it.includes("wrong item"))         return "Replacement Needed";
+  if (it.includes("refund"))             return "Process Refund";
+  if (it.includes("return"))             return "Process Return";
+  if (it.includes("follow-up") || it.includes("follow up")) return "Customer Follow-Up";
+  if (msg.needs_human_review === true || msg.needs_human_review === "true") return "Human Review Required";
+  return "Follow Up";
+};
+
+// Derive short title for the action card
+const deriveActionTitle = (msg) => {
+  const name = msg.customer_name || msg.sender_name || "Customer";
+  const it   = msg.issue_type || "inquiry";
+  return `${it} — ${name}`.slice(0, 80);
+};
+
+// ─── ACTION PRIORITY / STATUS STYLES ─────────────────────────────────────────
+const ACTION_PRIORITY_STYLE = {
+  Critical: "bg-red-100 text-red-800 border-red-300",
+  High:     "bg-red-50 text-red-700 border-red-200",
+  Medium:   "bg-amber-50 text-amber-700 border-amber-200",
+  Low:      "bg-gray-100 text-gray-600 border-gray-200",
+};
+const ACTION_STATUS_STYLE = {
+  "Open":                "bg-blue-50 text-blue-700 border-blue-200",
+  "In Progress":         "bg-purple-50 text-purple-700 border-purple-200",
+  "Waiting on Customer": "bg-amber-50 text-amber-700 border-amber-200",
+  "Replacement Needed":  "bg-orange-50 text-orange-700 border-orange-200",
+  "Completed":           "bg-green-50 text-green-700 border-green-200",
+};
+const ACTION_FILTERS = ["All", "Due Today", "Overdue", "High Priority", "Waiting on Customer", "Replacement Needed"];
+
+// ─── NEXT ACTION QUEUE VIEW ───────────────────────────────────────────────────
+const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, onRefresh, setActiveView }) => {
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [busyId, setBusyId] = useState(null);
+
+  const now = new Date();
+  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+
+  const isOverdue   = (a) => a.due_at && new Date(a.due_at) < now;
+  const isDueToday  = (a) => a.due_at && new Date(a.due_at) <= todayEnd && !isOverdue(a);
+  const isHighPlus  = (a) => a.priority === "High" || a.priority === "Critical";
+
+  const openCount     = opsActions.length;
+  const dueTodayCount = opsActions.filter(isDueToday).length;
+  const overdueCount  = opsActions.filter(isOverdue).length;
+  const highCount     = opsActions.filter(isHighPlus).length;
+
+  const filtered = opsActions.filter(a => {
+    if (activeFilter === "All")                  return true;
+    if (activeFilter === "Due Today")            return isDueToday(a);
+    if (activeFilter === "Overdue")              return isOverdue(a);
+    if (activeFilter === "High Priority")        return isHighPlus(a);
+    if (activeFilter === "Waiting on Customer")  return a.status === "Waiting on Customer";
+    if (activeFilter === "Replacement Needed")   return a.status === "Replacement Needed" || a.action_type === "Replacement Needed";
+    return true;
+  });
+
+  const handleStatus = async (id, status) => {
+    setBusyId(id);
+    const { error } = await updateOpsActionStatusInSupabase(id, status);
+    setBusyId(null);
+    if (error) { alert(`Update failed: ${error.message}`); return; }
+    if (status === "Completed") {
+      setOpsActions(prev => prev.filter(a => a.id !== id));
+    } else {
+      setOpsActions(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    }
+  };
+
+  const fmtDue = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    const isToday = d.toDateString() === now.toDateString();
+    return isToday ? "Due today" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Next Action Queue</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{opsActions.length} open actions</p>
+        </div>
+        <button onClick={onRefresh} disabled={opsLoading}
+          className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={opsLoading ? "animate-spin" : ""}>
+            <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {opsLoading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {opsError && <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{opsError}</div>}
+
+      {/* Count chips */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: "Open",         count: openCount,     cls: "border-l-blue-500"  },
+          { label: "Due Today",    count: dueTodayCount, cls: "border-l-amber-500" },
+          { label: "Overdue",      count: overdueCount,  cls: "border-l-red-500"   },
+          { label: "High Priority",count: highCount,     cls: "border-l-orange-500"},
+        ].map(({ label, count, cls }) => (
+          <Card key={label} className={`p-4 border-l-4 ${cls}`}>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{count}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {ACTION_FILTERS.map(opt => (
+          <button key={opt} onClick={() => setActiveFilter(opt)}
+            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+              activeFilter === opt
+                ? "bg-blue-600 text-white border-blue-700"
+                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-700"
+            }`}>
+            {opt}
+          </button>
+        ))}
+        <span className="text-[10px] text-gray-400 ml-1">{filtered.length} shown</span>
+      </div>
+
+      {/* Loading skeleton */}
+      {opsLoading && opsActions.length === 0 && (
+        <div className="space-y-2">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 animate-pulse">
+              <div className="h-3 bg-gray-200 rounded w-1/3 mb-2" />
+              <div className="h-3 bg-gray-100 rounded w-2/3" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!opsLoading && filtered.length === 0 && !opsError && (
+        <div className="text-center py-16 text-gray-300">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" className="mx-auto mb-3">
+            <rect x="4" y="6" width="32" height="28" rx="3" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+            <path d="M12 15h16M12 21h12M12 27h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+          <p className="text-sm font-medium">{activeFilter === "All" ? "Queue is clear" : `No actions match "${activeFilter}"`}</p>
+          <p className="text-xs mt-1">{activeFilter === "All" ? "No open actions." : "Try a different filter."}</p>
+        </div>
+      )}
+
+      {/* Action cards */}
+      <div className="space-y-2">
+        {filtered.map(action => {
+          const isBusy     = busyId === action.id;
+          const overdue    = isOverdue(action);
+          const dueDisplay = fmtDue(action.due_at);
+          const prStyle    = ACTION_PRIORITY_STYLE[action.priority] || "bg-gray-100 text-gray-500 border-gray-200";
+          const stStyle    = ACTION_STATUS_STYLE[action.status]     || "bg-gray-100 text-gray-500 border-gray-200";
+
+          return (
+            <Card key={action.id} className={`p-4 ${overdue ? "border-red-200" : ""}`}>
+              {/* Header row */}
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  {action.brand && <BrandPip brand={action.brand} />}
+                  {action.brand && <span className="text-xs font-semibold text-gray-700">{BRAND_SHORT[action.brand] || action.brand}</span>}
+                  {action.action_type && <span className="text-[10px] text-gray-500 border border-gray-200 bg-gray-50 rounded px-1.5 py-0.5">{action.action_type}</span>}
+                  {action.priority && <Badge label={action.priority} className={prStyle} />}
+                  {action.status   && <Badge label={action.status}   className={stStyle} />}
+                  {overdue && <Badge label="Overdue" className="bg-red-100 text-red-700 border-red-300" />}
+                </div>
+                {dueDisplay && (
+                  <span className={`text-[10px] flex-shrink-0 whitespace-nowrap font-medium ${overdue ? "text-red-600" : "text-gray-400"}`}>{dueDisplay}</span>
+                )}
+              </div>
+
+              {/* Title + details */}
+              {action.title   && <p className="text-xs font-semibold text-gray-900 mb-1">{action.title}</p>}
+              {action.details && <p className="text-[11px] text-gray-500 mb-2 line-clamp-3 leading-relaxed">{action.details}</p>}
+
+              {/* Customer info */}
+              {(action.customer_name || action.customer_email) && (
+                <p className="text-[10px] text-gray-400 mb-2">
+                  {action.customer_name && <span className="font-medium text-gray-600">{action.customer_name}</span>}
+                  {action.customer_email && <span className="ml-1">· {action.customer_email}</span>}
+                </p>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex flex-wrap gap-1.5">
+                {action.status !== "In Progress" && (
+                  <button disabled={isBusy} onClick={() => handleStatus(action.id, "In Progress")}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 cursor-pointer transition-colors">
+                    In Progress
+                  </button>
+                )}
+                {action.status !== "Waiting on Customer" && (
+                  <button disabled={isBusy} onClick={() => handleStatus(action.id, "Waiting on Customer")}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 cursor-pointer transition-colors">
+                    Waiting
+                  </button>
+                )}
+                <button disabled={isBusy} onClick={() => handleStatus(action.id, "Completed")}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 cursor-pointer transition-colors">
+                  ✓ Complete
+                </button>
+                {action.inbound_message_id && (
+                  <button onClick={() => setActiveView("inbox")}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+                    Open Message ↗
+                  </button>
+                )}
+                {action.ticket_id && (
+                  <button onClick={() => setActiveView("tickets")}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+                    Open Ticket ↗
+                  </button>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 // ─── INBOUND MESSAGE SUPABASE HELPERS ────────────────────────────────────────
 
@@ -613,7 +902,7 @@ const RISK_LEVEL_STYLE = {
 const INBOX_FILTER_OPTIONS = ["All", "Untriaged", "Needs Human Review", "High Priority", "Noise / Not CS"];
 
 // ─── COMMAND INBOX VIEW ───────────────────────────────────────────────────────
-const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets }) => {
+const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions }) => {
   const [copiedId, setCopiedId] = useState(null);
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -675,6 +964,49 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     await updateInboundStatusInSupabase(msg.id, "Ticket Created");
     setBusyId(null);
     setInboundMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: "Ticket Created" } : m));
+  };
+
+  const handleCreateAction = async (msg) => {
+    // Duplicate guard: check for an existing open action for this message
+    if (supabase) {
+      const { data: existing } = await supabase
+        .from("ops_actions")
+        .select("id")
+        .eq("inbound_message_id", msg.id)
+        .neq("status", "Completed")
+        .limit(1);
+      if (existing && existing.length > 0) {
+        alert("An open action already exists for this message.");
+        return;
+      }
+    }
+
+    setBusyId(msg.id);
+    const { displayName, displayBody } = getDisplayInboundMessage(msg);
+    const priority = normalizeTicketPriority(msg.priority);
+    const details = [msg.triage_summary, msg.next_action, displayBody]
+      .filter(Boolean).join("\n\n").slice(0, 1000);
+    const row = {
+      inbound_message_id: msg.id,
+      brand:              msg.brand        || null,
+      channel:            msg.channel      || null,
+      customer_name:      displayName || msg.customer_name || msg.sender_name || null,
+      customer_email:     msg.sender_email || null,
+      action_type:        deriveActionType(msg),
+      title:              deriveActionTitle(msg),
+      details:            details          || null,
+      priority,
+      status:             "Open",
+      due_at:             defaultDueAt(priority),
+      source:             "command-inbox",
+      created_at:         nowISO(),
+      updated_at:         nowISO(),
+    };
+    const { data: inserted, error } = await insertOpsActionToSupabase(row);
+    setBusyId(null);
+    if (error) { alert(`Create action failed: ${error.message}`); return; }
+    // Push returned row into local Next Actions state so it shows immediately
+    if (inserted) setOpsActions(prev => [inserted, ...prev]);
   };
 
   const handleCopy = (id, msg) => {
@@ -1060,6 +1392,27 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               >
                 {isDraftBusy ? "Drafting…" : "✦ Generate Draft"}
               </button>
+
+              {/* Create Action — disabled/muted if an open action already exists */}
+              {(() => {
+                const hasOpenAction = opsActions.some(
+                  a => a.inbound_message_id === msg.id && a.status !== "Completed"
+                );
+                return (
+                  <button
+                    disabled={isBusy || hasOpenAction}
+                    onClick={() => handleCreateAction(msg)}
+                    title={hasOpenAction ? "An open action already exists for this message" : "Create a Next Action from this message"}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${
+                      hasOpenAction
+                        ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                        : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+                    }`}
+                  >
+                    {hasOpenAction ? "✓ Action exists" : "+ Action"}
+                  </button>
+                );
+              })()}
 
               {/* Archive */}
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
@@ -2223,6 +2576,20 @@ export default function JonnyOpsCommandCenter() {
     setInboundMessages(data);
   };
 
+  // ── Next Actions state ────────────────────────────────────────────────────────
+  const [opsActions, setOpsActions] = useState([]);
+  const [opsLoading, setOpsLoading] = useState(false);
+  const [opsError, setOpsError]     = useState("");
+
+  const refreshOpsActions = async () => {
+    setOpsLoading(true);
+    setOpsError("");
+    const { data, error } = await fetchOpsActionsFromSupabase();
+    setOpsLoading(false);
+    if (error) { setOpsError(`Actions fetch failed: ${error.message}`); return; }
+    setOpsActions(data);
+  };
+
   // Fetch active tickets from Supabase on mount (archived_at IS NULL, auto-age filter applied inside)
   useEffect(() => {
     const fetchTickets = async () => {
@@ -2234,6 +2601,9 @@ export default function JonnyOpsCommandCenter() {
 
   // Fetch inbound messages on mount
   useEffect(() => { refreshInbox(); }, []);
+
+  // Fetch ops actions on mount
+  useEffect(() => { refreshOpsActions(); }, []);
 
   // OP Sidekick — INSERT into Supabase, then refresh list
   useEffect(() => {
@@ -2259,12 +2629,14 @@ export default function JonnyOpsCommandCenter() {
   const openCount = tickets.filter(t => t.status !== "Resolved").length;
   const criticalSlaCount = tickets.filter(isActiveSlaRisk).length;
   const inboxNeedsReplyCount = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
+  const opsOpenCount = opsActions.length;
 
   const renderView = () => {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores };
     switch (activeView) {
       case "dashboard": return <DashboardView {...common} />;
-      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} />;
+      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} opsActions={opsActions} setOpsActions={setOpsActions} />;
+      case "actions": return <NextActionQueueView opsActions={opsActions} setOpsActions={setOpsActions} opsLoading={opsLoading} opsError={opsError} onRefresh={refreshOpsActions} setActiveView={setActiveView} />;
       case "daily": return <DailyCommandView tickets={tickets} />;
       case "tickets": return <TicketQueueView tickets={tickets} setTickets={setTickets} />;
       case "browser": return <BrowserProfileView />;
@@ -2306,7 +2678,7 @@ export default function JonnyOpsCommandCenter() {
               <div className="space-y-0.5">
                 {section.items.map(item => (
                   <NavItem key={item.id} {...item} active={activeView === item.id} onClick={setActiveView}
-                    badge={item.id === "tickets" ? criticalSlaCount : item.id === "inbox" ? inboxNeedsReplyCount : 0} />
+                    badge={item.id === "tickets" ? criticalSlaCount : item.id === "inbox" ? inboxNeedsReplyCount : item.id === "actions" ? opsOpenCount : 0} />
                 ))}
               </div>
             </div>
