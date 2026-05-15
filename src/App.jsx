@@ -730,6 +730,77 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
   );
 };
 
+// ─── AUTOMATION RULES SUPABASE HELPERS ───────────────────────────────────────
+
+const fetchAutomationRulesFromSupabase = async () => {
+  if (!supabase) return { data: [], error: { message: "No Supabase client." } };
+  const { data, error } = await supabase
+    .from("automation_rules")
+    .select("*")
+    .eq("is_enabled", true)
+    .order("created_at", { ascending: true });
+  if (error) { console.error("automation_rules fetch error:", error); return { data: [], error }; }
+  return { data: data || [], error: null };
+};
+
+// Match priority (highest to lowest specificity):
+//   1. brand + channel + issue_type + recommended_reply_type
+//   2. brand + issue_type
+//   3. channel + issue_type
+//   4. issue_type only
+//   5. recommended_reply_type only
+//   6. null (no match)
+const findAutomationRule = (rules, msg) => {
+  if (!rules || rules.length === 0) return null;
+  const brand   = (msg.brand                   || "").toLowerCase();
+  const channel = (msg.channel                 || "").toLowerCase();
+  const issue   = (msg.issue_type              || "").toLowerCase();
+  const rrt     = (msg.recommended_reply_type  || "").toLowerCase();
+
+  const match = (rule) => {
+    const rb  = (rule.brand                  || "").toLowerCase();
+    const rc  = (rule.channel                || "").toLowerCase();
+    const ri  = (rule.issue_type             || "").toLowerCase();
+    const rr  = (rule.recommended_reply_type || "").toLowerCase();
+    return { rb, rc, ri, rr };
+  };
+
+  // Tier 1: all four fields
+  let found = rules.find(r => {
+    const { rb, rc, ri, rr } = match(r);
+    return rb && rc && ri && rr && rb === brand && rc === channel && ri === issue && rr === rrt;
+  });
+  if (found) return found;
+
+  // Tier 2: brand + issue_type
+  found = rules.find(r => {
+    const { rb, ri } = match(r);
+    return rb && ri && rb === brand && ri === issue;
+  });
+  if (found) return found;
+
+  // Tier 3: channel + issue_type
+  found = rules.find(r => {
+    const { rc, ri } = match(r);
+    return rc && ri && rc === channel && ri === issue;
+  });
+  if (found) return found;
+
+  // Tier 4: issue_type only
+  found = rules.find(r => {
+    const { rb, rc, ri } = match(r);
+    return ri && !rb && !rc && ri === issue;
+  });
+  if (found) return found;
+
+  // Tier 5: recommended_reply_type only
+  found = rules.find(r => {
+    const { rb, rc, ri, rr } = match(r);
+    return rr && !rb && !rc && !ri && rr === rrt;
+  });
+  return found || null;
+};
+
 // ─── INBOUND MESSAGE SUPABASE HELPERS ────────────────────────────────────────
 
 const fetchInboundMessagesFromSupabase = async () => {
@@ -902,7 +973,7 @@ const RISK_LEVEL_STYLE = {
 const INBOX_FILTER_OPTIONS = ["All", "Untriaged", "Needs Human Review", "High Priority", "Noise / Not CS"];
 
 // ─── COMMAND INBOX VIEW ───────────────────────────────────────────────────────
-const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions }) => {
+const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [copiedId, setCopiedId] = useState(null);
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -1095,13 +1166,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       m => !m.triage_status || m.triage_status === "Untriaged"
     );
     if (candidates.length === 0) {
-      setQueueSummary({ processed: 0, drafted: 0, actions: 0, skipped: 0, note: "No untriaged messages to process." });
+      setQueueSummary({ processed: 0, drafted: 0, actions: 0, skipped: 0, archivedNoise: 0, note: "No untriaged messages to process." });
       return;
     }
 
     setQueueRunning(true);
     setQueueSummary(null);
-    let drafted = 0, actionsCreated = 0, skipped = 0;
+    let drafted = 0, actionsCreated = 0, skipped = 0, archivedNoise = 0;
 
     for (let i = 0; i < candidates.length; i++) {
       const msg = candidates[i];
@@ -1119,31 +1190,58 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         }
       } catch (_) { /* non-fatal */ }
 
-      // ── Step 2: Skip noise ──────────────────────────────────────────────────
+      // ── Step 2: Find matching automation rule ───────────────────────────────
+      const rule = findAutomationRule(automationRules, triaged);
+
+      // ── Step 3: Noise handling ──────────────────────────────────────────────
       const isNoise = triaged.triage_status === "Noise / Not CS" ||
         triaged.issue_type === "Noise / Not CS";
-      if (isNoise) { skipped++; continue; }
 
-      // ── Step 3: Draft if needs human review and no draft yet ─────────────────
-      const wantsReview = triaged.needs_human_review === true ||
-        triaged.needs_human_review === "true";
-      if (wantsReview && !triaged.ai_draft) {
+      if (isNoise) {
+        // If rule says auto_archive_noise, archive it immediately
+        if (rule?.auto_archive_noise) {
+          try {
+            await supabase
+              .from("inbound_messages")
+              .update({ archived_at: nowISO(), updated_at: nowISO() })
+              .eq("id", triaged.id);
+            setInboundMessages(prev => prev.filter(m => m.id !== triaged.id));
+            archivedNoise++;
+          } catch (_) { /* non-fatal */ }
+        } else {
+          skipped++;
+        }
+        continue;
+      }
+
+      // ── Step 4: Draft ───────────────────────────────────────────────────────
+      // Rule-driven if rule exists; safe default = draft only if needs_human_review
+      const shouldDraft = rule
+        ? rule.auto_draft === true
+        : (triaged.needs_human_review === true || triaged.needs_human_review === "true");
+
+      if (shouldDraft && !triaged.ai_draft) {
         try {
           const { data: dData, error: dErr } = await supabase.functions.invoke(
-            "draft-inbound-reply", { body: { message_id: msg.id } }
+            "draft-inbound-reply", { body: { message_id: triaged.id } }
           );
           if (!dErr && dData?.message) {
             triaged = { ...triaged, ...dData.message };
-            setInboundMessages(prev => prev.map(m => m.id === msg.id ? triaged : m));
+            setInboundMessages(prev => prev.map(m => m.id === triaged.id ? triaged : m));
             drafted++;
           }
         } catch (_) { /* non-fatal */ }
       }
 
-      // ── Step 4: Create action if next_action and no open action exists ────────
-      if (triaged.next_action) {
+      // ── Step 5: Create action ───────────────────────────────────────────────
+      // Rule-driven if rule exists; safe default = create if next_action is set
+      const shouldCreateAction = rule
+        ? rule.auto_create_action === true
+        : !!triaged.next_action;
+
+      if (shouldCreateAction) {
         const alreadyHasAction = opsActions.some(
-          a => a.inbound_message_id === msg.id && a.status !== "Completed"
+          a => a.inbound_message_id === triaged.id && a.status !== "Completed"
         );
         if (!alreadyHasAction) {
           const { displayName, displayBody } = getDisplayInboundMessage(triaged);
@@ -1156,7 +1254,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             channel:            triaged.channel      || null,
             customer_name:      displayName || triaged.customer_name || triaged.sender_name || null,
             customer_email:     triaged.sender_email || null,
-            action_type:        deriveActionType(triaged),
+            action_type:        rule?.action_type || deriveActionType(triaged),
             title:              deriveActionTitle(triaged),
             details:            details || null,
             priority,
@@ -1177,7 +1275,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
     setQueueRunning(false);
     setQueueProgress("");
-    setQueueSummary({ processed: candidates.length, drafted, actions: actionsCreated, skipped });
+    setQueueSummary({ processed: candidates.length, drafted, actions: actionsCreated, skipped, archivedNoise });
   };
 
   return (
@@ -1186,7 +1284,22 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Command Inbox</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Active inbound messages — {inboundMessages.length} unarchived</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-gray-400">Active inbound messages — {inboundMessages.length} unarchived</p>
+            {/* Automation rules indicator */}
+            {automationRulesLoading
+              ? <span className="text-[10px] text-gray-400 italic">Loading rules…</span>
+              : <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                  automationRules.length > 0
+                    ? "bg-teal-50 text-teal-700 border-teal-200"
+                    : "bg-gray-100 text-gray-400 border-gray-200"
+                }`}>
+                  {automationRules.length > 0
+                    ? `${automationRules.length} automation rule${automationRules.length !== 1 ? "s" : ""} active`
+                    : "No automation rules"}
+                </span>
+            }
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Process Queue */}
@@ -1232,6 +1345,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 <span className="text-xs text-teal-700">Processed <strong>{queueSummary.processed}</strong></span>
                 <span className="text-xs text-teal-700">Drafted <strong>{queueSummary.drafted}</strong></span>
                 <span className="text-xs text-teal-700">Actions created <strong>{queueSummary.actions}</strong></span>
+                {queueSummary.archivedNoise > 0 && <span className="text-xs text-gray-500">Archived noise <strong>{queueSummary.archivedNoise}</strong></span>}
                 {queueSummary.skipped > 0 && <span className="text-xs text-gray-500">Skipped noise <strong>{queueSummary.skipped}</strong></span>}
               </>
             )}
@@ -2724,6 +2838,11 @@ export default function JonnyOpsCommandCenter() {
     setOpsActions(data);
   };
 
+  // ── Automation Rules state ────────────────────────────────────────────────────
+  const [automationRules, setAutomationRules]           = useState([]);
+  const [automationRulesLoading, setAutomationRulesLoading] = useState(false);
+  const [automationRulesError, setAutomationRulesError]     = useState("");
+
   // Fetch active tickets from Supabase on mount (archived_at IS NULL, auto-age filter applied inside)
   useEffect(() => {
     const fetchTickets = async () => {
@@ -2738,6 +2857,18 @@ export default function JonnyOpsCommandCenter() {
 
   // Fetch ops actions on mount
   useEffect(() => { refreshOpsActions(); }, []);
+
+  // Fetch automation rules on mount (non-blocking — queue falls back to safe defaults on error)
+  useEffect(() => {
+    const load = async () => {
+      setAutomationRulesLoading(true);
+      const { data, error } = await fetchAutomationRulesFromSupabase();
+      setAutomationRulesLoading(false);
+      if (error) { setAutomationRulesError(error.message); return; }
+      setAutomationRules(data);
+    };
+    load();
+  }, []);
 
   // OP Sidekick — INSERT into Supabase, then refresh list
   useEffect(() => {
@@ -2769,7 +2900,7 @@ export default function JonnyOpsCommandCenter() {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores };
     switch (activeView) {
       case "dashboard": return <DashboardView {...common} />;
-      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} opsActions={opsActions} setOpsActions={setOpsActions} />;
+      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
       case "actions": return <NextActionQueueView opsActions={opsActions} setOpsActions={setOpsActions} opsLoading={opsLoading} opsError={opsError} onRefresh={refreshOpsActions} setActiveView={setActiveView} />;
       case "daily": return <DailyCommandView tickets={tickets} />;
       case "tickets": return <TicketQueueView tickets={tickets} setTickets={setTickets} />;
