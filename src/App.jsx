@@ -1085,26 +1085,160 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     ));
   };
 
+  // ── Process Queue state ───────────────────────────────────────────────────────
+  const [queueRunning, setQueueRunning]   = useState(false);
+  const [queueProgress, setQueueProgress] = useState("");
+  const [queueSummary, setQueueSummary]   = useState(null);
+
+  const handleProcessQueue = async () => {
+    const candidates = inboundMessages.filter(
+      m => !m.triage_status || m.triage_status === "Untriaged"
+    );
+    if (candidates.length === 0) {
+      setQueueSummary({ processed: 0, drafted: 0, actions: 0, skipped: 0, note: "No untriaged messages to process." });
+      return;
+    }
+
+    setQueueRunning(true);
+    setQueueSummary(null);
+    let drafted = 0, actionsCreated = 0, skipped = 0;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const msg = candidates[i];
+      setQueueProgress(`Processing ${i + 1} of ${candidates.length}…`);
+
+      // ── Step 1: Triage ──────────────────────────────────────────────────────
+      let triaged = msg;
+      try {
+        const { data: tData, error: tErr } = await supabase.functions.invoke(
+          "triage-inbound-message", { body: { message_id: msg.id } }
+        );
+        if (!tErr && tData?.message) {
+          triaged = { ...msg, ...tData.message };
+          setInboundMessages(prev => prev.map(m => m.id === msg.id ? triaged : m));
+        }
+      } catch (_) { /* non-fatal */ }
+
+      // ── Step 2: Skip noise ──────────────────────────────────────────────────
+      const isNoise = triaged.triage_status === "Noise / Not CS" ||
+        triaged.issue_type === "Noise / Not CS";
+      if (isNoise) { skipped++; continue; }
+
+      // ── Step 3: Draft if needs human review and no draft yet ─────────────────
+      const wantsReview = triaged.needs_human_review === true ||
+        triaged.needs_human_review === "true";
+      if (wantsReview && !triaged.ai_draft) {
+        try {
+          const { data: dData, error: dErr } = await supabase.functions.invoke(
+            "draft-inbound-reply", { body: { message_id: msg.id } }
+          );
+          if (!dErr && dData?.message) {
+            triaged = { ...triaged, ...dData.message };
+            setInboundMessages(prev => prev.map(m => m.id === msg.id ? triaged : m));
+            drafted++;
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+
+      // ── Step 4: Create action if next_action and no open action exists ────────
+      if (triaged.next_action) {
+        const alreadyHasAction = opsActions.some(
+          a => a.inbound_message_id === msg.id && a.status !== "Completed"
+        );
+        if (!alreadyHasAction) {
+          const { displayName, displayBody } = getDisplayInboundMessage(triaged);
+          const priority = normalizeTicketPriority(triaged.priority);
+          const details  = [triaged.triage_summary, triaged.next_action, displayBody]
+            .filter(Boolean).join("\n\n").slice(0, 1000);
+          const row = {
+            inbound_message_id: triaged.id,
+            brand:              triaged.brand        || null,
+            channel:            triaged.channel      || null,
+            customer_name:      displayName || triaged.customer_name || triaged.sender_name || null,
+            customer_email:     triaged.sender_email || null,
+            action_type:        deriveActionType(triaged),
+            title:              deriveActionTitle(triaged),
+            details:            details || null,
+            priority,
+            status:             "Open",
+            due_at:             defaultDueAt(priority),
+            source:             "process-queue",
+            created_at:         nowISO(),
+            updated_at:         nowISO(),
+          };
+          const { data: inserted, error: aErr } = await insertOpsActionToSupabase(row);
+          if (!aErr && inserted) {
+            setOpsActions(prev => [inserted, ...prev]);
+            actionsCreated++;
+          }
+        }
+      }
+    }
+
+    setQueueRunning(false);
+    setQueueProgress("");
+    setQueueSummary({ processed: candidates.length, drafted, actions: actionsCreated, skipped });
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Command Inbox</h2>
           <p className="text-xs text-gray-400 mt-0.5">Active inbound messages — {inboundMessages.length} unarchived</p>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={inboundLoading}
-          className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={inboundLoading ? "animate-spin" : ""}>
-            <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          {inboundLoading ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Process Queue */}
+          <button
+            onClick={handleProcessQueue}
+            disabled={queueRunning || inboundLoading}
+            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg border border-blue-700 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+          >
+            {queueRunning ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin flex-shrink-0">
+                  <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {queueProgress || "Processing…"}
+              </>
+            ) : "⚡ Process Queue"}
+          </button>
+          {/* Refresh */}
+          <button
+            onClick={onRefresh}
+            disabled={inboundLoading || queueRunning}
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={inboundLoading ? "animate-spin" : ""}>
+              <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {inboundLoading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
       </div>
+
+      {/* Queue summary banner */}
+      {queueSummary && (
+        <div className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-4 flex-wrap">
+            {queueSummary.note ? (
+              <span className="text-xs text-teal-700 font-medium">{queueSummary.note}</span>
+            ) : (
+              <>
+                <span className="text-xs text-teal-800 font-semibold">Queue complete</span>
+                <span className="text-xs text-teal-700">Processed <strong>{queueSummary.processed}</strong></span>
+                <span className="text-xs text-teal-700">Drafted <strong>{queueSummary.drafted}</strong></span>
+                <span className="text-xs text-teal-700">Actions created <strong>{queueSummary.actions}</strong></span>
+                {queueSummary.skipped > 0 && <span className="text-xs text-gray-500">Skipped noise <strong>{queueSummary.skipped}</strong></span>}
+              </>
+            )}
+          </div>
+          <button onClick={() => setQueueSummary(null)} className="text-teal-400 hover:text-teal-700 text-lg leading-none ml-3 flex-shrink-0">×</button>
+        </div>
+      )}
 
       {/* Error banner */}
       {inboundError && (
