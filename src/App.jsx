@@ -970,7 +970,97 @@ const RISK_LEVEL_STYLE = {
   "Medium": "bg-amber-50 text-amber-700 border-amber-200",
   "Low":    "bg-gray-100 text-gray-500 border-gray-200",
 };
-const INBOX_FILTER_OPTIONS = ["All", "Untriaged", "Needs Human Review", "High Priority", "Noise / Not CS"];
+const INBOX_FILTER_OPTIONS = ["All", "TikTok DMs", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority"];
+
+// ─── INBOX MESSAGE CLASSIFICATION HELPERS ────────────────────────────────────
+
+// Format an ISO timestamp in Pacific time. Gracefully returns "" on bad input.
+const fmtPacific = (iso) => {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
+      month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit",
+      hour12: true,
+    });
+  } catch { return ""; }
+};
+
+// Returns the best display timestamp + a label ("Received" or "Imported").
+const getInboundTimestamp = (msg) => {
+  const recv = msg.email_received_at || msg.received_at;
+  if (recv) return { iso: recv, label: "Received", display: fmtPacific(recv) };
+  if (msg.created_at) return { iso: msg.created_at, label: "Imported", display: fmtPacific(msg.created_at) };
+  return { iso: null, label: "", display: "" };
+};
+
+// Detect if an inbound message is a TikTok refund/return notification.
+const isTikTokRefund = (msg) => {
+  const subj = (msg.subject || "").toLowerCase();
+  const body = (msg.message_body || "").toLowerCase();
+  const lbl  = (msg.label || "").toLowerCase();
+  const chan  = (msg.channel || "").toLowerCase();
+  if (/return\s*\/?\s*refund request received/i.test(msg.subject || "")) return true;
+  if (/refund request received/i.test(msg.subject || "")) return true;
+  if (/return request received/i.test(msg.subject || "")) return true;
+  if ((chan.includes("tiktok") || lbl.includes("tiktok")) &&
+      (subj.includes("refund") || subj.includes("return"))) return true;
+  if (body.includes("refund request") || body.includes("return request")) return true;
+  return false;
+};
+
+// Returns a source category string for a message.
+const classifyInboundSource = (msg) => {
+  if (isTikTokRefund(msg)) return "TikTok Refund";
+  const chan  = (msg.channel || "").toLowerCase();
+  const src   = (msg.source  || "").toLowerCase();
+  const lbl   = (msg.label   || "").toLowerCase();
+  const subj  = (msg.subject || "").toLowerCase();
+  const noise = (msg.triage_status || "") === "Noise / Not CS" ||
+                (msg.issue_type    || "") === "Noise / Not CS";
+  if (noise) return "Noise";
+  if (chan.includes("tiktok") || lbl.includes("tiktok") ||
+      subj.includes("tiktok shop customer") || src.includes("tiktok")) return "TikTok DM";
+  if (chan.includes("shopify") || src.includes("shopify") ||
+      lbl.includes("shopify") || subj.includes("shopify")) return "Shopify";
+  if (chan.includes("outlook") || chan.includes("email") ||
+      src.includes("outlook") || lbl.includes("outlook") ||
+      (msg.sender_email || "").includes("outlook")) return "Outlook";
+  return "Other";
+};
+
+// Source type badge styles
+const SOURCE_BADGE_STYLE = {
+  "TikTok DM":     "bg-black text-white border-black",
+  "TikTok Refund": "bg-red-600 text-white border-red-700",
+  "Shopify":       "bg-green-700 text-white border-green-800",
+  "Outlook":       "bg-blue-700 text-white border-blue-800",
+  "Noise":         "bg-gray-200 text-gray-500 border-gray-300",
+  "Other":         "bg-gray-100 text-gray-500 border-gray-200",
+};
+
+// Derive the best display title for a card given its source type.
+const getInboundCardTitle = (msg, sourceType, displayName) => {
+  if (sourceType === "TikTok Refund") {
+    const orderStr = (msg.order_number || msg.orderNumber || "").trim();
+    return orderStr ? `Refund / Return Request — Order ${orderStr}` : "Refund / Return Request";
+  }
+  if (sourceType === "TikTok DM") {
+    return displayName ? `Message from ${displayName}` : (msg.subject || "TikTok DM");
+  }
+  if (sourceType === "Shopify") {
+    const who = msg.customer_name || msg.sender_name || msg.sender_email || "";
+    return who ? `Shopify — ${who}` : (msg.subject || "Shopify Contact");
+  }
+  if (sourceType === "Outlook") {
+    const who = msg.sender_name || msg.sender_email || "";
+    return [who, msg.subject].filter(Boolean).join(" — ") || "Outlook Email";
+  }
+  return msg.subject || msg.issue_type || "Inbound Message";
+};
+
+
 
 // ─── COMMAND INBOX VIEW ───────────────────────────────────────────────────────
 const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
@@ -987,10 +1077,15 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
   const filtered = inboundMessages.filter(m => {
     if (activeFilter === "All")                 return true;
+    if (activeFilter === "TikTok DMs")          return classifyInboundSource(m) === "TikTok DM";
+    if (activeFilter === "Refunds / Returns")   return classifyInboundSource(m) === "TikTok Refund";
+    if (activeFilter === "Shopify")             return classifyInboundSource(m) === "Shopify";
+    if (activeFilter === "Outlook")             return classifyInboundSource(m) === "Outlook";
+    if (activeFilter === "Noise / Not CS")      return classifyInboundSource(m) === "Noise" ||
+      m.triage_status === "Noise / Not CS" || m.issue_type === "Noise / Not CS";
     if (activeFilter === "Untriaged")           return isUntriaged(m);
     if (activeFilter === "Needs Human Review")  return m.needs_human_review === true || m.needs_human_review === "true" || m.triage_status === "Needs Human Review";
     if (activeFilter === "High Priority")       return m.risk_level === "High" || m.priority === "High" || m.triage_status === "High Priority";
-    if (activeFilter === "Noise / Not CS")      return m.triage_status === "Noise / Not CS";
     return true;
   });
 
@@ -1418,26 +1513,34 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
       {/* Message cards */}
       {filtered.map(msg => {
-        const isBusy = busyId === msg.id;
-        const statusStyle   = INBOX_STATUS_STYLE[msg.status]       || "bg-gray-100 text-gray-500 border-gray-200";
-        const priorityStyle = INBOX_PRIORITY_STYLE[msg.priority]   || "bg-gray-100 text-gray-500 border-gray-200";
-        const triageStyle   = TRIAGE_STATUS_STYLE[msg.triage_status] || "bg-gray-100 text-gray-500 border-gray-200";
-        const riskStyle     = RISK_LEVEL_STYLE[msg.risk_level]      || "bg-gray-100 text-gray-500 border-gray-200";
-        const { displayName, displayBody, hasHistory } = getDisplayInboundMessage(msg);
-        const showName = displayName || msg.sender_name || msg.customer_name;
-        const untriaged = isUntriaged(msg);
-
+        const isBusy      = busyId === msg.id;
         const isDraftBusy = draftBusyId === msg.id;
+        const statusStyle    = INBOX_STATUS_STYLE[msg.status]        || "bg-gray-100 text-gray-500 border-gray-200";
+        const priorityStyle  = INBOX_PRIORITY_STYLE[msg.priority]    || "bg-gray-100 text-gray-500 border-gray-200";
+        const triageStyle    = TRIAGE_STATUS_STYLE[msg.triage_status] || "bg-gray-100 text-gray-500 border-gray-200";
+        const riskStyle      = RISK_LEVEL_STYLE[msg.risk_level]       || "bg-gray-100 text-gray-500 border-gray-200";
+        const { displayName, displayBody, hasHistory } = getDisplayInboundMessage(msg);
+        const showName       = displayName || msg.sender_name || msg.customer_name;
+        const untriaged      = isUntriaged(msg);
+        const sourceType     = classifyInboundSource(msg);
+        const sourceBadgeCls = SOURCE_BADGE_STYLE[sourceType] || SOURCE_BADGE_STYLE["Other"];
+        const cardTitle      = getInboundCardTitle(msg, sourceType, displayName);
+        const ts             = getInboundTimestamp(msg);
+        const orderNum       = msg.order_number || msg.orderNumber || null;
+        const isRefund       = sourceType === "TikTok Refund";
+        const isNoise        = sourceType === "Noise";
 
         return (
-          <Card key={msg.id} className="p-4">
+          <Card key={msg.id} className={`p-4 ${isRefund ? "border-l-4 border-l-red-400" : isNoise ? "opacity-75" : ""}`}>
             {/* Card header row */}
             <div className="flex items-start justify-between gap-3 mb-2">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
-                <BrandPip brand={msg.brand} />
-                <span className="text-xs font-semibold text-gray-700">{msg.brand || "—"}</span>
-                {msg.channel  && <span className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{msg.channel}</span>}
-                {msg.label    && <span className="text-[10px] text-gray-500 border border-gray-200 bg-gray-50 rounded px-1.5 py-0.5">{msg.label}</span>}
+                {msg.brand && <BrandPip brand={msg.brand} />}
+                {msg.brand && <span className="text-xs font-semibold text-gray-700">{msg.brand}</span>}
+                <Badge label={sourceType} className={`text-[10px] ${sourceBadgeCls}`} />
+                {msg.channel && msg.channel !== "TikTok Shop" && (
+                  <span className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{msg.channel}</span>
+                )}
                 {msg.priority && <Badge label={msg.priority} className={priorityStyle} />}
                 {msg.status   && <Badge label={msg.status}   className={statusStyle}   />}
                 {untriaged
@@ -1447,30 +1550,60 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {msg.draft_status === "Approved" && (
                   <Badge label="Draft Approved" className="bg-green-50 text-green-700 border-green-200" />
                 )}
-                {msg.needs_human_review === true || msg.needs_human_review === "true"
-                  ? <Badge label="Human Review" className="bg-orange-50 text-orange-700 border-orange-200" />
-                  : null
-                }
+                {(msg.needs_human_review === true || msg.needs_human_review === "true") && (
+                  <Badge label="Human Review" className="bg-orange-50 text-orange-700 border-orange-200" />
+                )}
               </div>
-              <span className="text-[10px] text-gray-400 flex-shrink-0 whitespace-nowrap">{msg.received_at ? fmtDate(msg.received_at) : "—"}</span>
+              {/* Timestamp — Pacific time, labeled Received or Imported */}
+              {ts.display && (
+                <div className="flex flex-col items-end flex-shrink-0">
+                  <span className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">{ts.label}</span>
+                  <span className="text-[10px] text-gray-500 font-medium whitespace-nowrap">{ts.display} PT</span>
+                </div>
+              )}
             </div>
 
-            {/* Sender / subject */}
-            <div className="mb-2 space-y-0.5">
-              {showName && (
-                <p className="text-xs text-gray-600">
-                  <span className="font-semibold text-gray-800">{showName}</span>
-                  {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">· {msg.sender_email}</span>}
-                </p>
-              )}
-              {msg.subject && <p className="text-xs font-semibold text-gray-900">{msg.subject}</p>}
-            </div>
+            {/* Card title — source-aware */}
+            <p className={`text-xs font-bold mb-1.5 ${isRefund ? "text-red-700" : "text-gray-900"}`}>{cardTitle}</p>
+
+            {/* Refund-specific info row */}
+            {isRefund && (
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 mb-2">
+                {orderNum         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Order:</span> {orderNum}</span>}
+                {showName         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Customer:</span> {showName}</span>}
+                {msg.sender_email && <span className="text-[11px] text-gray-400">{msg.sender_email}</span>}
+                <span className="text-[11px] text-red-600 font-medium">→ Review in TikTok Seller Center</span>
+              </div>
+            )}
+
+            {/* Non-refund sender line */}
+            {!isRefund && showName && (
+              <p className="text-xs text-gray-600 mb-1.5">
+                <span className="font-semibold text-gray-800">{showName}</span>
+                {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">· {msg.sender_email}</span>}
+              </p>
+            )}
+
+            {/* Subject (non-TikTok-DM, non-refund) */}
+            {msg.subject && sourceType !== "TikTok DM" && !isRefund && (
+              <p className="text-xs text-gray-500 italic mb-1.5 truncate">{msg.subject}</p>
+            )}
 
             {/* Message body */}
-            {displayBody && (
+            {displayBody && !isRefund && (
               <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 mb-2">
                 <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-5">{displayBody}</p>
               </div>
+            )}
+
+            {/* Refund body — collapsed */}
+            {isRefund && displayBody && (
+              <details className="mb-2">
+                <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600 select-none">Show notification body</summary>
+                <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-1">
+                  <p className="text-[11px] text-gray-600 leading-relaxed whitespace-pre-wrap line-clamp-6">{displayBody}</p>
+                </div>
+              </details>
             )}
 
             {/* History note */}
@@ -1483,31 +1616,19 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               <div className="border border-gray-100 rounded-lg bg-gray-50 px-3 py-2.5 mb-3 space-y-1.5">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Triage</p>
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  {msg.issue_type && (
-                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Issue:</span> {msg.issue_type}</span>
-                  )}
-                  {msg.customer_intent && (
-                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Intent:</span> {msg.customer_intent}</span>
-                  )}
+                  {msg.issue_type && <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Issue:</span> {msg.issue_type}</span>}
+                  {msg.customer_intent && <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Intent:</span> {msg.customer_intent}</span>}
                   {msg.risk_level && (
                     <span className="inline-flex items-center gap-1 text-[11px]">
                       <span className="font-semibold text-gray-700">Risk:</span>
                       <Badge label={msg.risk_level} className={riskStyle} />
                     </span>
                   )}
-                  {msg.recommended_reply_type && (
-                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Reply type:</span> {msg.recommended_reply_type}</span>
-                  )}
-                  {msg.confidence_score != null && (
-                    <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Confidence:</span> {msg.confidence_score}%</span>
-                  )}
+                  {msg.recommended_reply_type && <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Reply type:</span> {msg.recommended_reply_type}</span>}
+                  {msg.confidence_score != null && <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Confidence:</span> {msg.confidence_score}%</span>}
                 </div>
-                {msg.triage_summary && (
-                  <p className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Summary:</span> {msg.triage_summary}</p>
-                )}
-                {msg.next_action && (
-                  <p className="text-[11px] text-blue-600">→ {msg.next_action}</p>
-                )}
+                {msg.triage_summary && <p className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Summary:</span> {msg.triage_summary}</p>}
+                {msg.next_action    && <p className="text-[11px] text-blue-600">→ {msg.next_action}</p>}
               </div>
             )}
 
@@ -1517,152 +1638,77 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">AI Draft</p>
                   {msg.draft_status && (
-                    <Badge
-                      label={msg.draft_status}
-                      className={msg.draft_status === "Approved"
-                        ? "bg-green-50 text-green-700 border-green-200"
-                        : "bg-blue-100 text-blue-600 border-blue-200"}
-                    />
+                    <Badge label={msg.draft_status} className={msg.draft_status === "Approved" ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-100 text-blue-600 border-blue-200"} />
                   )}
                 </div>
                 <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
-
-                {/* Draft action buttons */}
                 <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-blue-100">
-                  {/* Copy Draft */}
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(msg.ai_draft);
-                      setCopiedDraftId(msg.id);
-                      setTimeout(() => setCopiedDraftId(null), 2000);
-                    }}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors"
-                  >
+                  <button onClick={() => { navigator.clipboard.writeText(msg.ai_draft); setCopiedDraftId(msg.id); setTimeout(() => setCopiedDraftId(null), 2000); }}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors">
                     {copiedDraftId === msg.id ? "Copied!" : "Copy Draft"}
                   </button>
-
-                  {/* Approve Draft */}
                   {msg.draft_status !== "Approved" && (
-                    <button
-                      disabled={isDraftBusy || isBusy}
-                      onClick={() => handleApproveDraft(msg)}
-                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors"
-                    >
+                    <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors">
                       ✓ Approve Draft
                     </button>
                   )}
-
-                  {/* Redraft */}
-                  <button
-                    disabled={isDraftBusy || isBusy}
-                    onClick={() => handleGenerateDraft(msg, "redraft")}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
-                  >
-                    {isDraftBusy ? "…" : "↺ Redraft"}
-                  </button>
-
-                  {/* Make Shorter */}
-                  <button
-                    disabled={isDraftBusy || isBusy}
-                    onClick={() => handleGenerateDraft(msg, "make_shorter")}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
-                  >
-                    Shorter
-                  </button>
-
-                  {/* Make Warmer */}
-                  <button
-                    disabled={isDraftBusy || isBusy}
-                    onClick={() => handleGenerateDraft(msg, "make_warmer")}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
-                  >
-                    Warmer
-                  </button>
-
-                  {/* Make Firmer */}
-                  <button
-                    disabled={isDraftBusy || isBusy}
-                    onClick={() => handleGenerateDraft(msg, "make_firmer")}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
-                  >
-                    Firmer
-                  </button>
+                  {[["redraft","↺ Redraft"], ["make_shorter","Shorter"], ["make_warmer","Warmer"], ["make_firmer","Firmer"]].map(([inst, lbl]) => (
+                    <button key={inst} disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg, inst)}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors">
+                      {isDraftBusy && inst === "redraft" ? "…" : lbl}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
 
             {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
-              {/* Mark In Progress */}
               {msg.status !== "In Progress" && msg.status !== "Closed" && msg.status !== "Ticket Created" && (
                 <button disabled={isBusy} onClick={() => handleStatus(msg.id, "In Progress")}
                   className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 cursor-pointer transition-colors">
                   In Progress
                 </button>
               )}
-
-              {/* Mark Closed */}
               {msg.status !== "Closed" && (
                 <button disabled={isBusy} onClick={() => handleStatus(msg.id, "Closed")}
                   className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 cursor-pointer transition-colors">
                   Mark Closed
                 </button>
               )}
-
-              {/* Create Ticket */}
               {msg.status !== "Ticket Created" && (
                 <button disabled={isBusy} onClick={() => handleCreateTicket(msg)}
                   className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 cursor-pointer transition-colors">
                   Create Ticket
                 </button>
               )}
-
-              {/* Copy Message */}
               <button onClick={() => handleCopy(msg.id, msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
                 {copiedId === msg.id ? "Copied!" : "Copy Message"}
               </button>
-
-              {/* Run Triage */}
-              <button
-                disabled={isBusy}
-                onClick={() => handleRunTriage(msg.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50 cursor-pointer transition-colors"
-              >
+              <button disabled={isBusy} onClick={() => handleRunTriage(msg.id)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50 cursor-pointer transition-colors">
                 {isBusy ? "Triaging…" : "⚡ Run Triage"}
               </button>
-
-              {/* Generate Draft */}
-              <button
-                disabled={isDraftBusy || isBusy}
-                onClick={() => handleGenerateDraft(msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors"
-              >
+              <button disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors">
                 {isDraftBusy ? "Drafting…" : "✦ Generate Draft"}
               </button>
-
-              {/* Create Action — disabled/muted if an open action already exists */}
               {(() => {
-                const hasOpenAction = opsActions.some(
-                  a => a.inbound_message_id === msg.id && a.status !== "Completed"
-                );
+                const hasOpenAction = opsActions.some(a => a.inbound_message_id === msg.id && a.status !== "Completed");
                 return (
-                  <button
-                    disabled={isBusy || hasOpenAction}
-                    onClick={() => handleCreateAction(msg)}
+                  <button disabled={isBusy || hasOpenAction} onClick={() => handleCreateAction(msg)}
                     title={hasOpenAction ? "An open action already exists for this message" : "Create a Next Action from this message"}
                     className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${
                       hasOpenAction
                         ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
                         : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
-                    }`}
-                  >
+                    }`}>
                     {hasOpenAction ? "✓ Action exists" : "+ Action"}
                   </button>
                 );
               })()}
-
-              {/* Archive */}
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 disabled:opacity-50 cursor-pointer transition-colors ml-auto">
                 <svg width="11" height="11" viewBox="0 0 13 13" fill="none">
@@ -1678,7 +1724,6 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     </div>
   );
 };
-
 
 const buildSlackSummary = ({ tickets, replacements, studios, surpriseSets, raiseScores }) => {
   const open = tickets.filter(t => t.status !== "Resolved" && t.status !== "Escalated");
