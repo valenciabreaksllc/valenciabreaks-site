@@ -684,6 +684,24 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleRunTriage = async (msgId) => {
+    setBusyId(msgId);
+    try {
+      const { data, error } = await supabase.functions.invoke("triage-inbound-message", {
+        body: { message_id: msgId },
+      });
+      if (error) throw error;
+      const updated = data?.message;
+      if (updated) {
+        setInboundMessages(prev => prev.map(m => m.id === msgId ? { ...m, ...updated } : m));
+      }
+    } catch (err) {
+      alert(`Triage failed: ${err?.message || "Unknown error. Check Supabase Edge Function logs."}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -892,12 +910,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {copiedId === msg.id ? "Copied!" : "Copy Message"}
               </button>
 
-              {/* Run Triage placeholder */}
+              {/* Run Triage */}
               <button
-                onClick={() => alert("Triage backend coming next.")}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 cursor-pointer transition-colors"
+                disabled={isBusy}
+                onClick={() => handleRunTriage(msg.id)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50 cursor-pointer transition-colors"
               >
-                ⚡ Run Triage
+                {isBusy ? "Triaging…" : "⚡ Run Triage"}
               </button>
 
               {/* AI Draft placeholder */}
