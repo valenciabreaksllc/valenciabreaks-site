@@ -264,6 +264,22 @@ const FRESH_STUDIOS = [
   { id: "TT-04", countCompleted: false, fullyStocked: false, discrepanciesLogged: 0, discrepanciesResolved: 0, streamReady: false, notes: "" },
 ];
 
+// Station-to-brand mapping
+const STUDIO_BRANDS = {
+  "TT-01": "Vaulted",
+  "TT-02": "PokeSpins",
+  "TT-03": "CardKing47",
+  "TT-04": "Pokiemart",
+};
+
+// Returns "Week of M/D" based on the most recent Sunday
+const getWeekOfLabel = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay()); // rewind to Sunday
+  return `Week of ${d.getMonth() + 1}/${d.getDate()}`;
+};
+
 const DEMO_SETS = [
   { id: uid(), brand: "Vaulted Rarities", streamer: "Jonny", date: "2025-05-08", setName: "May Holo Bundle A", quantity: 50, warehouseListReceived: true, convertedSetSheet: true, importedDesktop: true, quantitiesVerified: true, readyForLive: true },
   { id: uid(), brand: "CardKing47", streamer: "Jonny", date: "2025-05-09", setName: "CK Graded Pack Set", quantity: 30, warehouseListReceived: true, convertedSetSheet: true, importedDesktop: false, quantitiesVerified: false, readyForLive: false },
@@ -271,24 +287,22 @@ const DEMO_SETS = [
 ];
 
 const SHIFT_START = [
-  "Review all open TikTok tickets",
-  "Check SLA risks — flag and escalate any tickets under 2 hours",
-  "Sweep all Shop Chats for missed messages",
-  "Review shipping queue for label-created / no-scan tickets",
-  "Check surprise set readiness for today's stream",
-  "Verify studio readiness for active stations",
-  "Review replacement log from prior shift",
-  "Run backend lookups for any pending ticket actions",
+  "Open Daily Ops Brief",
+  "Refresh Command Inbox",
+  "Run Process Queue",
+  "Review drafts ready for approval",
+  "Review refunds and returns",
+  "Review replacements needing follow-up",
+  "Sweep TikTok Shop Chats manually if needed",
+  "Check Surprise Sets for today and tomorrow",
 ];
 const SHIFT_END = [
-  "All P1 tickets resolved or escalated",
-  "Shop chat sweep complete and logged",
-  "Replacement log updated with today's cases",
-  "Studio inventory notes updated",
-  "Surprise sets marked ready or flagged for next stream",
-  "Weekly raise tracker updated",
-  "Data exported / backed up to JSON",
-  "Next shift priority queue prepped",
+  "Clear high-priority inbox items",
+  "Approve or copy all safe drafts",
+  "Update replacement and reship log",
+  "Complete or update Action Queue items",
+  "Schedule or check surprise sets for tomorrow",
+  "Confirm no overdue actions",
 ];
 
 // ─── CS TEMPLATES ─────────────────────────────────────────────────────────────
@@ -352,7 +366,7 @@ const ProgressBar = ({ pct, color = "bg-blue-500" }) => (
 );
 
 const BtnPrimary = ({ children, onClick, size = "sm", disabled = false }) => (
-  <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg border border-blue-700 transition-colors cursor-pointer ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
+  <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold rounded-lg border border-slate-800 transition-colors cursor-pointer ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
 );
 const BtnSecondary = ({ children, onClick, size = "sm" }) => (
   <button onClick={onClick} className={`inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
@@ -378,7 +392,7 @@ const Txt = ({ value, onChange, placeholder, rows = 3, className = "" }) => (
 );
 const Chk = ({ checked, onChange, label }) => (
   <label className="flex items-center gap-2.5 cursor-pointer group">
-    <div onClick={() => onChange(!checked)} className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${checked ? "bg-blue-600 border-blue-600" : "border-gray-300 hover:border-blue-400"}`}>
+    <div onClick={() => onChange(!checked)} className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${checked ? "bg-slate-700 border-slate-700" : "border-gray-300 hover:border-slate-400"}`}>
       {checked && <span className="text-white text-[9px] font-bold">✓</span>}
     </div>
     <span className={`text-sm ${checked ? "line-through text-gray-400" : "text-gray-700 group-hover:text-gray-900"}`}>{label}</span>
@@ -429,7 +443,7 @@ const ICONS = {
   actions: <><path d="M2 4h9M2 8h7M2 12h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M14.5 13.5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></>,
 };
 const NavItem = ({ id, label, active, onClick, badge }) => (
-  <button onClick={() => onClick(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${active ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
+  <button onClick={() => onClick(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${active ? "bg-slate-700 text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={`flex-shrink-0 ${active ? "text-white" : "text-gray-400"}`}>{ICONS[id]}</svg>
     <span className="flex-1 truncate">{label}</span>
     {badge > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">{badge}</span>}
@@ -438,8 +452,8 @@ const NavItem = ({ id, label, active, onClick, badge }) => (
 
 const NAV = [
   { section: null, items: [{ id: "dashboard", label: "Dashboard" }, { id: "inbox", label: "Command Inbox" }] },
-  { section: "Operations", items: [{ id: "actions", label: "Next Actions" }, { id: "daily", label: "Daily Command Board" }, { id: "tickets", label: "Tickets" }, { id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }] },
-  { section: "Content", items: [{ id: "sets", label: "Surprise Sets" }, { id: "browser", label: "Browser Profiles" }, { id: "cs", label: "CS Templates" }] },
+  { section: "Operations", items: [{ id: "actions", label: "Action Queue" }, { id: "daily", label: "Daily Command Board" }, { id: "tickets", label: "Tickets" }, { id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }] },
+  { section: "Content", items: [{ id: "sets", label: "Surprise Sets" }] },
   { section: "Reporting", items: [{ id: "weekly", label: "Report" }, { id: "data", label: "Settings" }] },
 ];
 
@@ -622,8 +636,8 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
           <button key={opt} onClick={() => setActiveFilter(opt)}
             className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
               activeFilter === opt
-                ? "bg-blue-600 text-white border-blue-700"
-                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-700"
+                ? "bg-slate-700 text-white border-slate-800"
+                : "bg-white text-gray-600 border-gray-300 hover:border-slate-400 hover:text-slate-700"
             }`}>
             {opt}
           </button>
@@ -1010,7 +1024,7 @@ const RISK_LEVEL_STYLE = {
   "Medium": "bg-amber-50 text-amber-700 border-amber-200",
   "Low":    "bg-gray-100 text-gray-500 border-gray-200",
 };
-const INBOX_FILTER_OPTIONS = ["All", "TikTok DMs", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority"];
+const INBOX_FILTER_OPTIONS = ["All", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority"];
 
 // ─── INBOX MESSAGE CLASSIFICATION HELPERS ────────────────────────────────────
 
@@ -1061,7 +1075,7 @@ const classifyInboundSource = (msg) => {
                 (msg.issue_type    || "") === "Noise / Not CS";
   if (noise) return "Noise";
   if (chan.includes("tiktok") || lbl.includes("tiktok") ||
-      subj.includes("tiktok shop customer") || src.includes("tiktok")) return "TikTok DM";
+      subj.includes("tiktok shop customer") || src.includes("tiktok")) return "TikTok Shop Chat";
   if (chan.includes("shopify") || src.includes("shopify") ||
       lbl.includes("shopify") || subj.includes("shopify")) return "Shopify";
   if (chan.includes("outlook") || chan.includes("email") ||
@@ -1072,12 +1086,12 @@ const classifyInboundSource = (msg) => {
 
 // Source type badge styles
 const SOURCE_BADGE_STYLE = {
-  "TikTok DM":     "bg-black text-white border-black",
-  "TikTok Refund": "bg-red-600 text-white border-red-700",
-  "Shopify":       "bg-green-700 text-white border-green-800",
-  "Outlook":       "bg-blue-700 text-white border-blue-800",
-  "Noise":         "bg-gray-200 text-gray-500 border-gray-300",
-  "Other":         "bg-gray-100 text-gray-500 border-gray-200",
+  "TikTok Shop Chat": "bg-black text-white border-black",
+  "TikTok Refund":    "bg-orange-500 text-white border-orange-600",
+  "Shopify":          "bg-green-700 text-white border-green-800",
+  "Outlook":          "bg-slate-600 text-white border-slate-700",
+  "Noise":            "bg-gray-200 text-gray-500 border-gray-300",
+  "Other":            "bg-gray-100 text-gray-500 border-gray-200",
 };
 
 // Derive the best display title for a card given its source type.
@@ -1086,8 +1100,8 @@ const getInboundCardTitle = (msg, sourceType, displayName) => {
     const orderStr = (msg.order_number || msg.orderNumber || "").trim();
     return orderStr ? `Refund / Return Request — Order ${orderStr}` : "Refund / Return Request";
   }
-  if (sourceType === "TikTok DM") {
-    return displayName ? `Message from ${displayName}` : (msg.subject || "TikTok DM");
+  if (sourceType === "TikTok Shop Chat") {
+    return displayName ? `Message from ${displayName}` : (msg.subject || "TikTok Shop Chat");
   }
   if (sourceType === "Shopify") {
     const who = msg.customer_name || msg.sender_name || msg.sender_email || "";
@@ -1107,6 +1121,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [copiedId, setCopiedId] = useState(null);
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [collapsedDrafts, setCollapsedDrafts] = useState({});
 
   const needsReply    = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
   const inProgress    = inboundMessages.filter(m => m.status === "In Progress").length;
@@ -1117,7 +1132,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
   const filtered = inboundMessages.filter(m => {
     if (activeFilter === "All")                 return true;
-    if (activeFilter === "TikTok DMs")          return classifyInboundSource(m) === "TikTok DM";
+    if (activeFilter === "TikTok Shop Chat")      return classifyInboundSource(m) === "TikTok Shop Chat";
     if (activeFilter === "Refunds / Returns")   return classifyInboundSource(m) === "TikTok Refund";
     if (activeFilter === "Shopify")             return classifyInboundSource(m) === "Shopify";
     if (activeFilter === "Outlook")             return classifyInboundSource(m) === "Outlook";
@@ -1517,8 +1532,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             onClick={() => setActiveFilter(opt)}
             className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
               activeFilter === opt
-                ? "bg-blue-600 text-white border-blue-700"
-                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-700"
+                ? "bg-slate-700 text-white border-slate-800"
+                : "bg-white text-gray-600 border-gray-300 hover:border-slate-400 hover:text-slate-700"
             }`}
           >
             {opt}
@@ -1625,7 +1640,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             )}
 
             {/* Subject (non-TikTok-DM, non-refund) */}
-            {msg.subject && sourceType !== "TikTok DM" && !isRefund && (
+            {msg.subject && sourceType !== "TikTok Shop Chat" && !isRefund && (
               <p className="text-xs text-gray-500 italic mb-1.5 truncate">{msg.subject}</p>
             )}
 
@@ -1668,40 +1683,53 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   {msg.confidence_score != null && <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Confidence:</span> {msg.confidence_score}%</span>}
                 </div>
                 {msg.triage_summary && <p className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Summary:</span> {msg.triage_summary}</p>}
-                {msg.next_action    && <p className="text-[11px] text-blue-600">→ {msg.next_action}</p>}
+                {msg.next_action    && <p className="text-[11px] text-slate-600">→ {msg.next_action}</p>}
               </div>
             )}
 
             {/* ── AI Draft box ── */}
-            {msg.ai_draft && (
+            {msg.ai_draft && (() => {
+              const isDraftCollapsed = collapsedDrafts[msg.id] === true;
+              const toggleCollapse = () => setCollapsedDrafts(prev => ({ ...prev, [msg.id]: !prev[msg.id] }));
+              return (
               <div className="border border-blue-100 rounded-lg bg-blue-50 px-3 py-2.5 mb-3">
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">AI Draft</p>
-                  {msg.draft_status && (
-                    <Badge label={msg.draft_status} className={msg.draft_status === "Approved" ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-100 text-blue-600 border-blue-200"} />
-                  )}
-                </div>
-                <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
-                <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-blue-100">
-                  <button onClick={() => { navigator.clipboard.writeText(msg.ai_draft); setCopiedDraftId(msg.id); setTimeout(() => setCopiedDraftId(null), 2000); }}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors">
-                    {copiedDraftId === msg.id ? "Copied!" : "Copy Draft"}
-                  </button>
-                  {msg.draft_status !== "Approved" && (
-                    <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
-                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors">
-                      ✓ Approve Draft
+                  <div className="flex items-center gap-2">
+                    {msg.draft_status && (
+                      <Badge label={msg.draft_status} className={msg.draft_status === "Approved" ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-100 text-blue-600 border-blue-200"} />
+                    )}
+                    <button onClick={toggleCollapse} className="text-[10px] text-blue-400 hover:text-blue-700 cursor-pointer">
+                      {isDraftCollapsed ? "Show Draft" : "Hide"}
                     </button>
-                  )}
-                  {[["redraft","↺ Redraft"], ["make_shorter","Shorter"], ["make_warmer","Warmer"], ["make_firmer","Firmer"]].map(([inst, lbl]) => (
-                    <button key={inst} disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg, inst)}
-                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors">
-                      {isDraftBusy && inst === "redraft" ? "…" : lbl}
-                    </button>
-                  ))}
+                  </div>
                 </div>
+                {!isDraftCollapsed && (
+                  <>
+                    <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-blue-100">
+                      <button onClick={() => { navigator.clipboard.writeText(msg.ai_draft); setCopiedDraftId(msg.id); setTimeout(() => setCopiedDraftId(null), 2000); }}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors">
+                        {copiedDraftId === msg.id ? "Copied!" : "Copy Draft"}
+                      </button>
+                      {msg.draft_status !== "Approved" && (
+                        <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors">
+                          Approve Draft
+                        </button>
+                      )}
+                      {[["redraft","Redraft"], ["make_shorter","Shorter"], ["make_warmer","Warmer"], ["make_firmer","Firmer"]].map(([inst, lbl]) => (
+                        <button key={inst} disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg, inst)}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors">
+                          {isDraftBusy && inst === "redraft" ? "..." : lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-            )}
+              );
+            })()}
 
             {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
@@ -2113,7 +2141,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
                     {/* Nav button */}
                     <button
                       onClick={() => setActiveView(item.nav)}
-                      className="flex-shrink-0 text-[10px] font-medium text-blue-600 hover:text-blue-800 cursor-pointer whitespace-nowrap"
+                      className="flex-shrink-0 text-[10px] font-medium text-slate-600 hover:text-slate-800 cursor-pointer whitespace-nowrap"
                     >
                       Open →
                     </button>
@@ -2125,6 +2153,103 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
         )}
       </div>
     </Card>
+  );
+};
+
+// ─── NOTIFICATION DROPDOWN ────────────────────────────────────────────────────
+const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setActiveView }) => {
+  const [open, setOpen] = useState(false);
+
+  const now = new Date();
+  const isOverdue = (a) => a.due_at && new Date(a.due_at) < now;
+
+  // Group refund/return messages by brand
+  const refundsByBrand = {};
+  inboundMessages.forEach(m => {
+    if (isTikTokRefund(m)) {
+      const b = m.brand || "Unknown";
+      refundsByBrand[b] = (refundsByBrand[b] || 0) + 1;
+    }
+  });
+
+  // Group Shop Chat messages by brand
+  const chatsByBrand = {};
+  inboundMessages.forEach(m => {
+    if (classifyInboundSource(m) === "TikTok Shop Chat" && !isTikTokRefund(m)) {
+      const b = m.brand || "Unknown";
+      chatsByBrand[b] = (chatsByBrand[b] || 0) + 1;
+    }
+  });
+
+  const draftsReady        = inboundMessages.filter(m => m.draft_status === "Draft Ready").length;
+  const followUpNeeded     = replacements.filter(r => r.followUp === "Yes" || r.follow_up === "Yes").length;
+  const overdueActionsCount = opsActions.filter(isOverdue).length;
+
+  const totalCount = Object.values(refundsByBrand).reduce((a, b) => a + b, 0)
+    + Object.values(chatsByBrand).reduce((a, b) => a + b, 0)
+    + draftsReady + followUpNeeded + overdueActionsCount;
+
+  const items = [];
+  Object.entries(refundsByBrand).forEach(([brand, n]) => {
+    items.push({ label: `${brand}: ${n} refund/return${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-orange-600" });
+  });
+  Object.entries(chatsByBrand).forEach(([brand, n]) => {
+    items.push({ label: `${brand}: ${n} shop chat${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-700" });
+  });
+  if (draftsReady > 0)        items.push({ label: `${draftsReady} draft${draftsReady > 1 ? "s" : ""} ready to approve`, nav: "inbox", color: "text-indigo-600" });
+  if (followUpNeeded > 0)     items.push({ label: `${followUpNeeded} replacement${followUpNeeded > 1 ? "s" : ""} need follow-up`, nav: "replacements", color: "text-amber-600" });
+  if (overdueActionsCount > 0) items.push({ label: `${overdueActionsCount} overdue action${overdueActionsCount > 1 ? "s" : ""}`, nav: "actions", color: "text-red-600" });
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="relative text-gray-400 hover:text-gray-700 transition-colors"
+        aria-label="Notifications"
+      >
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M9 2a5 5 0 0 1 5 5v3l2 2H2l2-2V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.4" fill="none"/>
+          <path d="M7 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+        </svg>
+        {totalCount > 0 && (
+          <span className="absolute -top-1 -right-1 text-[9px] bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">
+            {totalCount > 9 ? "9+" : totalCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          {/* Dropdown */}
+          <div className="absolute right-0 top-8 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+              <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Notifications</p>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+            </div>
+            {items.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <p className="text-sm text-gray-400">All clear. Nothing needs attention.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {items.map((item, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setActiveView(item.nav); setOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                  >
+                    <p className={`text-xs font-medium ${item.color}`}>{item.label}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Tap to open {item.nav === "inbox" ? "Command Inbox" : item.nav === "replacements" ? "Replacements" : "Action Queue"}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 
@@ -2208,7 +2333,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         </Card>
         <Card className="p-4 border-l-4 border-l-blue-500">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">SLA Risks</p>
-          <p className={`text-4xl font-bold mt-1 ${criticalSla.length > 0 ? "text-red-600" : "text-blue-600"}`}>{criticalSla.length}</p>
+          <p className={`text-4xl font-bold mt-1 ${criticalSla.length > 0 ? "text-red-600" : "text-slate-600"}`}>{criticalSla.length}</p>
           <p className="text-[10px] text-gray-400 mt-0.5">&lt; 2h remaining</p>
         </Card>
         <Card className="p-4">
@@ -2323,7 +2448,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
               {studios.map(s => (
                 <div key={s.id} className="text-center">
                   <p className="text-[10px] font-semibold text-gray-400 mb-1">{s.id}</p>
-                  <input type="checkbox" checked={s.streamReady} readOnly className="accent-blue-600 mb-1" />
+                  <input type="checkbox" checked={s.streamReady} readOnly className="accent-slate-700 mb-1" />
                   <p className={`text-[9px] font-bold ${s.streamReady ? "text-green-600" : "text-red-500"}`}>{s.streamReady ? "READY" : "NOT READY"}</p>
                 </div>
               ))}
@@ -2394,8 +2519,8 @@ const DailyCommandView = ({ tickets }) => {
       </Card>
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-4">
-          <div className="flex items-center justify-between mb-2"><p className="text-sm font-bold text-gray-900">Start-of-Shift Checklist</p><span className="text-xs font-bold text-blue-600">{sp}%</span></div>
-          <ProgressBar pct={sp} color="bg-blue-500" />
+          <div className="flex items-center justify-between mb-2"><p className="text-sm font-bold text-gray-900">Start-of-Shift Checklist</p><span className="text-xs font-bold text-slate-600">{sp}%</span></div>
+          <ProgressBar pct={sp} color="bg-slate-600" />
           <div className="mt-4 space-y-2.5">{SHIFT_START.map((item, i) => <Chk key={i} checked={startC[i]} onChange={v => { const n = [...startC]; n[i] = v; setStartC(n); }} label={item} />)}</div>
         </Card>
         <Card className="p-4">
@@ -2457,7 +2582,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
         <p className="text-[10px] text-gray-400 mb-1">{t.channel} · {fmtDate(t.createdAt)}</p>
         {showSla && <p className={`text-[10px] font-mono font-bold mb-1 ${cd.urgent ? "text-red-600" : cd.warning ? "text-amber-500" : "text-gray-500"}`}>SLA: {cd.display} remaining</p>}
         {t.notes && <p className="text-[10px] text-gray-500 mb-2 line-clamp-2">{t.notes}</p>}
-        {t.nextAction && <p className="text-[10px] text-blue-600">→ {t.nextAction}</p>}
+        {t.nextAction && <p className="text-[10px] text-slate-600">→ {t.nextAction}</p>}
         <select value={t.status} onChange={e => upd(t.id, e.target.value)} className="mt-2 w-full bg-gray-50 border border-gray-200 text-gray-700 text-[10px] rounded px-1.5 py-1 focus:outline-none">{KANBAN_COLS.map(c => <option key={c}>{c}</option>)}</select>
       </div>
     );
@@ -2592,7 +2717,7 @@ const CSTemplateView = ({ setTickets }) => {
         <div className="flex flex-wrap gap-2">
           {QUICK_TEMPLATES.map(qt => (
             <button key={qt.issueType} onClick={() => { setIssue(qt.issueType); setTone(qt.tone); if (brand) setTpl(generateTemplate(brand, qt.issueType, qt.tone, order, cname)); }}
-              className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${issue === qt.issueType ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-700"}`}>
+              className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${issue === qt.issueType ? "bg-slate-700 text-white border-slate-800" : "bg-white text-gray-700 border-gray-300 hover:border-slate-400 hover:text-slate-700"}`}>
               {qt.label}
             </button>
           ))}
@@ -2782,7 +2907,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{replacements.length}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p><p className="text-3xl font-bold text-red-600 mt-1">${loss.toFixed(2)}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-amber-600 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{replacements.length > 0 ? Math.round((prev / replacements.length) * 100) : 0}% of total</p></Card>
-        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Follow-Up Needed</p><p className="text-3xl font-bold text-blue-600 mt-1">{fu}</p></Card>
+        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Follow-Up Needed</p><p className="text-3xl font-bold text-slate-700 mt-1">{fu}</p></Card>
       </div>
 
       {/* Root cause breakdown */}
@@ -2823,8 +2948,8 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
           <button key={opt} onClick={() => setActiveFilter(opt)}
             className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
               activeFilter === opt
-                ? "bg-blue-600 text-white border-blue-700"
-                : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-700"
+                ? "bg-slate-700 text-white border-slate-800"
+                : "bg-white text-gray-600 border-gray-300 hover:border-slate-400 hover:text-slate-700"
             }`}>
             {opt}
           </button>
@@ -2878,7 +3003,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                         <td className="px-3 py-2 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             <button disabled={savingId === r.id} onClick={handleSaveEdit}
-                              className="text-[10px] font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-2 py-0.5 rounded cursor-pointer">
+                              className="text-[10px] font-semibold text-white bg-slate-700 hover:bg-slate-800 disabled:opacity-50 px-2 py-0.5 rounded cursor-pointer">
                               {savingId === r.id ? "…" : "Save"}
                             </button>
                             <button onClick={() => { setEditRow(null); setEditForm({}); }}
@@ -2948,7 +3073,7 @@ const StudioReadinessView = ({ studios, setStudios }) => {
   const overall = Math.round(studios.reduce((a, s) => a + score(s), 0) / studios.length);
   return (
     <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness</p></div>
+      <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness · <span className="font-medium text-gray-500">{getWeekOfLabel()}</span></p></div>
       <Card className="p-4 flex items-center gap-6">
         <div className="text-center"><p className="text-xs text-gray-400 mb-1">Overall Readiness</p><p className={`text-5xl font-bold ${overall >= 75 ? "text-green-600" : overall >= 50 ? "text-amber-500" : "text-red-500"}`}>{overall}%</p></div>
         <div className="flex-1"><ProgressBar pct={overall} color={overall >= 75 ? "bg-green-500" : overall >= 50 ? "bg-amber-400" : "bg-red-500"} /><p className="text-xs text-gray-400 mt-1.5">{studios.filter(s => s.streamReady).length}/{studios.length} stations stream-ready</p></div>
@@ -2956,10 +3081,14 @@ const StudioReadinessView = ({ studios, setStudios }) => {
       <div className="grid grid-cols-2 gap-4">
         {studios.map(s => {
           const sc = score(s);
+          const brandLabel = STUDIO_BRANDS[s.id];
           return (
             <Card key={s.id} className={`p-5 ${s.streamReady ? "border-green-300" : ""}`}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-gray-900">{s.id}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-gray-900">{s.id}</h3>
+                  {brandLabel && <span className="text-[10px] text-gray-400 font-medium border border-gray-200 rounded px-1.5 py-0.5">{brandLabel}</span>}
+                </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-sm font-bold ${sc >= 75 ? "text-green-600" : sc >= 50 ? "text-amber-500" : "text-red-500"}`}>{sc}%</span>
                   <Badge label={s.streamReady ? "Stream Ready" : "Not Ready"} className={s.streamReady ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"} />
@@ -2970,7 +3099,7 @@ const StudioReadinessView = ({ studios, setStudios }) => {
                 {[["countCompleted", "Count Completed"], ["fullyStocked", "Fully Stocked"], ["streamReady", "Stream Ready"]].map(([field, label]) => (
                   <label key={field} className="flex items-center justify-between cursor-pointer">
                     <span className="text-xs text-gray-500">{label}</span>
-                    <input type="checkbox" checked={s[field]} onChange={e => upd(s.id, field, e.target.checked)} className="accent-blue-600" />
+                    <input type="checkbox" checked={s[field]} onChange={e => upd(s.id, field, e.target.checked)} className="accent-slate-700" />
                   </label>
                 ))}
                 <div className="flex items-center gap-2">
@@ -3005,7 +3134,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-gray-900">Surprise Set Tracker</h2><p className="text-xs text-gray-400 mt-0.5">{surpriseSets.filter(s => s.readyForLive).length}/{surpriseSets.length} sets ready for live</p></div>
+        <div><h2 className="text-2xl font-bold text-gray-900">Surprise Set Tracker</h2><p className="text-xs text-gray-400 mt-0.5">{surpriseSets.filter(s => s.readyForLive).length}/{surpriseSets.length} sets ready for live</p><p className="text-[10px] text-amber-600 mt-0.5">Surprise set calendar and import coming soon.</p></div>
         <BtnPrimary onClick={() => setShow(s => !s)} size="md">{show ? "✕ Close" : "+ Add Set"}</BtnPrimary>
       </div>
       {show && (
@@ -3018,7 +3147,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
             <Inp value={form.quantity} onChange={f("quantity")} placeholder="Quantity" type="number" />
             <div className="col-span-2"><Inp value={form.setName} onChange={f("setName")} placeholder="Set Name *" /></div>
           </div>
-          <div className="flex flex-wrap gap-4 mb-3">{STEPS.map(step => <label key={step} className="flex items-center gap-2 cursor-pointer text-xs text-gray-600"><input type="checkbox" checked={form[step]} onChange={e => setForm(p => ({ ...p, [step]: e.target.checked }))} className="accent-blue-600" />{SL[step]}</label>)}</div>
+          <div className="flex flex-wrap gap-4 mb-3">{STEPS.map(step => <label key={step} className="flex items-center gap-2 cursor-pointer text-xs text-gray-600"><input type="checkbox" checked={form[step]} onChange={e => setForm(p => ({ ...p, [step]: e.target.checked }))} className="accent-slate-700" />{SL[step]}</label>)}</div>
           <BtnPrimary onClick={add} size="md">Add Set</BtnPrimary>
         </Card>
       )}
@@ -3041,7 +3170,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
             <div className="flex flex-wrap gap-4 mt-3">
               {STEPS.map(step => (
                 <label key={step} className="flex items-center gap-1.5 cursor-pointer text-xs">
-                  <input type="checkbox" checked={s[step]} onChange={e => upd(s.id, step, e.target.checked)} className="accent-blue-600" />
+                  <input type="checkbox" checked={s[step]} onChange={e => upd(s.id, step, e.target.checked)} className="accent-slate-700" />
                   <span className={s[step] ? "text-green-600 font-medium" : "text-gray-400"}>{SL[step]}</span>
                 </label>
               ))}
@@ -3083,14 +3212,14 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
 
   return (
     <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold text-gray-900">Weekly Raise Tracker Report</h2><p className="text-xs text-gray-400 mt-0.5">Leadership-ready — auto-generated from your logged data</p></div>
+      <div><h2 className="text-2xl font-bold text-gray-900">Ops Impact Report</h2><p className="text-xs text-gray-400 mt-0.5">Leadership-ready - auto-generated from your logged data</p></div>
       <Card className="p-4">
         <p className="text-sm font-bold text-gray-900 mb-3">Raise Path Self-Score</p>
         <div className="space-y-3">
           {RF.map(({ key, label }) => (
             <div key={key} className="flex items-center gap-3">
               <span className="text-xs text-gray-500 w-36">{label}</span>
-              <input type="range" min="0" max="100" step="5" value={raiseScores[key]} onChange={e => setRaiseScores(s => ({ ...s, [key]: parseInt(e.target.value) }))} className="flex-1 accent-blue-600" />
+              <input type="range" min="0" max="100" step="5" value={raiseScores[key]} onChange={e => setRaiseScores(s => ({ ...s, [key]: parseInt(e.target.value) }))} className="flex-1 accent-slate-700" />
               <span className="text-xs text-gray-500 w-8 text-right font-mono">{raiseScores[key]}%</span>
             </div>
           ))}
@@ -3104,8 +3233,8 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex gap-2">
-            <button onClick={() => setMode("full")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer transition-colors ${mode === "full" ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"}`}>Full Report</button>
-            <button onClick={() => setMode("slack")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer transition-colors ${mode === "slack" ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"}`}>Slack Summary</button>
+            <button onClick={() => setMode("full")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer transition-colors ${mode === "full" ? "bg-slate-700 text-white border-slate-800" : "bg-white text-gray-700 border-gray-300 hover:border-slate-400"}`}>Full Report</button>
+            <button onClick={() => setMode("slack")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer transition-colors ${mode === "slack" ? "bg-slate-700 text-white border-slate-800" : "bg-white text-gray-700 border-gray-300 hover:border-slate-400"}`}>Slack Summary</button>
           </div>
           <div className="flex gap-2">
             <BtnSuccess onClick={copy} size="sm">{copied ? "Copied!" : "Copy"}</BtnSuccess>
@@ -3353,10 +3482,27 @@ const getSidekickTicketFromHash = () => {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function JonnyOpsCommandCenter() {
-  const [activeView, setActiveView] = useState("dashboard");
+  const [activeView, setActiveViewRaw] = useState(() => {
+    const VALID_VIEWS = new Set(["dashboard","inbox","actions","daily","tickets","replacements","studio","sets","weekly","data","browser","cs"]);
+    try {
+      const saved = localStorage.getItem("ops_active_view");
+      if (saved && VALID_VIEWS.has(saved)) return saved;
+    } catch {}
+    return "dashboard";
+  });
+  const setActiveView = (v) => {
+    setActiveViewRaw(v);
+    try { localStorage.setItem("ops_active_view", v); } catch {}
+  };
   const [tickets, setTickets] = useState([]);
   const [replacements, setReplacements] = useState([]);
-  const [studios, setStudios] = useState(FRESH_STUDIOS);
+  const [studios, setStudios] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ops_studios_v1");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return FRESH_STUDIOS;
+  });
   const [surpriseSets, setSurpriseSets] = useState([]);
   const [raiseScores, setRaiseScores] = useState({ consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 });
   const [sidebar, setSidebar] = useState(true);
@@ -3426,6 +3572,11 @@ export default function JonnyOpsCommandCenter() {
   // Fetch replacements on mount
   useEffect(() => { refreshReplacements(); }, []);
 
+  // Persist studio readiness to localStorage whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("ops_studios_v1", JSON.stringify(studios)); } catch {}
+  }, [studios]);
+
   // Fetch automation rules on mount (non-blocking — queue falls back to safe defaults on error)
   useEffect(() => {
     const load = async () => {
@@ -3479,7 +3630,7 @@ export default function JonnyOpsCommandCenter() {
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
       case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} />;
       case "data": return <DataManagementView {...common} />;
-      default: return null;
+      default: return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} />;
     }
   };
 
@@ -3487,7 +3638,7 @@ export default function JonnyOpsCommandCenter() {
 
   // Current page label for mobile top bar
   const PAGE_LABELS = {
-    dashboard: "Dashboard", inbox: "Command Inbox", actions: "Next Actions",
+    dashboard: "Dashboard", inbox: "Command Inbox", actions: "Action Queue",
     daily: "Daily Command Board", tickets: "Tickets", replacements: "Replacements",
     studio: "Inventory", sets: "Surprise Sets", browser: "Browser Profiles",
     cs: "CS Templates", weekly: "Report", data: "Settings",
@@ -3531,7 +3682,7 @@ export default function JonnyOpsCommandCenter() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
       {/* Sidekick toast */}
       {sidekickToast && (
         <div className="fixed right-4 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-green-700 bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-lg" role="status">
@@ -3556,8 +3707,8 @@ export default function JonnyOpsCommandCenter() {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="1.4"/><path d="M8 5.5v2.5l1.5 1.5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/></svg>
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-bold text-gray-900">Jonny Ops</p>
-            <p className="text-[10px] text-gray-400">Command Center v1.1</p>
+            <p className="text-sm font-bold text-gray-900">Ops Command Hub</p>
+            <p className="text-[10px] text-gray-400">Command Center v1.5</p>
           </div>
           <button onClick={() => setMobileNavOpen(false)} className="text-gray-400 hover:text-gray-700 text-xl leading-none p-1">×</button>
         </div>
@@ -3573,7 +3724,7 @@ export default function JonnyOpsCommandCenter() {
           <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="1.4"/><path d="M8 5.5v2.5l1.5 1.5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/></svg>
           </div>
-          {sidebar && <div className="overflow-hidden flex-1"><p className="text-sm font-bold text-gray-900 truncate">Jonny Ops</p><p className="text-[10px] text-gray-400 truncate">Command Center v1.1</p></div>}
+          {sidebar && <div className="overflow-hidden flex-1"><p className="text-sm font-bold text-gray-900 truncate">Ops Command Hub</p><p className="text-[10px] text-gray-400 truncate">Command Center v1.5</p></div>}
           <button onClick={() => setSidebar(s => !s)} className="text-gray-300 hover:text-gray-600 flex-shrink-0 text-xs ml-auto">{sidebar ? "«" : "»"}</button>
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
@@ -3618,7 +3769,7 @@ export default function JonnyOpsCommandCenter() {
               </svg>
             </button>
             <div>
-              <p className="text-sm font-bold text-gray-900 leading-tight">Jonny Ops</p>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Ops Command Hub</p>
               <p className="text-[10px] text-gray-400 leading-tight">{PAGE_LABELS[activeView] || activeView}</p>
             </div>
           </div>
@@ -3640,7 +3791,7 @@ export default function JonnyOpsCommandCenter() {
 
         {/* ── DESKTOP TOP BAR (hidden on mobile) ── */}
         <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
-          <p className="text-sm font-bold text-gray-900">Jonny Ops Command Center</p>
+          <p className="text-sm font-bold text-gray-900">Ops Command Hub</p>
           <div className="flex items-center gap-3">
             {criticalSlaCount > 0 && (
               <button onClick={() => setActiveView("tickets")} className="flex items-center gap-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg px-3 py-1.5 cursor-pointer transition-colors">
@@ -3648,15 +3799,12 @@ export default function JonnyOpsCommandCenter() {
                 <span className="text-xs font-bold text-red-700">{criticalSlaCount} SLA Critical</span>
               </button>
             )}
-            <button className="text-gray-400 hover:text-gray-600">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M9 8v4M9 6.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-            </button>
-            <div className="relative">
-              <button onClick={() => setActiveView("tickets")} className="text-gray-400 hover:text-gray-600">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2a5 5 0 0 1 5 5v3l2 2H2l2-2V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M7 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              </button>
-              {openCount > 0 && <span className="absolute -top-1 -right-1 text-[9px] bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">{openCount > 9 ? "9+" : openCount}</span>}
-            </div>
+            <NotificationDropdown
+              inboundMessages={inboundMessages}
+              opsActions={opsActions}
+              replacements={replacements}
+              setActiveView={setActiveView}
+            />
             <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"><span className="text-xs font-bold text-gray-600">JV</span></div>
           </div>
         </header>
@@ -3685,9 +3833,9 @@ export default function JonnyOpsCommandCenter() {
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative transition-colors ${isActive ? "text-blue-600" : "text-gray-400 hover:text-gray-700"}`}
+                className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative transition-colors ${isActive ? "text-slate-700" : "text-gray-400 hover:text-gray-700"}`}
               >
-                <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className={isActive ? "text-blue-600" : "text-gray-400"}>
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className={isActive ? "text-slate-700" : "text-gray-400"}>
                   {item.icon}
                 </svg>
                 <span className="text-[9px] font-medium leading-tight">{item.label}</span>
