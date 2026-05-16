@@ -141,7 +141,8 @@ const fetchTicketsFromSupabase = async () => {
     .from("tickets")
     .select("*")
     .is("archived_at", null)          // active-only: archived rows excluded
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(300);
 
   if (error) {
     console.error("Supabase fetch error:", error);
@@ -453,7 +454,8 @@ const fetchOpsActionsFromSupabase = async () => {
     .select("*")
     .neq("status", "Completed")
     .order("due_at",    { ascending: true,  nullsFirst: false })
-    .order("created_at",{ ascending: true });
+    .order("created_at",{ ascending: true })
+    .limit(200);
   if (error) { console.error("ops_actions fetch error:", error); return { data: [], error }; }
   // Client-side priority sort on top of Supabase ordering
   const sorted = (data || []).slice().sort((a, b) => {
@@ -738,7 +740,8 @@ const fetchAutomationRulesFromSupabase = async () => {
     .from("automation_rules")
     .select("*")
     .eq("is_enabled", true)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(100);
   if (error) { console.error("automation_rules fetch error:", error); return { data: [], error }; }
   return { data: data || [], error: null };
 };
@@ -809,7 +812,8 @@ const fetchInboundMessagesFromSupabase = async () => {
     .from("inbound_messages")
     .select("*")
     .is("archived_at", null)
-    .order("received_at", { ascending: false });
+    .order("received_at", { ascending: false })
+    .limit(200);
   if (error) { console.error("Supabase inbound fetch error:", error); return { data: [], error }; }
   return { data: data || [], error: null };
 };
@@ -842,7 +846,8 @@ const fetchReplacementsFromSupabase = async () => {
     .from("replacements")
     .select("id, date, brand, customer_name, order_number, reason, root_cause, replacement_items, notes, value, preventable, follow_up, status, archived_at, created_at, updated_at")
     .is("archived_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(300);
   if (error) {
     console.error("Supabase replacements fetch error:", error);
     return { data: [], error };
@@ -3699,4 +3704,3 @@ export default function JonnyOpsCommandCenter() {
     </div>
   );
 }
-
