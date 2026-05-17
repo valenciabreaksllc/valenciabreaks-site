@@ -1311,6 +1311,37 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [queueProgress, setQueueProgress] = useState("");
   const [queueSummary, setQueueSummary]   = useState(null);
 
+  // ── Check Gmail state ─────────────────────────────────────────────────────────
+  const [gmailChecking, setGmailChecking] = useState(false);
+  const [gmailCooldown, setGmailCooldown] = useState(false);
+  const [gmailMessage,  setGmailMessage]  = useState("");
+
+  const handleCheckGmail = async () => {
+    setGmailChecking(true);
+    setGmailMessage("");
+    try {
+      const res = await fetch("/api/trigger-make-intake-refresh", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        alert(`Gmail check failed: ${data.error || res.statusText || "Unknown error"}`);
+        setGmailChecking(false);
+        return;
+      }
+      setGmailMessage("Gmail check started. Refreshing inbox shortly.");
+      // Start 30-second cooldown to prevent spam
+      setGmailCooldown(true);
+      setTimeout(() => setGmailCooldown(false), 30000);
+      // Wait 5 seconds then pull fresh messages from Supabase
+      setTimeout(async () => {
+        await onRefresh();
+        setGmailChecking(false);
+      }, 5000);
+    } catch (err) {
+      alert(`Gmail check failed: ${err?.message || "Network error"}`);
+      setGmailChecking(false);
+    }
+  };
+
   const handleProcessQueue = async () => {
     const candidates = inboundMessages.filter(
       m => !m.triage_status || m.triage_status === "Untriaged"
@@ -1468,6 +1499,22 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </>
             ) : "⚡ Process Queue"}
           </button>
+          {/* Check Gmail Now */}
+          <button
+            onClick={handleCheckGmail}
+            disabled={gmailChecking || gmailCooldown || queueRunning || inboundLoading}
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+          >
+            {gmailChecking ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin flex-shrink-0">
+                  <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Checking…
+              </>
+            ) : gmailCooldown ? "Checked ✓" : "Check Gmail Now"}
+          </button>
           {/* Refresh */}
           <button
             onClick={onRefresh}
@@ -1482,6 +1529,14 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           </button>
         </div>
       </div>
+
+      {/* Gmail check success banner */}
+      {gmailMessage && (
+        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
+          <span className="text-xs text-green-700 font-medium">{gmailMessage}</span>
+          <button onClick={() => setGmailMessage("")} className="text-green-400 hover:text-green-700 text-lg leading-none ml-3">×</button>
+        </div>
+      )}
 
       {/* Queue summary banner */}
       {queueSummary && (
