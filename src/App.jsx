@@ -127,7 +127,7 @@ const appTicketToDbRow = (ticket = {}) => {
   };
 };
 
-// ─── PATCH 1: fetchTicketsFromSupabase — active-only + auto-archive filter ───
+// ─── PATCH 1: fetchTicketsFromSupabase - active-only + auto-archive filter ───
 // Fetches only rows where archived_at IS NULL.
 // Resolved tickets older than 7 days and Escalated tickets older than 14 days
 // are excluded client-side so they silently age out without touching Supabase.
@@ -233,7 +233,7 @@ const DEMO_TICKETS = [
   { id: uid(), brand: "Vaulted Rarities", channel: "Email", issueType: "Hostile customer", priority: "High", slaRisk: "Yes", status: "In Progress", notes: "Customer threatening chargeback and public social media post. Requires same-day response.", nextAction: "Backend lookup: confirm order details, then issue de-escalation response", createdAt: new Date(Date.now() - 46 * 3600000).toISOString() },
   { id: uid(), brand: "CardKing47", channel: "Shop Chat", issueType: "Where is my order", priority: "Medium", slaRisk: "No", status: "Resolved", notes: "Carrier scan confirmed delivery. Customer acknowledged receipt.", nextAction: "Closed", createdAt: new Date(Date.now() - 5 * 24 * 3600000).toISOString() },
   { id: uid(), brand: "PokeSpins", channel: "Refund / Return", issueType: "Surprise set dispute", priority: "Medium", slaRisk: "No", status: "Resolved", notes: "Customer disputed contents of surprise set. Unboxing video reviewed and contents confirmed correct.", nextAction: "Closed", createdAt: new Date(Date.now() - 5 * 24 * 3600000).toISOString() },
-  { id: uid(), brand: "CardKing47", channel: "TikTok DM", issueType: "Label created / no scan", priority: "High", slaRisk: "Yes", status: "Resolved", notes: "Label created 3 days prior with no carrier scan. Carrier located package after trace request.", nextAction: "Closed — carrier trace resolved", createdAt: new Date(Date.now() - 5 * 24 * 3600000).toISOString() },
+  { id: uid(), brand: "CardKing47", channel: "TikTok DM", issueType: "Label created / no scan", priority: "High", slaRisk: "Yes", status: "Resolved", notes: "Label created 3 days prior with no carrier scan. Carrier located package after trace request.", nextAction: "Closed - carrier trace resolved", createdAt: new Date(Date.now() - 5 * 24 * 3600000).toISOString() },
   { id: uid(), brand: "CardKing47", channel: "Shop Chat", issueType: "Damaged item", priority: "Medium", slaRisk: "No", status: "Resolved", notes: "Item arrived damaged in transit. Photos confirmed. Replacement sent via priority mail.", nextAction: "Closed", createdAt: new Date(Date.now() - 5 * 24 * 3600000).toISOString() },
   { id: uid(), brand: "CardKing47", channel: "TikTok DM", issueType: "Wrong item", priority: "Medium", slaRisk: "No", status: "Resolved", notes: "Wrong card set packed. Correct item reshipped same day.", nextAction: "Closed", createdAt: new Date(Date.now() - 5 * 24 * 3600000).toISOString() },
   { id: uid(), brand: "PokeSpins", channel: "TikTok DM", issueType: "Missing item", priority: "Low", slaRisk: "No", status: "Resolved", notes: "Customer reported missing item. Order confirmed delivered in full per carrier tracking.", nextAction: "Closed", createdAt: new Date(Date.now() - 5 * 24 * 3600000).toISOString() },
@@ -433,12 +433,12 @@ const generateTemplate = (brand, issueType, tone, orderNum, customerName) => {
   const greeting = greetings[tone] || `Hi ${cName},`;
   const sign = `\nBest,\n${brand} Support`;
   const templates = {
-    "Where is my order": `${greeting}\n\nThank you for reaching out about ${oNum}. I can see your order has been processed and a shipping label has been created. Carriers can take 24–48 hours to scan packages after pickup, especially during high-volume periods.\n\nI'm monitoring your shipment and will follow up as soon as there's a tracking update. If you don't see movement within 2 business days, please let me know and I'll open a carrier investigation right away.\n\nThank you for your patience.${sign}`,
-    "Label created / no scan": `${greeting}\n\nThank you for checking in on ${oNum}. I can confirm your shipping label was created and the order has been handed off to the carrier. I'm currently seeing that the package has not received a carrier scan yet — this can happen during high-volume pickup windows.\n\nI've flagged this for investigation. If we don't see a scan update within 48 hours, I will file a carrier trace on your behalf and keep you updated.\n\nThank you for your patience.${sign}`,
-    "Refund request": `${greeting}\n\nI've received your refund request for ${oNum} and I'm reviewing it right away. We take all refund requests seriously and want to make sure this is handled fairly for you.\n\nTo process this quickly, could you confirm:\n• The reason for the refund request\n• Whether the item is still sealed or has been opened\n• Your preferred resolution — refund or replacement\n\nI'll follow up within 1 business day once I have those details.${sign}`,
+    "Where is my order": `${greeting}\n\nThank you for reaching out about ${oNum}. I can see your order has been processed and a shipping label has been created. Carriers can take 24-48 hours to scan packages after pickup, especially during high-volume periods.\n\nI'm monitoring your shipment and will follow up as soon as there's a tracking update. If you don't see movement within 2 business days, please let me know and I'll open a carrier investigation right away.\n\nThank you for your patience.${sign}`,
+    "Label created / no scan": `${greeting}\n\nThank you for checking in on ${oNum}. I can confirm your shipping label was created and the order has been handed off to the carrier. I'm currently seeing that the package has not received a carrier scan yet - this can happen during high-volume pickup windows.\n\nI've flagged this for investigation. If we don't see a scan update within 48 hours, I will file a carrier trace on your behalf and keep you updated.\n\nThank you for your patience.${sign}`,
+    "Refund request": `${greeting}\n\nI've received your refund request for ${oNum} and I'm reviewing it right away. We take all refund requests seriously and want to make sure this is handled fairly for you.\n\nTo process this quickly, could you confirm:\n• The reason for the refund request\n• Whether the item is still sealed or has been opened\n• Your preferred resolution - refund or replacement\n\nI'll follow up within 1 business day once I have those details.${sign}`,
     "Return request": `${greeting}\n\nThank you for reaching out about ${oNum}. I've received your return request and I'm reviewing your order now.\n\nTo make sure I process this correctly, could you confirm:\n• Whether the item is sealed or opened\n• The reason for the return request\n\nI'll follow up within 1 business day with next steps.${sign}`,
     "Surprise set dispute": `${greeting}\n\nThank you for reaching out about ${oNum}. I want to make sure this gets resolved for you.\n\nSurprise sets are curated ahead of each stream, and contents may vary from what is shown during live. To investigate your concern, could you please:\n• Share a short unboxing video or photos of the contents received\n• Describe the specific concern with the set\n\nOnce I've reviewed the details, I'll follow up with next steps.${sign}`,
-    "Missing item": `${greeting}\n\nI'm sorry to hear ${oNum} arrived with a missing item — that's not the experience we want for you.\n\nTo investigate and process a resolution, could you please send:\n• A photo of the package as it arrived (outside and inside)\n• A photo of all items included in the shipment\n• A photo of the packing slip, if one was included\n\nI'll review everything and get back to you within 24 hours.${sign}`,
+    "Missing item": `${greeting}\n\nI'm sorry to hear ${oNum} arrived with a missing item - that's not the experience we want for you.\n\nTo investigate and process a resolution, could you please send:\n• A photo of the package as it arrived (outside and inside)\n• A photo of all items included in the shipment\n• A photo of the packing slip, if one was included\n\nI'll review everything and get back to you within 24 hours.${sign}`,
     "Damaged item": `${greeting}\n\nI'm so sorry to hear that ${oNum} arrived damaged. That's not acceptable and I want to make this right for you immediately.\n\nTo file a damage claim and process your replacement or refund, I'll need:\n• Clear photos of the damaged item(s)\n• A photo of the outer packaging showing any damage\n\nPlease send those over and I'll prioritize your case right away.${sign}`,
     "Wrong item": `${greeting}\n\nThank you for letting me know about ${oNum}. I apologize for the mix-up on our end.\n\nTo get the correct item to you as quickly as possible, could you please:\n• Send a photo of the item(s) you received\n• Confirm the item(s) you originally ordered\n\nOnce I verify the details, I'll get a replacement shipped out promptly.${sign}`,
     "Hostile customer": `${greeting}\n\nThank you for reaching out. I understand you're frustrated and I assure you that we take your concern seriously.\n\nI am reviewing ${oNum} now and will respond with a complete update by end of day. We are committed to resolving this professionally and fairly.\n\nIf you'd prefer to continue this conversation through another channel, please let me know.${sign}`,
@@ -464,7 +464,7 @@ const BrandPip = ({ brand, size = "sm" }) => (
   />
 );
 
-const ProgressBar = ({ pct, color = "bg-blue-500" }) => (
+const ProgressBar = ({ pct, color = "bg-slate-500" }) => (
   <div className="w-full bg-gray-200 rounded-full h-1.5">
     <div className={`${color} h-1.5 rounded-full transition-all`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
   </div>
@@ -484,16 +484,16 @@ const BtnDanger = ({ children, onClick, size = "sm" }) => (
 );
 
 const Sel = ({ value, onChange, options, placeholder = "Select...", className = "" }) => (
-  <select value={value} onChange={e => onChange(e.target.value)} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 w-full ${className}`}>
+  <select value={value} onChange={e => onChange(e.target.value)} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-500 w-full ${className}`}>
     {placeholder && <option value="">{placeholder}</option>}
     {options.map(o => <option key={o} value={o}>{o}</option>)}
   </select>
 );
 const Inp = ({ value, onChange, placeholder, type = "text", className = "" }) => (
-  <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 w-full placeholder-gray-400 ${className}`} />
+  <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-500 w-full placeholder-gray-400 ${className}`} />
 );
 const Txt = ({ value, onChange, placeholder, rows = 3, className = "" }) => (
-  <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 w-full placeholder-gray-400 resize-none ${className}`} />
+  <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-500 w-full placeholder-gray-400 resize-none ${className}`} />
 );
 const Chk = ({ checked, onChange, label }) => (
   <label className="flex items-center gap-2.5 cursor-pointer group">
@@ -505,7 +505,7 @@ const Chk = ({ checked, onChange, label }) => (
 );
 const FL = ({ children }) => <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{children}</p>;
 
-// ─── PATCH 3: ArchiveBtn — reusable trash icon button ────────────────────────
+// ─── PATCH 3: ArchiveBtn - reusable trash icon button ────────────────────────
 const ArchiveBtn = ({ ticketId, setTickets }) => {
   const handleArchive = async () => {
     const confirmed = window.confirm("Archive this ticket from the active queue?");
@@ -617,7 +617,7 @@ const defaultDueAt = (priority) => {
     d.setHours(23, 59, 59, 0);
     return d.toISOString();
   }
-  return null; // Low — no due date
+  return null; // Low - no due date
 };
 
 // Derive action_type from triage fields
@@ -639,7 +639,7 @@ const deriveActionType = (msg) => {
 const deriveActionTitle = (msg) => {
   const name = msg.customer_name || msg.sender_name || "Customer";
   const it   = msg.issue_type || "inquiry";
-  return `${it} — ${name}`.slice(0, 80);
+  return `${it} - ${name}`.slice(0, 80);
 };
 
 // ─── ACTION PRIORITY / STATUS STYLES ─────────────────────────────────────────
@@ -718,7 +718,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
             <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
             <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          {opsLoading ? "Refreshing…" : "Refresh"}
+          {opsLoading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
@@ -1031,7 +1031,7 @@ const isTikTokJunkLine = (line, username) => {
   // Pure digits e.g. "96"
   if (/^\d+$/.test(line)) return true;
   // Pure symbols / pipes
-  if (/^[|/\\–—\-=*~`]+$/.test(line)) return true;
+  if (/^[|/\\\-*=~`]+$/.test(line)) return true;
   // Timestamp lines e.g. "1:03PM, May 14"
   if (/^\d{1,2}:\d{2}\s*(AM|PM),?\s+\w+\.?\s+\d{1,2}$/i.test(line)) return true;
   // Snapshot note
@@ -1074,7 +1074,7 @@ const cleanTikTokBody = (raw, username) => {
   return kept.join("\n").trim();
 };
 
-// Public entry point — returns { displayName, displayBody, hasHistory }.
+// Public entry point - returns { displayName, displayBody, hasHistory }.
 // hasHistory = true when a "Your previous chat with" boundary was found,
 // used to show the optional collapsed note in the card.
 // Non-TikTok messages pass through unchanged.
@@ -1234,7 +1234,7 @@ const classifyInboundSource = (msg) => {
 // Source type badge styles
 const SOURCE_BADGE_STYLE = {
   "TikTok Shop Chat": "bg-black text-white border-black",
-  "TikTok Refund":    "bg-orange-500 text-white border-orange-600",
+  "TikTok Refund":    "bg-black text-white border-black",
   "Shopify":          "bg-green-700 text-white border-green-800",
   "Outlook":          "bg-slate-600 text-white border-slate-700",
   "Noise":            "bg-gray-200 text-gray-500 border-gray-300",
@@ -1245,18 +1245,18 @@ const SOURCE_BADGE_STYLE = {
 const getInboundCardTitle = (msg, sourceType, displayName) => {
   if (sourceType === "TikTok Refund") {
     const orderStr = (msg.order_number || msg.orderNumber || "").trim();
-    return orderStr ? `Refund / Return Request — Order ${orderStr}` : "Refund / Return Request";
+    return orderStr ? `Refund / Return Request - Order ${orderStr}` : "Refund / Return Request";
   }
   if (sourceType === "TikTok Shop Chat") {
     return displayName ? `Message from ${displayName}` : (msg.subject || "TikTok Shop Chat");
   }
   if (sourceType === "Shopify") {
     const who = msg.customer_name || msg.sender_name || msg.sender_email || "";
-    return who ? `Shopify — ${who}` : (msg.subject || "Shopify Contact");
+    return who ? `Shopify - ${who}` : (msg.subject || "Shopify Contact");
   }
   if (sourceType === "Outlook") {
     const who = msg.sender_name || msg.sender_email || "";
-    return [who, msg.subject].filter(Boolean).join(" — ") || "Outlook Email";
+    return [who, msg.subject].filter(Boolean).join(" - ") || "Outlook Email";
   }
   return msg.subject || msg.issue_type || "Inbound Message";
 };
@@ -1534,7 +1534,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
     for (let i = 0; i < candidates.length; i++) {
       const msg = candidates[i];
-      setQueueProgress(`Processing ${i + 1} of ${candidates.length}…`);
+      setQueueProgress(`Processing ${i + 1} of ${candidates.length}...`);
 
       // ── Step 1: Triage ──────────────────────────────────────────────────────
       let triaged = msg;
@@ -1643,10 +1643,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Command Inbox</h2>
           <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-xs text-gray-400">Active inbound messages — {inboundMessages.length} unarchived</p>
+            <p className="text-xs text-gray-400">Active inbound messages: {safeInboundMessages.length} unarchived</p>
             {/* Automation rules indicator */}
             {automationRulesLoading
-              ? <span className="text-[10px] text-gray-400 italic">Loading rules…</span>
+              ? <span className="text-[10px] text-gray-400 italic">Loading rules...</span>
               : <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
                   automationRules.length > 0
                     ? "bg-teal-50 text-teal-700 border-teal-200"
@@ -1664,7 +1664,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           <button
             onClick={handleProcessQueue}
             disabled={queueRunning || inboundLoading}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg border border-blue-700 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold rounded-lg border border-slate-800 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
           >
             {queueRunning ? (
               <>
@@ -1672,7 +1672,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
                   <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                {queueProgress || "Processing…"}
+                {queueProgress || "Processing..."}
               </>
             ) : "Process Queue"}
           </button>
@@ -1688,7 +1688,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
                   <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                Checking…
+                Checking...
               </>
             ) : gmailCooldown ? "Checked" : "Check Gmail Now"}
           </button>
@@ -1702,7 +1702,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            {inboundLoading ? "Refreshing…" : "Refresh"}
+            {inboundLoading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </div>
@@ -1846,7 +1846,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   <Badge label="Human Review" className="bg-orange-50 text-orange-700 border-orange-200" />
                 )}
               </div>
-              {/* Timestamp — Pacific time, labeled Received or Imported */}
+              {/* Timestamp - Pacific time, labeled Received or Imported */}
               {ts.display && (
                 <div className="flex flex-col items-start flex-shrink-0 sm:items-end">
                   <span className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">{ts.label}</span>
@@ -1855,7 +1855,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               )}
             </div>
 
-            {/* Card title — source-aware */}
+            {/* Card title - source-aware */}
             <p className={`text-xs font-bold mb-1.5 ${isRefund ? "text-orange-700" : "text-gray-900"}`}>{cardTitle}</p>
 
             {/* Refund-specific info row */}
@@ -2002,11 +2002,11 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               )}
               <button disabled={isBusy} onClick={() => handleRunTriage(msg.id)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isBusy ? "Triaging…" : "Run Triage"}
+                {isBusy ? "Triaging..." : "Run Triage"}
               </button>
               <button disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isDraftBusy ? "Drafting…" : "Generate Draft"}
+                {isDraftBusy ? "Drafting..." : "Generate Draft"}
               </button>
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
@@ -2025,64 +2025,72 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 };
 
 const buildSlackSummary = ({ tickets, replacements, studios, surpriseSets, raiseScores }) => {
-  const open = tickets.filter(t => t.status !== "Resolved" && t.status !== "Escalated");
-  const resolved = tickets.filter(t => t.status === "Resolved");
-  const escalated = tickets.filter(t => t.status === "Escalated");
-  const slaRisks = tickets.filter(t => t.slaRisk === "Yes");
-  const totalLoss = replacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
-  const studioReady = studios.filter(s => s.streamReady);
-  const studioScore = Math.round((studioReady.length / studios.length) * 100);
-  const setsReady = surpriseSets.filter(s => s.readyForLive);
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+  const safeStudios = Array.isArray(studios) ? studios : [];
+  const safeSurpriseSets = Array.isArray(surpriseSets) ? surpriseSets : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+  const open = safeTickets.filter(t => t.status !== "Resolved" && t.status !== "Escalated");
+  const resolved = safeTickets.filter(t => t.status === "Resolved");
+  const escalated = safeTickets.filter(t => t.status === "Escalated");
+  const slaRisks = safeTickets.filter(t => t.slaRisk === "Yes");
+  const totalLoss = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
+  const studioReady = safeStudios.filter(s => s.streamReady);
+  const studioScore = safeStudios.length ? Math.round((studioReady.length / safeStudios.length) * 100) : 0;
+  const setsReady = safeSurpriseSets.filter(s => s.readyForLive);
 
-  return `*Jonny Ops — Weekly Shift Summary*
+  return `*Jonny Ops - Weekly Shift Summary*
 
 *TikTok SPS / Customer Support*
-• ${tickets.length} tickets reviewed across VR, CK47, PS, and PM
+• ${safeTickets.length} tickets reviewed across VR, CK47, PS, and PM
 • ${slaRisks.length} SLA risk ticket${slaRisks.length !== 1 ? "s" : ""} identified
 • ${resolved.length} ticket${resolved.length !== 1 ? "s" : ""} resolved | ${escalated.length} escalated | ${open.length} still open
 
 *Inventory & Studio Readiness*
 • ${studioReady.map(s => s.id).join(", ")} stream-ready
-• ${studios.filter(s => !s.streamReady).map(s => s.id).join(", ") || "All studios"} ${studios.filter(s => !s.streamReady).length > 0 ? "not ready" : "stream-ready"}
+• ${safeStudios.filter(s => !s.streamReady).map(s => s.id).join(", ") || "All studios"} ${safeStudios.filter(s => !s.streamReady).length > 0 ? "not ready" : "stream-ready"}
 • Overall studio readiness: ${studioScore}%
 
 *Shipping Loss Prevention*
-• ${replacements.length} replacement case${replacements.length !== 1 ? "s" : ""} logged
+• ${safeReplacements.length} replacement case${safeReplacements.length !== 1 ? "s" : ""} logged
 • Estimated loss tracked: $${totalLoss.toFixed(2)}
-• Preventable cases: ${replacements.filter(r => r.preventable === "Yes").length}
+• Preventable cases: ${safeReplacements.filter(r => r.preventable === "Yes").length}
 
 *Surprise Set Execution*
-• ${setsReady.length} of ${surpriseSets.length} surprise set${surpriseSets.length !== 1 ? "s" : ""} ready for live
+• ${setsReady.length} of ${safeSurpriseSets.length} surprise set${safeSurpriseSets.length !== 1 ? "s" : ""} ready for live
 
-*Raise Path — Self Score*
+*Raise Path - Self Score*
 Consistency ${raiseScores.consistency}% | Accuracy ${raiseScores.accuracy}% | Loss Reduction ${raiseScores.lossReduction}% | Ownership ${raiseScores.ownership}% | Process ${raiseScores.processImprovement}%`;
 };
 
 const buildFullReport = ({ tickets, replacements, studios, surpriseSets, raiseScores, improvements, risks, nextFocus }) => {
-  const open = tickets.filter(t => t.status !== "Resolved" && t.status !== "Escalated");
-  const resolved = tickets.filter(t => t.status === "Resolved");
-  const escalated = tickets.filter(t => t.status === "Escalated");
-  const slaRisks = tickets.filter(t => t.slaRisk === "Yes");
-  const byBrand = BRANDS.map(b => ({ brand: b, total: tickets.filter(t => t.brand === b).length, resolved: tickets.filter(t => t.brand === b && t.status === "Resolved").length }));
-  const totalLoss = replacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
-  const preventable = replacements.filter(r => r.preventable === "Yes");
-  const studioReady = studios.filter(s => s.streamReady);
-  const studioScore = Math.round((studioReady.length / studios.length) * 100);
-  const openDiscrepancies = studios.reduce((a, s) => a + Math.max(0, s.discrepanciesLogged - s.discrepanciesResolved), 0);
-  const setsReady = surpriseSets.filter(s => s.readyForLive);
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+  const safeStudios = Array.isArray(studios) ? studios : [];
+  const safeSurpriseSets = Array.isArray(surpriseSets) ? surpriseSets : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+  const open = safeTickets.filter(t => t.status !== "Resolved" && t.status !== "Escalated");
+  const resolved = safeTickets.filter(t => t.status === "Resolved");
+  const escalated = safeTickets.filter(t => t.status === "Escalated");
+  const slaRisks = safeTickets.filter(t => t.slaRisk === "Yes");
+  const byBrand = BRANDS.map(b => ({ brand: b, total: safeTickets.filter(t => t.brand === b).length, resolved: safeTickets.filter(t => t.brand === b && t.status === "Resolved").length }));
+  const totalLoss = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
+  const preventable = safeReplacements.filter(r => r.preventable === "Yes");
+  const studioReady = safeStudios.filter(s => s.streamReady);
+  const studioScore = safeStudios.length ? Math.round((studioReady.length / safeStudios.length) * 100) : 0;
+  const openDiscrepancies = safeStudios.reduce((a, s) => a + Math.max(0, s.discrepanciesLogged - s.discrepanciesResolved), 0);
+  const setsReady = safeSurpriseSets.filter(s => s.readyForLive);
 
   const rcCounts = {};
-  replacements.forEach(r => { rcCounts[r.rootCause] = (rcCounts[r.rootCause] || 0) + 1; });
+  safeReplacements.forEach(r => { rcCounts[r.rootCause] = (rcCounts[r.rootCause] || 0) + 1; });
   const topCauses = Object.entries(rcCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-  return `JONNY OPS — WEEKLY RAISE TRACKER REPORT
+  return `JONNY OPS - WEEKLY RAISE TRACKER REPORT
 Week of ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
 Prepared by: Jonny Valencia
 ${"─".repeat(52)}
 
 TIKTOK SPS / CUSTOMER SUPPORT
 ─────────────────────────────
-Reviewed ${tickets.length} support tickets across all four brands this week.
+Reviewed ${safeTickets.length} support tickets across all four brands this week.
 
 By brand:
 ${byBrand.map(b => `  ${b.brand.padEnd(20)} ${b.total} tickets  (${b.resolved} resolved)`).join("\n")}
@@ -2092,31 +2100,31 @@ Summary:
   Open:            ${open.length}
   Escalated:       ${escalated.length}
   SLA risks flagged: ${slaRisks.length}
-  SLA risks (active, < 2h): ${tickets.filter(t => isActiveSlaRisk(t)).length}
+  SLA risks (active, < 2h): ${safeTickets.filter(t => isActiveSlaRisk(t)).length}
 
 INVENTORY & STUDIO READINESS
 ─────────────────────────────
-${studios.map(s => `  ${s.id}: ${s.streamReady ? "Stream-ready" : "NOT READY"} — ${s.notes}`).join("\n")}
+${safeStudios.map(s => `  ${s.id}: ${s.streamReady ? "Stream-ready" : "NOT READY"} - ${s.notes}`).join("\n")}
 
   Overall readiness:     ${studioScore}%
   Open discrepancies:    ${openDiscrepancies}
-  Studios counted:       ${studios.filter(s => s.countCompleted).length}/${studios.length}
+  Studios counted:       ${safeStudios.filter(s => s.countCompleted).length}/${safeStudios.length}
 
 SHIPPING LOSS PREVENTION
 ─────────────────────────────
-  Replacement cases logged:   ${replacements.length}
+  Replacement cases logged:   ${safeReplacements.length}
   Estimated loss tracked:     $${totalLoss.toFixed(2)}
   Preventable cases:          ${preventable.length}${preventable.length > 0 ? ` (${preventable.map(r => r.orderNum).join(", ")})` : ""}
-  Follow-up required:         ${replacements.filter(r => r.followUp === "Yes").length}
+  Follow-up required:         ${safeReplacements.filter(r => r.followUp === "Yes").length}
 ${topCauses.length > 0 ? `\n  Top root causes:\n${topCauses.map(([c, n]) => `  • ${c}: ${n} case${n > 1 ? "s" : ""}`).join("\n")}` : ""}
 
 SURPRISE SET EXECUTION
 ─────────────────────────────
-  Sets tracked:       ${surpriseSets.length}
+  Sets tracked:       ${safeSurpriseSets.length}
   Ready for live:     ${setsReady.length}
-${surpriseSets.map(s => `  • ${s.setName} (${s.brand}) — ${s.readyForLive ? "Ready" : "Not ready"}`).join("\n")}
+${safeSurpriseSets.map(s => `  • ${s.setName} (${s.brand}) - ${s.readyForLive ? "Ready" : "Not ready"}`).join("\n")}
 
-RAISE PATH — SELF ASSESSMENT
+RAISE PATH - SELF ASSESSMENT
 ─────────────────────────────
   Consistency:          ${raiseScores.consistency}%
   Accuracy:             ${raiseScores.accuracy}%
@@ -2142,7 +2150,7 @@ ${new Date().toLocaleString()}`.trim();
 };
 
 // ─── DAILY OPS BRIEF ─────────────────────────────────────────────────────────
-// Pure computation — reads already-fetched state, no new Supabase calls.
+// Pure computation - reads already-fetched state, no new Supabase calls.
 
 const buildBriefSummary = ({ msgsNeedingReply, draftsReady, overdueActions, highActions, dueTodayActions, waitingActions }) => {
   const parts = [];
@@ -2174,6 +2182,9 @@ const START_HERE_TYPE_LABEL = {
 
 const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) => {
   const [refreshKey, setRefreshKey] = useState(0);
+  const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
   const now = new Date();
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -2185,20 +2196,20 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   const createdToday = (iso) => { const d = new Date(iso); return d >= todayStart && d <= todayEnd; };
 
   // ── Metric counts ─────────────────────────────────────────────────────────────
-  const msgsNeedingReply  = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
-  const draftsReady       = inboundMessages.filter(m => m.draft_status === "Draft Ready").length;
-  const openActions       = opsActions.length;
-  const dueTodayActions   = opsActions.filter(isDueToday).length;
-  const overdueActions    = opsActions.filter(isOverdue).length;
-  const highActions       = opsActions.filter(isHighPlus).length;
-  const waitingActions    = opsActions.filter(a => a.status === "Waiting on Customer").length;
-  const ticketsToday      = tickets.filter(t => t.createdAt && createdToday(t.createdAt)).length;
+  const msgsNeedingReply  = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
+  const draftsReady       = safeInboundMessages.filter(m => m.draft_status === "Draft Ready").length;
+  const openActions       = safeOpsActions.length;
+  const dueTodayActions   = safeOpsActions.filter(isDueToday).length;
+  const overdueActions    = safeOpsActions.filter(isOverdue).length;
+  const highActions       = safeOpsActions.filter(isHighPlus).length;
+  const waitingActions    = safeOpsActions.filter(a => a.status === "Waiting on Customer").length;
+  const ticketsToday      = safeTickets.filter(t => t.createdAt && createdToday(t.createdAt)).length;
 
   // ── Build Start Here list (max 5, priority-ordered) ───────────────────────────
   const startHere = [];
 
   // 1. Overdue ops_actions
-  opsActions
+  safeOpsActions
     .filter(isOverdue)
     .sort((a, b) => new Date(a.due_at) - new Date(b.due_at))
     .forEach(a => {
@@ -2262,7 +2273,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
         type:     "draft_ready",
         brand:    m.brand,
         title:    m.subject || m.issue_type || "Draft ready",
-        summary:  displayName ? `From ${displayName} — approve or refine` : "Review and approve AI draft",
+        summary:  displayName ? `From ${displayName} - approve or refine` : "Review and approve AI draft",
         priority: m.priority,
         due_at:   null,
         nav:      "inbox",
@@ -2504,7 +2515,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
     setShowForm(false);
   };
 
-  // Safe array guards — prevents crash if props arrive undefined during loading
+  // Safe array guards - prevents crash if props arrive undefined during loading
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
   const safeReplacements = Array.isArray(replacements) ? replacements : [];
   const safeStudios = Array.isArray(studios) ? studios : [];
@@ -2526,12 +2537,12 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const studioReady = safeStudios.filter(s => s.streamReady).length;
   const studioScore = safeStudios.length ? Math.round((studioReady / safeStudios.length) * 100) : 0;
 
-  // Morning Brief — deterministic, no AI
+  // Morning Brief - deterministic, no AI
   const morningBrief = (() => {
     const firstName = "Jonny";
     const allClear  = msgsNeedingReply === 0 && refundItems === 0 && replacementFU === 0;
     if (allClear) {
-      return `Good morning, ${firstName}. The inbox is clear right now. Check surprise sets, inventory readiness, and any manual DMs before the day starts.`;
+      return `Good morning ${firstName}! The inbox is clear right now. Check surprise sets, inventory readiness, and any manual DMs before the day starts.`;
     }
     const parts = [];
     if (msgsNeedingReply > 0) parts.push(`${msgsNeedingReply} message${msgsNeedingReply > 1 ? "s" : ""} needing reply`);
@@ -2540,7 +2551,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
     const list = parts.length === 1 ? parts[0]
       : parts.length === 2 ? `${parts[0]} and ${parts[1]}`
       : `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
-    return `Good morning, ${firstName}. You have ${list}. Start with the highest-priority inbox items, then check surprise sets and inventory readiness.`;
+    return `Good morning ${firstName}! You have ${list}. Start with refunds or returns first, then clear the oldest inbox items.`;
   })();
 
   const SET_STEPS = ["warehouseListReceived", "convertedSetSheet", "importedDesktop", "quantitiesVerified", "readyForLive"];
@@ -2613,7 +2624,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         </Card>
       </div>
 
-      {/* 2-col layout — stacks on mobile */}
+      {/* 2-col layout - stacks on mobile */}
       <div className="flex flex-col md:flex-row gap-4">
         {/* Ticket table */}
         <div className="flex-1 min-w-0">
@@ -2659,7 +2670,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
             </div>
           </Card>
 
-          {/* Weekly report preview — real data */}
+          {/* Weekly report preview - real data */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-bold text-gray-900">Weekly Report Preview</p>
@@ -2667,13 +2678,13 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
             <div className="bg-gray-50 border border-gray-200 rounded p-3 text-[11px] text-gray-600 leading-relaxed space-y-1.5">
               <p className="font-semibold text-gray-800">Command Inbox</p>
               <p>• {safeInbound.length} active messages</p>
-              <p>• {msgsNeedingReply} needing reply — {refundItems} refund/return item{refundItems !== 1 ? "s" : ""}</p>
+              <p>• {msgsNeedingReply} needing reply - {refundItems} refund/return item{refundItems !== 1 ? "s" : ""}</p>
               <p>• {actionRequiredCount} total action required</p>
               <p className="font-semibold text-gray-800 pt-1">Shipping Loss</p>
-              <p>• {safeReplacements.length} replacement cases — ${totalLoss.toFixed(2)} tracked</p>
+              <p>• {safeReplacements.length} replacement cases - ${totalLoss.toFixed(2)} tracked</p>
               <p>• {safeReplacements.filter(r => r.preventable === "Yes").length} preventable</p>
               <p className="font-semibold text-gray-800 pt-1">Studios</p>
-              <p>• {studioReady}/{safeStudios.length} stream-ready — {studioScore}% readiness</p>
+              <p>• {studioReady}/{safeStudios.length} stream-ready - {studioScore}% readiness</p>
               <p className="font-semibold text-gray-800 pt-1">Sets</p>
               <p>• {surpriseReadyTotal}/{surpriseBlockTotal} stream blocks live ready</p>
             </div>
@@ -2693,19 +2704,19 @@ const DailyCommandView = ({ tickets }) => {
   const crit = tickets.filter(isActiveSlaRisk);
   const high = tickets.filter(t => t.priority === "High" && t.status !== "Resolved");
   const rec = crit.length > 0
-    ? `Resolve SLA critical ticket immediately: "${crit[0].issueType}" for ${crit[0].brand} — ${slaDisplay(crit[0].createdAt).display} remaining`
+    ? `Resolve SLA critical ticket immediately: "${crit[0].issueType}" for ${crit[0].brand} - ${slaDisplay(crit[0].createdAt).display} remaining`
     : high.length > 0
     ? `Address high-priority ticket: "${high[0].issueType}" for ${high[0].brand}`
     : sp < 100
     ? `Complete start-of-shift checklist (${sp}% done)`
-    : "All clear — run a proactive Shop Chat sweep across all brands";
+    : "All clear - run a proactive Shop Chat sweep across all brands";
 
   const priorities = [
-    { label: "P1 — Refunds / Returns", count: tickets.filter(t => ["Refund request","Return request"].includes(t.issueType) && t.status !== "Resolved").length, cls: "border-red-300 bg-red-50 text-red-700" },
-    { label: "P2 — Shop Chat Sweeps", count: tickets.filter(t => t.channel === "Shop Chat" && t.status === "New").length, cls: "border-amber-300 bg-amber-50 text-amber-700" },
-    { label: "P3 — Inventory & Studio Readiness", count: 0, cls: "border-blue-300 bg-blue-50 text-blue-700" },
-    { label: "P4 — Shipping Replacement Log", count: 0, cls: "border-purple-300 bg-purple-50 text-purple-700" },
-    { label: "P5 — Surprise Sets", count: 0, cls: "border-pink-300 bg-pink-50 text-pink-700" },
+    { label: "P1 - Refunds / Returns", count: tickets.filter(t => ["Refund request","Return request"].includes(t.issueType) && t.status !== "Resolved").length, cls: "border-red-300 bg-red-50 text-red-700" },
+    { label: "P2 - Shop Chat Sweeps", count: tickets.filter(t => t.channel === "Shop Chat" && t.status === "New").length, cls: "border-amber-300 bg-amber-50 text-amber-700" },
+    { label: "P3 - Inventory & Studio Readiness", count: 0, cls: "border-blue-300 bg-blue-50 text-blue-700" },
+    { label: "P4 - Shipping Replacement Log", count: 0, cls: "border-purple-300 bg-purple-50 text-purple-700" },
+    { label: "P5 - Surprise Sets", count: 0, cls: "border-pink-300 bg-pink-50 text-pink-700" },
   ];
 
   return (
@@ -2713,8 +2724,8 @@ const DailyCommandView = ({ tickets }) => {
       <div><h2 className="text-2xl font-bold text-gray-900">Daily Command Board</h2><p className="text-xs text-gray-400 mt-0.5">{todayStr()} · {nowStr()}</p></div>
       {crit.length > 0 && (
         <div className="bg-red-600 rounded-lg px-5 py-3">
-          <p className="text-white text-xs font-bold uppercase tracking-widest mb-1">Critical SLA Alert Zone — Action Required Now</p>
-          {crit.map(t => <p key={t.id} className="text-white text-sm font-mono">{t.brand} — {t.issueType} — {slaDisplay(t.createdAt).display} remaining</p>)}
+          <p className="text-white text-xs font-bold uppercase tracking-widest mb-1">Critical SLA Alert Zone - Action Required Now</p>
+          {crit.map(t => <p key={t.id} className="text-white text-sm font-mono">{t.brand} - {t.issueType} - {slaDisplay(t.createdAt).display} remaining</p>)}
         </div>
       )}
       <Card className="p-4 border-l-4 border-l-blue-500">
@@ -2796,7 +2807,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h2 className="text-2xl font-bold text-gray-900">TikTok SPS Defense Queue</h2><p className="text-xs text-gray-400 mt-0.5">{tickets.length} total tickets</p></div>
-        <BtnPrimary onClick={() => setShowForm(s => !s)} size="md">{showForm ? "✕ Close" : "+ New Ticket"}</BtnPrimary>
+        <BtnPrimary onClick={() => setShowForm(s => !s)} size="md">{showForm ? "Close" : "+ New Ticket"}</BtnPrimary>
       </div>
       {showForm && (
         <Card className="p-4">
@@ -2848,20 +2859,20 @@ const BrowserProfileView = () => {
       <div><h2 className="text-2xl font-bold text-gray-900">Browser Profile Map</h2><p className="text-xs text-gray-400 mt-0.5">Each TikTok Shop requires its own isolated browser profile</p></div>
       <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
         <p className="text-amber-800 font-bold text-sm mb-1">Critical Operating Rule</p>
-        <p className="text-amber-700 text-sm">Never mix TikTok logins. Each brand stays in its own dedicated browser profile. Shopify is a backend lookup source only — it is never used to process TikTok orders or actions directly.</p>
+        <p className="text-amber-700 text-sm">Never mix TikTok logins. Each brand stays in its own dedicated browser profile. Shopify is a backend lookup source only - it is never used to process TikTok orders or actions directly.</p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         {profiles.map(p => (
           <Card key={p.brand} className="p-5">
             <div className="flex items-center gap-2.5 mb-4"><BrandPip brand={p.brand} size="lg" /><h3 className="font-bold text-gray-900">{p.brand}</h3><span className="text-xs text-gray-400 ml-auto border border-gray-200 rounded px-2 py-0.5">Isolated Profile</span></div>
             <div className="space-y-2 mb-4">{p.tools.map(t => <div key={t} className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" /><span className="text-sm text-gray-700">{t}</span></div>)}</div>
-            <div className="border-t border-gray-100 pt-3 flex items-center gap-2"><span className="text-gray-400 text-sm">Shopify</span><span className="text-sm text-gray-400">— backend lookup only</span><span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 ml-auto">Read-only</span></div>
+            <div className="border-t border-gray-100 pt-3 flex items-center gap-2"><span className="text-gray-400 text-sm">Shopify</span><span className="text-sm text-gray-400">- backend lookup only</span><span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 ml-auto">Read-only</span></div>
           </Card>
         ))}
       </div>
       <Card className="p-4">
         <p className="text-sm font-bold text-gray-900 mb-3">Profile Isolation Rules</p>
-        <div className="space-y-2">{["Never log into multiple TikTok Shop accounts in the same browser session","Use separate Chrome profiles or browser instances for each brand","Shopify is a backend lookup source — do not use it to perform TikTok order actions","Instagram DMs for Vaulted Rarities and CardKing47 stay in their respective profiles","Outlook Email is only used within the Vaulted Rarities profile"].map((r, i) => <div key={i} className="flex items-start gap-2"><span className="text-gray-400 flex-shrink-0 mt-0.5">{i + 1}.</span><span className="text-sm text-gray-600">{r}</span></div>)}</div>
+        <div className="space-y-2">{["Never log into multiple TikTok Shop accounts in the same browser session","Use separate Chrome profiles or browser instances for each brand","Shopify is a backend lookup source - do not use it to perform TikTok order actions","Instagram DMs for Vaulted Rarities and CardKing47 stay in their respective profiles","Outlook Email is only used within the Vaulted Rarities profile"].map((r, i) => <div key={i} className="flex items-start gap-2"><span className="text-gray-400 flex-shrink-0 mt-0.5">{i + 1}.</span><span className="text-sm text-gray-600">{r}</span></div>)}</div>
       </Card>
     </div>
   );
@@ -2995,6 +3006,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   const [savingId, setSavingId] = useState(null);
   const f  = k => v => setForm(p => ({ ...p, [k]: v }));
   const ef = k => v => setEditForm(p => ({ ...p, [k]: v }));
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
 
   // ── Add new row (local-only until Supabase migration of replacements table) ──
   const add = () => {
@@ -3054,16 +3066,16 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   };
 
   // ── Filter + derived stats ──────────────────────────────────────────────────
-  const displayRows = replacements.filter(r => {
+  const displayRows = safeReplacements.filter(r => {
     if (activeFilter === "All")             return true;
     if (activeFilter === "Follow-Up Needed") return r.followUp === "Yes";
     return r.brand === activeFilter;
   });
 
-  const loss = replacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
-  const prev = replacements.filter(r => r.preventable === "Yes").length;
-  const fu   = replacements.filter(r => r.followUp === "Yes").length;
-  const rc   = ROOT_CAUSES.map(c => ({ c, n: replacements.filter(r => r.rootCause === c).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
+  const loss = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
+  const prev = safeReplacements.filter(r => r.preventable === "Yes").length;
+  const fu   = safeReplacements.filter(r => r.followUp === "Yes").length;
+  const rc   = ROOT_CAUSES.map(c => ({ c, n: safeReplacements.filter(r => r.rootCause === c).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
 
   return (
     <div className="space-y-4">
@@ -3083,9 +3095,9 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
               <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            {replacementsLoading ? "Loading…" : "Refresh"}
+            {replacementsLoading ? "Loading..." : "Refresh"}
           </button>
-          <BtnPrimary onClick={() => setShow(s => !s)} size="md">{show ? "✕ Close" : "+ Log Replacement"}</BtnPrimary>
+          <BtnPrimary onClick={() => setShow(s => !s)} size="md">{show ? "Close" : "+ Log Replacement"}</BtnPrimary>
         </div>
       </div>
 
@@ -3095,7 +3107,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
       )}
 
       {/* Loading skeleton */}
-      {replacementsLoading && replacements.length === 0 && (
+      {replacementsLoading && safeReplacements.length === 0 && (
         <div className="space-y-2">
           {[1,2,3].map(i => (
             <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 animate-pulse">
@@ -3108,9 +3120,9 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
 
       {/* Metric chips */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{replacements.length}</p></Card>
+        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{safeReplacements.length}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p><p className="text-3xl font-bold text-red-600 mt-1">${loss.toFixed(2)}</p></Card>
-        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-amber-600 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{replacements.length > 0 ? Math.round((prev / replacements.length) * 100) : 0}% of total</p></Card>
+        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-amber-600 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{safeReplacements.length > 0 ? Math.round((prev / safeReplacements.length) * 100) : 0}% of total</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Follow-Up Needed</p><p className="text-3xl font-bold text-slate-700 mt-1">{fu}</p></Card>
       </div>
 
@@ -3118,7 +3130,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
       {rc.length > 0 && (
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-3">Root Cause Breakdown</p>
-          <div className="space-y-2">{rc.slice(0, 5).map(({ c, n }) => <div key={c} className="flex items-center gap-3"><span className="text-xs text-gray-500 w-44 truncate">{c}</span><div className="flex-1"><ProgressBar pct={(n / replacements.length) * 100} color="bg-red-400" /></div><span className="text-xs text-gray-400 w-6 text-right">{n}</span></div>)}</div>
+          <div className="space-y-2">{rc.slice(0, 5).map(({ c, n }) => <div key={c} className="flex items-center gap-3"><span className="text-xs text-gray-500 w-44 truncate">{c}</span><div className="flex-1"><ProgressBar pct={safeReplacements.length ? (n / safeReplacements.length) * 100 : 0} color="bg-red-400" /></div><span className="text-xs text-gray-400 w-6 text-right">{n}</span></div>)}</div>
         </Card>
       )}
 
@@ -3146,19 +3158,19 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
         </Card>
       )}
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 no-scrollbar">
-        {REPLACEMENT_FILTERS.map(opt => (
-          <button key={opt} onClick={() => setActiveFilter(opt)}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
-              activeFilter === opt
-                ? "bg-slate-700 text-white border-slate-800"
-                : "bg-white text-gray-600 border-gray-300 hover:border-slate-400 hover:text-slate-700"
-            }`}>
-            {opt}
-          </button>
-        ))}
-        <span className="text-[10px] text-gray-400 ml-1">{displayRows.length} shown</span>
+      {/* Filter control */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+          <span className="whitespace-nowrap">Filter:</span>
+          <select
+            value={activeFilter}
+            onChange={e => setActiveFilter(e.target.value)}
+            className="min-w-0 bg-transparent text-xs font-semibold text-slate-800 outline-none"
+          >
+            {REPLACEMENT_FILTERS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+        </label>
+        <span className="text-[10px] text-gray-400">{displayRows.length} shown</span>
       </div>
 
       {/* Table */}
@@ -3208,7 +3220,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                           <div className="flex items-center gap-1.5">
                             <button disabled={savingId === r.id} onClick={handleSaveEdit}
                               className="text-[10px] font-semibold text-white bg-slate-700 hover:bg-slate-800 disabled:opacity-50 px-2 py-0.5 rounded cursor-pointer">
-                              {savingId === r.id ? "…" : "Save"}
+                              {savingId === r.id ? "..." : "Save"}
                             </button>
                             <button onClick={() => { setEditRow(null); setEditForm({}); }}
                               className="text-[10px] text-gray-500 hover:text-gray-800 cursor-pointer px-1">
@@ -3222,18 +3234,18 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                       <>
                         <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.date}</td>
                         <td className="px-3 py-2.5"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{BRAND_SHORT[r.brand] || r.brand}</span></div></td>
-                        <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{r.customerName || r.customer_name || "—"}</td>
-                        <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{r.orderNum || r.order_number || "—"}</td>
-                        <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">{r.reason || "—"}</td>
-                        <td className="px-3 py-2.5 text-gray-500 max-w-[120px] truncate">{r.replacementItems || r.replacement_items || "—"}</td>
-                        <td className="px-3 py-2.5 text-gray-400 max-w-[120px] truncate">{r.notes || "—"}</td>
+                        <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{r.customerName || r.customer_name || "-"}</td>
+                        <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{r.orderNum || r.order_number || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">{r.reason || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-500 max-w-[120px] truncate">{r.replacementItems || r.replacement_items || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-400 max-w-[120px] truncate">{r.notes || "-"}</td>
                         <td className="px-3 py-2.5 text-green-700 font-bold whitespace-nowrap">${parseFloat(r.marketValue || r.market_value || 0).toFixed(2)}</td>
                         <td className="px-3 py-2.5"><Badge label={r.preventable} className={r.preventable === "Yes" ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
                         <td className="px-3 py-2.5"><Badge label={r.followUp || r.follow_up} className={(r.followUp === "Yes" || r.follow_up === "Yes") ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
                         <td className="px-3 py-2.5">
                           {r.status
                             ? <Badge label={r.status} className={r.status === "Reshipped" || r.status === "Resolved" ? "bg-green-50 text-green-700 border-green-200" : r.status === "Open" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
-                            : <span className="text-gray-300">—</span>
+                            : <span className="text-gray-300">-</span>
                           }
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
@@ -3272,18 +3284,19 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
 
 // ─── STUDIO READINESS ─────────────────────────────────────────────────────────
 const StudioReadinessView = ({ studios, setStudios }) => {
+  const safeStudios = Array.isArray(studios) ? studios : [];
   const upd = (id, field, val) => setStudios(p => p.map(s => s.id === id ? { ...s, [field]: val } : s));
   const score = s => { let sc = 0; if (s.countCompleted) sc += 25; if (s.fullyStocked) sc += 25; if (s.discrepanciesLogged === 0 || s.discrepanciesResolved === s.discrepanciesLogged) sc += 25; if (s.streamReady) sc += 25; return sc; };
-  const overall = Math.round(studios.reduce((a, s) => a + score(s), 0) / studios.length);
+  const overall = safeStudios.length ? Math.round(safeStudios.reduce((a, s) => a + score(s), 0) / safeStudios.length) : 0;
   return (
     <div className="space-y-4">
       <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness · <span className="font-medium text-gray-500">{getWeekOfLabel()}</span></p></div>
       <Card className="p-4 flex items-center gap-6">
         <div className="text-center"><p className="text-xs text-gray-400 mb-1">Overall Readiness</p><p className={`text-5xl font-bold ${overall >= 75 ? "text-green-600" : overall >= 50 ? "text-amber-500" : "text-red-500"}`}>{overall}%</p></div>
-        <div className="flex-1"><ProgressBar pct={overall} color={overall >= 75 ? "bg-green-500" : overall >= 50 ? "bg-amber-400" : "bg-red-500"} /><p className="text-xs text-gray-400 mt-1.5">{studios.filter(s => s.streamReady).length}/{studios.length} stations stream-ready</p></div>
+        <div className="flex-1"><ProgressBar pct={overall} color={overall >= 75 ? "bg-green-500" : overall >= 50 ? "bg-amber-400" : "bg-red-500"} /><p className="text-xs text-gray-400 mt-1.5">{safeStudios.filter(s => s.streamReady).length}/{safeStudios.length} stations stream-ready</p></div>
       </Card>
       <div className="grid grid-cols-2 gap-4">
-        {studios.map(s => {
+        {safeStudios.map(s => {
           const sc = score(s);
           const brandLabel = STUDIO_BRANDS[s.id];
           return (
@@ -3662,7 +3675,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
         </div>
       </div>
 
-      {/* Top Metric Cards — 4 col on md, 2 col on mobile */}
+      {/* Top Metric Cards - 4 col on md, 2 col on mobile */}
       <div>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Top Metrics</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -3697,7 +3710,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
                   <td className="px-4 py-2.5 font-medium text-gray-800">{row.brand}</td>
                   <td className="px-4 py-2.5 text-gray-600">{row.open}</td>
                   <td className="px-4 py-2.5 text-gray-600">{row.closed}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{row.refunds > 0 ? <span className="text-orange-600 font-semibold">{row.refunds}</span> : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{row.refunds > 0 ? <span className="text-orange-600 font-semibold">{row.refunds}</span> : <span className="text-gray-300">-</span>}</td>
                   <td className="px-4 py-2.5 text-gray-600">{row.replacements}</td>
                 </tr>
               ))}
@@ -3763,6 +3776,10 @@ const [confirmClear, setConfirmClear] = useState(false);
 const [importErr, setImportErr] = useState("");
 const [clearErr, setClearErr] = useState("");
 const [saved, setSaved] = useState(false);
+const safeReplacements = Array.isArray(replacements) ? replacements : [];
+const safeStudios = Array.isArray(studios) ? studios : [];
+const safeSurpriseSets = Array.isArray(surpriseSets) ? surpriseSets : [];
+const safeTickets = Array.isArray(tickets) ? tickets : [];
 
   const dl = (data, name, type) => {
     const b = new Blob([data], { type }); const u = URL.createObjectURL(b);
@@ -3771,19 +3788,19 @@ const [saved, setSaved] = useState(false);
   };
 
   const exportJSON = () => {
-    const data = { tickets, replacements, studios, surpriseSets, exportedAt: nowISO() };
+    const data = { tickets: safeTickets, replacements: safeReplacements, studios: safeStudios, surpriseSets: safeSurpriseSets, exportedAt: nowISO() };
     dl(JSON.stringify(data, null, 2), `jonny-ops-backup-${todayDate()}.json`, "application/json");
   };
   const exportTicketsCSV = () => {
-    const rows = tickets.map(t => [t.id, `"${t.brand}"`, `"${t.channel}"`, `"${t.issueType}"`, t.priority, t.slaRisk, t.status, `"${t.notes?.replace(/"/g, '""')}"`, `"${t.nextAction?.replace(/"/g, '""')}"`, t.createdAt]);
+    const rows = safeTickets.map(t => [t.id, `"${t.brand}"`, `"${t.channel}"`, `"${t.issueType}"`, t.priority, t.slaRisk, t.status, `"${t.notes?.replace(/"/g, '""')}"`, `"${t.nextAction?.replace(/"/g, '""')}"`, t.createdAt]);
     dl([["ID", "Brand", "Channel", "Issue Type", "Priority", "SLA Risk", "Status", "Notes", "Next Action", "Created At"], ...rows].map(r => r.join(",")).join("\n"), `tiktok-tickets-${todayDate()}.csv`, "text/csv");
   };
   const exportReplacementsCSV = () => {
-    const rows = replacements.map(r => [r.id, r.date, `"${r.brand}"`, r.orderNum, `"${r.reason?.replace(/"/g, '""')}"`, `"${r.rootCause}"`, r.marketValue, r.preventable, r.followUp, `"${r.notes?.replace(/"/g, '""')}"`]);
+    const rows = safeReplacements.map(r => [r.id, r.date, `"${r.brand}"`, r.orderNum, `"${r.reason?.replace(/"/g, '""')}"`, `"${r.rootCause}"`, r.marketValue, r.preventable, r.followUp, `"${r.notes?.replace(/"/g, '""')}"`]);
     dl([["ID", "Date", "Brand", "Order #", "Reason", "Root Cause", "Market Value", "Preventable", "Follow-Up", "Notes"], ...rows].map(r => r.join(",")).join("\n"), `replacement-log-${todayDate()}.csv`, "text/csv");
   };
   const exportReport = () => {
-    const rpt = buildFullReport({ tickets, replacements, studios, surpriseSets, raiseScores, improvements: "", risks: "", nextFocus: "" });
+    const rpt = buildFullReport({ tickets: safeTickets, replacements: safeReplacements, studios: safeStudios, surpriseSets: safeSurpriseSets, raiseScores, improvements: "", risks: "", nextFocus: "" });
     dl(rpt, `jonny-ops-report-${todayDate()}.txt`, "text/plain");
   };
 
@@ -3849,7 +3866,7 @@ const clearAll = async () => {
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-1">Export JSON Backup</p>
-          <p className="text-xs text-gray-400 mb-3">Full backup — tickets, replacements, studios, sets</p>
+          <p className="text-xs text-gray-400 mb-3">Full backup - tickets, replacements, studios, sets</p>
           <BtnPrimary onClick={exportJSON} size="md">Export JSON Backup</BtnPrimary>
         </Card>
         <Card className="p-4">
@@ -3862,12 +3879,12 @@ const clearAll = async () => {
         </Card>
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-1">Export Tickets CSV</p>
-          <p className="text-xs text-gray-400 mb-3">{tickets.length} tickets → spreadsheet</p>
+          <p className="text-xs text-gray-400 mb-3">{safeTickets.length} tickets to spreadsheet</p>
           <BtnSecondary onClick={exportTicketsCSV} size="md">Export Tickets CSV</BtnSecondary>
         </Card>
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-1">Export Replacements CSV</p>
-          <p className="text-xs text-gray-400 mb-3">{replacements.length} cases → spreadsheet</p>
+          <p className="text-xs text-gray-400 mb-3">{safeReplacements.length} cases to spreadsheet</p>
           <BtnSecondary onClick={exportReplacementsCSV} size="md">Export Replacements CSV</BtnSecondary>
         </Card>
         <Card className="p-4">
@@ -3878,7 +3895,7 @@ const clearAll = async () => {
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-1">Session Stats</p>
           <div className="space-y-1.5 mt-2">
-            {[["Tickets", tickets.length], ["Replacements", replacements.length], ["Studios tracked", studios.length], ["Surprise sets", surpriseSets.length]].map(([k, v]) => <div key={k} className="flex justify-between text-xs"><span className="text-gray-400">{k}</span><span className="font-semibold text-gray-800">{v}</span></div>)}
+            {[["Tickets", safeTickets.length], ["Replacements", safeReplacements.length], ["Studios tracked", safeStudios.length], ["Surprise sets", safeSurpriseSets.length]].map(([k, v]) => <div key={k} className="flex justify-between text-xs"><span className="text-gray-400">{k}</span><span className="font-semibold text-gray-800">{v}</span></div>)}
           </div>
         </Card>
       </div>
@@ -4015,7 +4032,13 @@ export default function JonnyOpsCommandCenter() {
   });
   const [surpriseSets, setSurpriseSets] = useState(() => loadWeeklySurpriseSets());
   const [raiseScores, setRaiseScores] = useState({ consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 });
-  const [sidebar, setSidebar] = useState(true);
+  const [sidebar, setSidebar] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ops_sidebar_expanded");
+      if (saved != null) return saved === "true";
+    } catch {}
+    return false;
+  });
   const [sidekickToast, setSidekickToast] = useState(false);
 
   // ── Inbox state ──────────────────────────────────────────────────────────────
@@ -4087,6 +4110,10 @@ export default function JonnyOpsCommandCenter() {
     try { localStorage.setItem("ops_studios_v1", JSON.stringify(studios)); } catch {}
   }, [studios]);
 
+  useEffect(() => {
+    try { localStorage.setItem("ops_sidebar_expanded", String(sidebar)); } catch {}
+  }, [sidebar]);
+
   // Persist weekly surprise set setup locally until a Supabase workflow exists
   useEffect(() => {
     try {
@@ -4097,7 +4124,7 @@ export default function JonnyOpsCommandCenter() {
     } catch {}
   }, [surpriseSets]);
 
-  // Fetch automation rules on mount (non-blocking — queue falls back to safe defaults on error)
+  // Fetch automation rules on mount (non-blocking - queue falls back to safe defaults on error)
   useEffect(() => {
     const load = async () => {
       setAutomationRulesLoading(true);
@@ -4109,7 +4136,7 @@ export default function JonnyOpsCommandCenter() {
     load();
   }, []);
 
-  // OP Sidekick — INSERT into Supabase, then refresh list
+  // OP Sidekick - INSERT into Supabase, then refresh list
   useEffect(() => {
     const ticket = getSidekickTicketFromHash();
     if (!ticket) return;
@@ -4235,11 +4262,14 @@ export default function JonnyOpsCommandCenter() {
         style={{ width: sidebar ? 224 : 56, transition: "width .2s" }}
         className="hidden md:flex flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden"
       >
-        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
-          {sidebar && <div className="overflow-hidden flex-1"><p className="text-sm font-bold text-gray-900 truncate">Ops Command Hub</p><p className="text-[10px] text-gray-400 truncate">Command Center v1.5</p></div>}
-          <button onClick={() => setSidebar(s => !s)} className="text-gray-300 hover:text-gray-600 flex-shrink-0 text-xs ml-auto">{sidebar ? "«" : "»"}</button>
-        </div>
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-4">
+          <button
+            onClick={() => setSidebar(s => !s)}
+            title={sidebar ? "Collapse sidebar" : "Expand sidebar"}
+            className={`mb-2 flex h-8 items-center rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 ${sidebar ? "w-full justify-end px-3" : "w-full justify-center px-0"}`}
+          >
+            {sidebar ? "<" : ">"}
+          </button>
           {NAV.map((section, si) => (
             <div key={si}>
               {section.section && sidebar && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-1">{section.section}</p>}
@@ -4253,6 +4283,11 @@ export default function JonnyOpsCommandCenter() {
             </div>
           ))}
         </nav>
+        <div className={`border-t border-gray-100 px-3 py-3 flex-shrink-0 ${sidebar ? "flex justify-start" : "flex justify-center"}`}>
+          <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-bold text-gray-600">JV</span>
+          </div>
+        </div>
       </aside>
 
       {/* ── MAIN CONTENT ── */}
@@ -4348,3 +4383,10 @@ export default function JonnyOpsCommandCenter() {
     </div>
   );
 }
+
+
+
+
+
+
+
