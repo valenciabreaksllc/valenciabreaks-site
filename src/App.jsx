@@ -280,6 +280,111 @@ const getWeekOfLabel = () => {
   return `Week of ${d.getMonth() + 1}/${d.getDate()}`;
 };
 
+const getWeekStartISO = (date = new Date()) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d.toISOString().slice(0, 10);
+};
+
+const addDaysISO = (iso, days) => {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+const SURPRISE_SET_STORAGE_KEY = "ops_surprise_sets_weekly_v1";
+const SURPRISE_SET_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const SURPRISE_SET_STREAMS = [
+  { key: "am", label: "AM Stream", time: "7:00 AM - 3:00 PM" },
+  { key: "pm", label: "PM Stream", time: "3:30 PM - 11:30 PM" },
+];
+const SURPRISE_SET_STATUS_OPTIONS = ["Not Started", "Built", "Checked", "Live Ready"];
+
+const getSurpriseSetFlags = (status) => {
+  const current = SURPRISE_SET_STATUS_OPTIONS.includes(status) ? status : "Not Started";
+  return {
+    warehouseListReceived: ["Built", "Checked", "Live Ready"].includes(current),
+    convertedSetSheet: ["Built", "Checked", "Live Ready"].includes(current),
+    importedDesktop: ["Checked", "Live Ready"].includes(current),
+    quantitiesVerified: ["Checked", "Live Ready"].includes(current),
+    readyForLive: current === "Live Ready",
+  };
+};
+
+const normalizeSurpriseSetStatus = (value, readyForLive) => {
+  if (readyForLive === true) return "Live Ready";
+  const raw = (value || "Not Started").toString().trim();
+  return SURPRISE_SET_STATUS_OPTIONS.includes(raw) ? raw : "Not Started";
+};
+
+const createDefaultWeeklySurpriseSets = (weekStart = getWeekStartISO()) =>
+  SURPRISE_SET_DAYS.flatMap((day, dayIndex) =>
+    SURPRISE_SET_STREAMS.map(stream => {
+      const status = "Not Started";
+      return {
+        id: `${weekStart}-${day.toLowerCase()}-${stream.key}`,
+        weekStart,
+        day,
+        date: addDaysISO(weekStart, dayIndex + 1),
+        streamKey: stream.key,
+        streamLabel: stream.label,
+        streamTime: stream.time,
+        brand: "",
+        streamer: "Jonny",
+        setName: "",
+        status,
+        notes: "",
+        quantity: 0,
+        ...getSurpriseSetFlags(status),
+      };
+    })
+  );
+
+const normalizeWeeklySurpriseSets = (items = [], weekStart = getWeekStartISO()) => {
+  const existing = new Map((Array.isArray(items) ? items : []).map(item => {
+    const day = item.day || "";
+    const streamKey = item.streamKey || (item.streamLabel === "PM Stream" ? "pm" : item.streamLabel === "AM Stream" ? "am" : "");
+    return [`${day}-${streamKey}`, item];
+  }));
+
+  return createDefaultWeeklySurpriseSets(weekStart).map(template => {
+    const saved = existing.get(`${template.day}-${template.streamKey}`) || {};
+    const status = normalizeSurpriseSetStatus(saved.status, saved.readyForLive);
+    return {
+      ...template,
+      ...saved,
+      id: template.id,
+      weekStart,
+      day: template.day,
+      date: template.date,
+      streamKey: template.streamKey,
+      streamLabel: template.streamLabel,
+      streamTime: template.streamTime,
+      brand: saved.brand || "",
+      streamer: saved.streamer || "Jonny",
+      setName: saved.setName || "",
+      status,
+      notes: saved.notes || "",
+      ...getSurpriseSetFlags(status),
+    };
+  });
+};
+
+const loadWeeklySurpriseSets = () => {
+  const weekStart = getWeekStartISO();
+  try {
+    const saved = localStorage.getItem(SURPRISE_SET_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const savedWeek = parsed?.weekStart || weekStart;
+      const items = Array.isArray(parsed) ? parsed : parsed?.items;
+      if (savedWeek === weekStart && Array.isArray(items)) return normalizeWeeklySurpriseSets(items, weekStart);
+    }
+  } catch {}
+  return createDefaultWeeklySurpriseSets(weekStart);
+};
+
 const DEMO_SETS = [
   { id: uid(), brand: "Vaulted Rarities", streamer: "Jonny", date: "2025-05-08", setName: "May Holo Bundle A", quantity: 50, warehouseListReceived: true, convertedSetSheet: true, importedDesktop: true, quantitiesVerified: true, readyForLive: true },
   { id: uid(), brand: "CardKing47", streamer: "Jonny", date: "2025-05-09", setName: "CK Graded Pack Set", quantity: 30, warehouseListReceived: true, convertedSetSheet: true, importedDesktop: false, quantitiesVerified: false, readyForLive: false },
@@ -3244,63 +3349,127 @@ const StudioReadinessView = ({ studios, setStudios }) => {
 
 // ─── SURPRISE SET TRACKER ─────────────────────────────────────────────────────
 const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
-  const emptyF = { brand: "", streamer: "Jonny", date: todayDate(), setName: "", quantity: "", warehouseListReceived: false, convertedSetSheet: false, importedDesktop: false, quantitiesVerified: false, readyForLive: false };
-  const [form, setForm] = useState(emptyF);
-  const [show, setShow] = useState(false);
-  const STEPS = ["warehouseListReceived", "convertedSetSheet", "importedDesktop", "quantitiesVerified", "readyForLive"];
-  const SL = { warehouseListReceived: "Warehouse List", convertedSetSheet: "SetSheet", importedDesktop: "Imported", quantitiesVerified: "Qty Verified", readyForLive: "Ready for Live" };
-  const f = k => v => setForm(p => ({ ...p, [k]: v }));
-  const add = () => { if (!form.brand || !form.setName) return; setSurpriseSets(p => [{ id: uid(), ...form, quantity: parseInt(form.quantity) || 0 }, ...p]); setForm(emptyF); setShow(false); };
-  const upd = (id, field, val) => setSurpriseSets(p => p.map(s => s.id === id ? { ...s, [field]: val } : s));
-  const prog = s => Math.round((STEPS.filter(st => s[st]).length / STEPS.length) * 100);
+  useEffect(() => {
+    setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev));
+  }, [setSurpriseSets]);
+
+  const weeklyBlocks = normalizeWeeklySurpriseSets(surpriseSets);
+  const totalBlocks = weeklyBlocks.length;
+  const liveReady = weeklyBlocks.filter(s => s.status === "Live Ready").length;
+  const needsSetup = weeklyBlocks.filter(s => s.status === "Not Started").length;
+  const checkedBuilt = weeklyBlocks.filter(s => s.status === "Built" || s.status === "Checked").length;
+
+  const statusStyle = {
+    "Not Started": "bg-gray-100 text-gray-500 border-gray-200",
+    "Built": "bg-blue-50 text-blue-700 border-blue-200",
+    "Checked": "bg-amber-50 text-amber-700 border-amber-200",
+    "Live Ready": "bg-green-50 text-green-700 border-green-200",
+  };
+
+  const updateBlock = (id, patch) => {
+    setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev).map(block => {
+      if (block.id !== id) return block;
+      const next = { ...block, ...patch };
+      const status = Object.prototype.hasOwnProperty.call(patch, "status")
+        ? normalizeSurpriseSetStatus(patch.status, false)
+        : normalizeSurpriseSetStatus(next.status, next.readyForLive);
+      return { ...next, status, ...getSurpriseSetFlags(status) };
+    }));
+  };
+
+  const markLiveReady = (id) => updateBlock(id, { status: "Live Ready" });
+
+  const clearWeek = () => {
+    if (!window.confirm("Clear this week's surprise set setup?")) return;
+    const fresh = createDefaultWeeklySurpriseSets();
+    try { localStorage.removeItem(SURPRISE_SET_STORAGE_KEY); } catch {}
+    setSurpriseSets(fresh);
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-gray-900">Surprise Set Tracker</h2><p className="text-xs text-gray-400 mt-0.5">{surpriseSets.filter(s => s.readyForLive).length}/{surpriseSets.length} sets ready for live</p><p className="text-[10px] text-amber-600 mt-0.5">Surprise set calendar and import coming soon.</p></div>
-        <BtnPrimary onClick={() => setShow(s => !s)} size="md">{show ? "✕ Close" : "+ Add Set"}</BtnPrimary>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Surprise Sets</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{getWeekOfLabel()} - Monday through Friday stream setup</p>
+        </div>
+        <button
+          onClick={clearWeek}
+          className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+        >
+          Clear Week
+        </button>
       </div>
-      {show && (
-        <Card className="p-4">
-          <p className="text-sm font-bold text-gray-900 mb-3">New Surprise Set</p>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <Sel value={form.brand} onChange={f("brand")} options={BRANDS} placeholder="Brand *" />
-            <Inp value={form.streamer} onChange={f("streamer")} placeholder="Streamer" />
-            <Inp type="date" value={form.date} onChange={f("date")} />
-            <Inp value={form.quantity} onChange={f("quantity")} placeholder="Quantity" type="number" />
-            <div className="col-span-2"><Inp value={form.setName} onChange={f("setName")} placeholder="Set Name *" /></div>
-          </div>
-          <div className="flex flex-wrap gap-4 mb-3">{STEPS.map(step => <label key={step} className="flex items-center gap-2 cursor-pointer text-xs text-gray-600"><input type="checkbox" checked={form[step]} onChange={e => setForm(p => ({ ...p, [step]: e.target.checked }))} className="accent-slate-700" />{SL[step]}</label>)}</div>
-          <BtnPrimary onClick={add} size="md">Add Set</BtnPrimary>
-        </Card>
-      )}
-      <div className="space-y-3">
-        {surpriseSets.map(s => (
-          <Card key={s.id} className={`p-4 ${s.readyForLive ? "border-green-300" : ""}`}>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <BrandPip brand={s.brand} />
-                  <span className="text-sm font-bold text-gray-900">{s.setName}</span>
-                  <span className="text-xs text-gray-400">{s.brand}</span>
-                  <Badge label={s.readyForLive ? "Ready for Live" : "Not Ready"} className={s.readyForLive ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
-                </div>
-                <p className="text-xs text-gray-400">{s.date} · Streamer: {s.streamer} · Qty: {s.quantity}</p>
-              </div>
-              <span className={`text-lg font-bold ${prog(s) === 100 ? "text-green-600" : "text-amber-500"}`}>{prog(s)}%</span>
-            </div>
-            <ProgressBar pct={prog(s)} color={prog(s) === 100 ? "bg-green-500" : "bg-amber-400"} />
-            <div className="flex flex-wrap gap-4 mt-3">
-              {STEPS.map(step => (
-                <label key={step} className="flex items-center gap-1.5 cursor-pointer text-xs">
-                  <input type="checkbox" checked={s[step]} onChange={e => upd(s.id, step, e.target.checked)} className="accent-slate-700" />
-                  <span className={s[step] ? "text-green-600 font-medium" : "text-gray-400"}>{SL[step]}</span>
-                </label>
-              ))}
-            </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[
+          { label: "Total stream blocks", value: totalBlocks, cls: "border-l-slate-400" },
+          { label: "Live Ready", value: liveReady, cls: "border-l-green-500" },
+          { label: "Needs Setup", value: needsSetup, cls: "border-l-gray-400" },
+          { label: "Checked/Built", value: checkedBuilt, cls: "border-l-blue-500" },
+        ].map(item => (
+          <Card key={item.label} className={`p-4 border-l-4 ${item.cls}`}>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{item.label}</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{item.value}</p>
           </Card>
         ))}
-        {surpriseSets.length === 0 && <div className="text-center py-12 text-gray-300">No surprise sets added yet</div>}
+      </div>
+      <div className="space-y-4">
+        {SURPRISE_SET_DAYS.map(day => {
+          const dayBlocks = weeklyBlocks.filter(block => block.day === day);
+          return (
+            <section key={day} className="space-y-2">
+              <div className="flex items-center justify-between border-b border-gray-200 pb-1">
+                <h3 className="text-sm font-bold text-gray-900">{day}</h3>
+                <span className="text-[10px] font-medium text-gray-400">{dayBlocks.filter(block => block.status === "Live Ready").length}/2 live ready</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {dayBlocks.map(block => (
+                  <Card key={block.id} className={`p-4 ${block.status === "Live Ready" ? "border-green-300" : ""}`}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-bold text-gray-900">{block.streamLabel}</p>
+                          <Badge label={block.status} className={statusStyle[block.status] || statusStyle["Not Started"]} />
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{block.streamTime}</p>
+                      </div>
+                      <button
+                        onClick={() => markLiveReady(block.id)}
+                        disabled={block.status === "Live Ready"}
+                        className="inline-flex items-center justify-center rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Mark Live Ready
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Brand</span>
+                        <Sel value={block.brand} onChange={value => updateBlock(block.id, { brand: value })} options={BRANDS} placeholder="Select brand" />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Streamer</span>
+                        <Inp value={block.streamer} onChange={value => updateBlock(block.id, { streamer: value })} placeholder="Streamer" />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Set name</span>
+                        <Inp value={block.setName} onChange={value => updateBlock(block.id, { setName: value })} placeholder="Set name" />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</span>
+                        <Sel value={block.status} onChange={value => updateBlock(block.id, { status: value })} options={SURPRISE_SET_STATUS_OPTIONS} placeholder="" />
+                      </label>
+                      <label className="space-y-1 sm:col-span-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</span>
+                        <Txt value={block.notes} onChange={value => updateBlock(block.id, { notes: value })} placeholder="Setup notes..." rows={2} />
+                      </label>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </div>
   );
@@ -3626,7 +3795,7 @@ export default function JonnyOpsCommandCenter() {
     } catch {}
     return FRESH_STUDIOS;
   });
-  const [surpriseSets, setSurpriseSets] = useState([]);
+  const [surpriseSets, setSurpriseSets] = useState(() => loadWeeklySurpriseSets());
   const [raiseScores, setRaiseScores] = useState({ consistency: 72, accuracy: 68, lossReduction: 55, ownership: 80, processImprovement: 60 });
   const [sidebar, setSidebar] = useState(true);
   const [sidekickToast, setSidekickToast] = useState(false);
@@ -3699,6 +3868,16 @@ export default function JonnyOpsCommandCenter() {
   useEffect(() => {
     try { localStorage.setItem("ops_studios_v1", JSON.stringify(studios)); } catch {}
   }, [studios]);
+
+  // Persist weekly surprise set setup locally until a Supabase workflow exists
+  useEffect(() => {
+    try {
+      localStorage.setItem(SURPRISE_SET_STORAGE_KEY, JSON.stringify({
+        weekStart: getWeekStartISO(),
+        items: surpriseSets,
+      }));
+    } catch {}
+  }, [surpriseSets]);
 
   // Fetch automation rules on mount (non-blocking — queue falls back to safe defaults on error)
   useEffect(() => {
