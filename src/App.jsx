@@ -452,9 +452,8 @@ const NavItem = ({ id, label, active, onClick, badge }) => (
 
 const NAV = [
   { section: null, items: [{ id: "dashboard", label: "Dashboard" }, { id: "inbox", label: "Command Inbox" }] },
-  { section: "Operations", items: [{ id: "actions", label: "Action Queue" }, { id: "daily", label: "Daily Command Board" }, { id: "tickets", label: "Tickets" }, { id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }] },
-  { section: "Content", items: [{ id: "sets", label: "Surprise Sets" }] },
-  { section: "Reporting", items: [{ id: "weekly", label: "Report" }, { id: "data", label: "Settings" }] },
+  { section: "Operations", items: [{ id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }, { id: "sets", label: "Surprise Sets" }] },
+  { section: "Reporting", items: [{ id: "weekly", label: "Reports" }, { id: "data", label: "Settings" }] },
 ];
 
 // ─── OPS ACTIONS SUPABASE HELPERS ────────────────────────────────────────────
@@ -1497,7 +1496,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 </svg>
                 {queueProgress || "Processing…"}
               </>
-            ) : "⚡ Process Queue"}
+            ) : "Process Queue"}
           </button>
           {/* Check Gmail Now */}
           <button
@@ -1812,7 +1811,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </button>
               <button disabled={isBusy} onClick={() => handleRunTriage(msg.id)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50 cursor-pointer transition-colors">
-                {isBusy ? "Triaging…" : "⚡ Run Triage"}
+                {isBusy ? "Triaging…" : "Run Triage"}
               </button>
               <button disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors">
@@ -2315,7 +2314,6 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const [form, setForm] = useState(emptyF);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
-  // Supabase insert, then add the inserted row to the visible queue
   const addTicket = async () => {
     if (!form.brand || !form.issueType) return alert("Pick a brand and issue type first.");
     const newTicket = { ...form, createdAt: nowISO(), source: "command-center" };
@@ -2326,11 +2324,39 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
     setShowForm(false);
   };
 
-  const open = tickets.filter(t => t.status !== "Resolved").length;
-  const criticalSla = tickets.filter(isActiveSlaRisk);
-  const totalLoss = replacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
+  // Safe array guards — prevents crash if props arrive undefined during loading
+  const safeInbound      = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const safeReplacements = Array.isArray(replacements)     ? replacements    : [];
+
+  // Primary counts driven by Command Inbox data
+  const openInboxMessages   = safeInbound.filter(m => !m.archived_at && m.status !== "Closed" && m.status !== "Done");
+  const replacementFollowUps = safeReplacements.filter(r => !r.archived_at && (r.followUp === "Yes" || r.follow_up === "Yes"));
+  const msgsNeedingReply    = safeInbound.filter(m => (m.status === "Needs Reply" || !m.status) && !m.archived_at).length;
+  const refundItems         = safeInbound.filter(m => isTikTokRefund(m) && !m.archived_at).length;
+  const replacementFU       = replacementFollowUps.length;
+  const actionRequiredCount = openInboxMessages.length + replacementFollowUps.length;
+  const actionRequired      = actionRequiredCount; // alias used by metric card
+
+  const totalLoss   = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || r.market_value || 0), 0);
   const studioReady = studios.filter(s => s.streamReady).length;
-  const studioScore = Math.round((studioReady / studios.length) * 100);
+  const studioScore = studios.length ? Math.round((studioReady / studios.length) * 100) : 0;
+
+  // Morning Brief — deterministic, no AI
+  const morningBrief = (() => {
+    const firstName = "Jonny";
+    const allClear  = msgsNeedingReply === 0 && refundItems === 0 && replacementFU === 0;
+    if (allClear) {
+      return `Good morning, ${firstName}. The inbox is clear right now. Check surprise sets, inventory readiness, and any manual DMs before the day starts.`;
+    }
+    const parts = [];
+    if (msgsNeedingReply > 0) parts.push(`${msgsNeedingReply} message${msgsNeedingReply > 1 ? "s" : ""} needing reply`);
+    if (refundItems > 0)      parts.push(`${refundItems} refund or return item${refundItems > 1 ? "s" : ""}`);
+    if (replacementFU > 0)   parts.push(`${replacementFU} replacement${replacementFU > 1 ? "s" : ""} needing follow-up`);
+    const list = parts.length === 1 ? parts[0]
+      : parts.length === 2 ? `${parts[0]} and ${parts[1]}`
+      : `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+    return `Good morning, ${firstName}. You have ${list}. Start with the highest-priority inbox items, then check surprise sets and inventory readiness.`;
+  })();
 
   const SET_STEPS = ["warehouseListReceived", "convertedSetSheet", "importedDesktop", "quantitiesVerified", "readyForLive"];
   const SET_LABELS = { warehouseListReceived: "Warehouse List", convertedSetSheet: "SetSheet", importedDesktop: "Imported", quantitiesVerified: "Verified", readyForLive: "Ready" };
@@ -2343,34 +2369,13 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
           <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
           <p className="text-xs text-gray-400 mt-0.5">{todayStr()}</p>
         </div>
-        <div className="flex gap-2">
-          <BtnSecondary size="sm">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1 5h11M4 1v4M9 1v4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            Main Page ▾
-          </BtnSecondary>
-          <BtnPrimary size="sm" onClick={() => setShowForm(s => !s)}>+ New Ticket</BtnPrimary>
-        </div>
       </div>
 
-      {showForm && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold text-gray-900">New Ticket</p>
-            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
-          </div>
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            <Sel value={form.brand} onChange={f("brand")} options={BRANDS} placeholder="Brand *" />
-            <Sel value={form.channel} onChange={f("channel")} options={CHANNELS} placeholder="Channel *" />
-            <Sel value={form.issueType} onChange={f("issueType")} options={ISSUE_TYPES} placeholder="Issue Type *" />
-            <Sel value={form.priority} onChange={f("priority")} options={PRIORITIES} placeholder="Priority" />
-            <Sel value={form.slaRisk} onChange={f("slaRisk")} options={["Yes", "No"]} placeholder="SLA Risk" />
-            <Sel value={form.status} onChange={f("status")} options={KANBAN_COLS} placeholder="Status" />
-          </div>
-          <Txt value={form.notes} onChange={f("notes")} placeholder="Notes..." rows={2} className="mb-2" />
-          <Inp value={form.nextAction} onChange={f("nextAction")} placeholder="Next action..." className="mb-3" />
-          <div className="flex gap-2"><BtnPrimary onClick={addTicket} size="sm">Add Ticket</BtnPrimary><BtnSecondary onClick={() => setShowForm(false)} size="sm">Cancel</BtnSecondary></div>
-        </Card>
-      )}
+      {/* Morning Brief */}
+      <Card className="p-4 border-l-4 border-l-slate-400">
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Morning Brief</p>
+        <p className="text-sm text-gray-800 leading-relaxed">{morningBrief}</p>
+      </Card>
 
       {/* Today's Ops Brief */}
       <DailyOpsBrief
@@ -2382,18 +2387,18 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
 
       {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="p-4">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Open Tickets</p>
-          <p className="text-4xl font-bold text-gray-900 mt-1">{open}</p>
-        </Card>
-        <Card className="p-4 border-l-4 border-l-blue-500">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">SLA Risks</p>
-          <p className={`text-4xl font-bold mt-1 ${criticalSla.length > 0 ? "text-red-600" : "text-slate-600"}`}>{criticalSla.length}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">&lt; 2h remaining</p>
+        <Card className="p-4 border-l-4 border-l-slate-400">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Action Required</p>
+          <p className={`text-4xl font-bold mt-1 ${actionRequired > 0 ? "text-red-600" : "text-gray-900"}`}>{actionRequired}</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">inbox + replacements</p>
         </Card>
         <Card className="p-4">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p>
-          <p className="text-4xl font-bold text-green-600 mt-1">${totalLoss.toFixed(2)}</p>
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Refunds / Returns</p>
+          <p className={`text-4xl font-bold mt-1 ${refundItems > 0 ? "text-orange-500" : "text-gray-900"}`}>{refundItems}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Est. Loss Tracked</p>
+          <p className="text-4xl font-bold text-gray-700 mt-1">${totalLoss.toFixed(2)}</p>
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-1.5 mb-1">
@@ -2405,23 +2410,6 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
           <div className="mt-2"><ProgressBar pct={studioScore} color={studioScore >= 75 ? "bg-green-500" : "bg-amber-400"} /></div>
         </Card>
       </div>
-
-      {/* Critical SLA Alert — only shows tickets actually < 2h */}
-      {criticalSla.length > 0 && (
-        <div className="bg-red-600 rounded-lg px-5 py-3">
-          <p className="text-white text-xs font-bold uppercase tracking-widest mb-1">Critical SLA Alert Zone</p>
-          <div className="space-y-1">
-            {criticalSla.map(t => {
-              const cd = slaDisplay(t.createdAt);
-              return (
-                <p key={t.id} className="text-white text-sm font-mono">
-                  <span className="font-bold">{t.brand}</span> — {t.issueType} — <span className="text-red-200">{cd.display} remaining</span>
-                </p>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 2-col layout — stacks on mobile */}
       <div className="flex flex-col md:flex-row gap-4">
@@ -2516,13 +2504,13 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
               <p className="text-sm font-bold text-gray-900">Weekly Report Preview</p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded p-3 text-[11px] text-gray-600 leading-relaxed space-y-1.5">
-              <p className="font-semibold text-gray-800">TikTok SPS / CS</p>
-              <p>• {tickets.length} tickets across all brands</p>
-              <p>• {tickets.filter(t => t.slaRisk === "Yes").length} SLA risks — {criticalSla.length} critical now</p>
-              <p>• {tickets.filter(t => t.status === "Resolved").length} resolved this period</p>
+              <p className="font-semibold text-gray-800">Command Inbox</p>
+              <p>• {safeInbound.length} active messages</p>
+              <p>• {msgsNeedingReply} needing reply — {refundItems} refund/return item{refundItems !== 1 ? "s" : ""}</p>
+              <p>• {actionRequiredCount} total action required</p>
               <p className="font-semibold text-gray-800 pt-1">Shipping Loss</p>
-              <p>• {replacements.length} replacement cases — ${totalLoss.toFixed(2)} tracked</p>
-              <p>• {replacements.filter(r => r.preventable === "Yes").length} preventable</p>
+              <p>• {safeReplacements.length} replacement cases — ${totalLoss.toFixed(2)} tracked</p>
+              <p>• {safeReplacements.filter(r => r.preventable === "Yes").length} preventable</p>
               <p className="font-semibold text-gray-800 pt-1">Studios</p>
               <p>• {studioReady}/{studios.length} stream-ready — {studioScore}% readiness</p>
               <p className="font-semibold text-gray-800 pt-1">Sets</p>
@@ -3538,7 +3526,7 @@ const getSidekickTicketFromHash = () => {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function JonnyOpsCommandCenter() {
   const [activeView, setActiveViewRaw] = useState(() => {
-    const VALID_VIEWS = new Set(["dashboard","inbox","actions","daily","tickets","replacements","studio","sets","weekly","data","browser","cs"]);
+    const VALID_VIEWS = new Set(["dashboard","inbox","replacements","studio","sets","weekly","data"]);
     try {
       const saved = localStorage.getItem("ops_active_view");
       if (saved && VALID_VIEWS.has(saved)) return saved;
@@ -3696,7 +3684,7 @@ export default function JonnyOpsCommandCenter() {
     dashboard: "Dashboard", inbox: "Command Inbox", actions: "Action Queue",
     daily: "Daily Command Board", tickets: "Tickets", replacements: "Replacements",
     studio: "Inventory", sets: "Surprise Sets", browser: "Browser Profiles",
-    cs: "CS Templates", weekly: "Report", data: "Settings",
+    cs: "CS Templates", weekly: "Reports", data: "Settings",
   };
 
   // Nav click: close mobile drawer then switch view
@@ -3848,12 +3836,6 @@ export default function JonnyOpsCommandCenter() {
         <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
           <p className="text-sm font-bold text-gray-900">Ops Command Hub</p>
           <div className="flex items-center gap-3">
-            {criticalSlaCount > 0 && (
-              <button onClick={() => setActiveView("tickets")} className="flex items-center gap-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg px-3 py-1.5 cursor-pointer transition-colors">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-xs font-bold text-red-700">{criticalSlaCount} SLA Critical</span>
-              </button>
-            )}
             <NotificationDropdown
               inboundMessages={inboundMessages}
               opsActions={opsActions}
@@ -3872,16 +3854,16 @@ export default function JonnyOpsCommandCenter() {
         {/* ── MOBILE BOTTOM QUICK NAV ── */}
         <nav className="flex md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 safe-area-inset-bottom">
           {[
-            { id: "dashboard", label: "Home",        badge: 0,
+            { id: "dashboard",    label: "Home",         badge: 0,
               icon: <path d="M2 2h5v5H2zm7 0h5v5H9zM2 9h5v5H2zm7 0h5v5H9z" fill="currentColor" opacity=".7" /> },
-            { id: "inbox",     label: "Inbox",       badge: inboxNeedsReplyCount,
+            { id: "inbox",        label: "Inbox",        badge: inboxNeedsReplyCount,
               icon: <><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></> },
-            { id: "actions",   label: "Actions",     badge: opsOpenCount,
-              icon: <><path d="M2 4h9M2 8h7M2 12h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M14.5 13.5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></> },
-            { id: "replacements", label: "Reship",   badge: 0,
+            { id: "replacements", label: "Reship",       badge: 0,
               icon: <><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></> },
-            { id: "tickets",   label: "Tickets",     badge: criticalSlaCount,
-              icon: <><path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 7h6M5 10h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></> },
+            { id: "studio",       label: "Inventory",    badge: 0,
+              icon: <><rect x="1" y="5" width="6" height="9" rx="1" stroke="currentColor" strokeWidth="1.3" fill="none"/><rect x="9" y="2" width="6" height="12" rx="1" stroke="currentColor" strokeWidth="1.3" fill="none"/></> },
+            { id: "weekly",       label: "Reports",      badge: 0,
+              icon: <path d="M2 12l3-5 3 2 3-6 3 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/> },
           ].map(item => {
             const isActive = activeView === item.id;
             return (
