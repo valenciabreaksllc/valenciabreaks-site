@@ -294,18 +294,55 @@ const addDaysISO = (iso, days) => {
 };
 
 const SURPRISE_SET_STORAGE_KEY = "ops_surprise_sets_weekly_v1";
+const SETSHEET_CONVERTER_STORAGE_KEY = "ops_setsheet_converter_v1";
 const SURPRISE_SET_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const SURPRISE_SET_STREAMS = [
-  { key: "am", label: "AM Stream", time: "7:00 AM - 3:00 PM" },
-  { key: "pm", label: "PM Stream", time: "3:30 PM - 11:30 PM" },
+  { key: "am", label: "AM Shift", time: "7:00 AM - 3:00 PM" },
+  { key: "pm", label: "PM Shift", time: "3:30 PM - 11:30 PM" },
 ];
 const SURPRISE_SET_STATUS_OPTIONS = ["Not Started", "Built", "Checked", "Live Ready"];
+const SURPRISE_SET_TRACKER_BRANDS = [
+  { brand: "Vaulted Rarities", code: "VR" },
+  { brand: "PokeSpins", code: "PS" },
+  { brand: "CardKing47", code: "CK" },
+  { brand: "Pokiemart", code: "PM" },
+];
+const SETSHEET_WAREHOUSES = ["US Warehouse"];
+const SETSHEET_BOX_DEFAULTS = { weight: "0.88", height: "9", width: "7", length: "4" };
+const SETSHEET_PACK_DEFAULTS = { weight: "0.12", height: "11", width: "8", length: "1" };
+const SETSHEET_BOX_KEYWORDS = [
+  "COMMANDER DECK",
+  "STARTER COMMANDER DECK",
+  "SECRET LAIR",
+  "VAULT BOX",
+  "VR BOX",
+  "RED BOX",
+  "COLLECTOR CHEST",
+  "CHEST",
+  "ETB",
+  "BOX",
+  "PRERELEASE KIT",
+  "BUNDLE",
+  "DECK",
+];
+const SETSHEET_PACK_KEYWORDS = ["PLAY PACK", "PACK", "BAG", "VR BAG", "RIPPIEZ", "CGC", "PSA"];
+
+const normalizeSurpriseSetBrandValue = (brandValue) => {
+  const raw = String(brandValue || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw === "vr" || raw.includes("vaulted")) return "Vaulted Rarities";
+  if (raw === "ps" || raw.includes("pokespins") || raw.includes("poke spins")) return "PokeSpins";
+  if (raw === "ck" || raw === "ck47" || raw.includes("cardking47") || raw.includes("card king 47")) return "CardKing47";
+  if (raw === "pm" || raw.includes("pokiemart") || raw.includes("pokie mart")) return "Pokiemart";
+  return BRANDS.includes(brandValue) ? brandValue : "";
+};
 
 const getSurpriseSetFlags = (status) => {
   const current = SURPRISE_SET_STATUS_OPTIONS.includes(status) ? status : "Not Started";
   return {
     warehouseListReceived: ["Built", "Checked", "Live Ready"].includes(current),
     convertedSetSheet: ["Built", "Checked", "Live Ready"].includes(current),
+    downloadedSetSheet: ["Checked", "Live Ready"].includes(current),
     importedDesktop: ["Checked", "Live Ready"].includes(current),
     quantitiesVerified: ["Checked", "Live Ready"].includes(current),
     readyForLive: current === "Live Ready",
@@ -320,37 +357,42 @@ const normalizeSurpriseSetStatus = (value, readyForLive) => {
 
 const createDefaultWeeklySurpriseSets = (weekStart = getWeekStartISO()) =>
   SURPRISE_SET_DAYS.flatMap((day, dayIndex) =>
-    SURPRISE_SET_STREAMS.map(stream => {
-      const status = "Not Started";
-      return {
-        id: `${weekStart}-${day.toLowerCase()}-${stream.key}`,
-        weekStart,
-        day,
-        date: addDaysISO(weekStart, dayIndex + 1),
-        streamKey: stream.key,
-        streamLabel: stream.label,
-        streamTime: stream.time,
-        brand: "",
-        streamer: "Jonny",
-        setName: "",
-        status,
-        notes: "",
-        quantity: 0,
-        ...getSurpriseSetFlags(status),
-      };
-    })
+    SURPRISE_SET_STREAMS.flatMap(stream =>
+      SURPRISE_SET_TRACKER_BRANDS.map(({ brand }) => {
+        const status = "Not Started";
+        return {
+          id: `${weekStart}-${day.toLowerCase()}-${stream.key}-${brand.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+          weekStart,
+          day,
+          date: addDaysISO(weekStart, dayIndex + 1),
+          streamKey: stream.key,
+          streamLabel: stream.label,
+          streamTime: stream.time,
+          brand,
+          streamer: "Jonny",
+          setName: "",
+          status,
+          notes: "",
+          quantity: 0,
+          ...getSurpriseSetFlags(status),
+        };
+      })
+    )
   );
 
 const normalizeWeeklySurpriseSets = (items = [], weekStart = getWeekStartISO()) => {
-  const existing = new Map((Array.isArray(items) ? items : []).map(item => {
+  const safeItems = Array.isArray(items) ? items : [];
+  const existing = new Map(safeItems.map(item => {
     const day = item.day || "";
-    const streamKey = item.streamKey || (item.streamLabel === "PM Stream" ? "pm" : item.streamLabel === "AM Stream" ? "am" : "");
-    return [`${day}-${streamKey}`, item];
+    const streamKey = item.streamKey || (["PM Stream", "PM Shift"].includes(item.streamLabel) ? "pm" : ["AM Stream", "AM Shift"].includes(item.streamLabel) ? "am" : "");
+    const brand = normalizeSurpriseSetBrandValue(item.brand);
+    return [`${day}-${streamKey}-${brand || "unassigned"}`, item];
   }));
 
-  return createDefaultWeeklySurpriseSets(weekStart).map(template => {
-    const saved = existing.get(`${template.day}-${template.streamKey}`) || {};
+  const normalizedTemplates = createDefaultWeeklySurpriseSets(weekStart).map(template => {
+    const saved = existing.get(`${template.day}-${template.streamKey}-${template.brand}`) || {};
     const status = normalizeSurpriseSetStatus(saved.status, saved.readyForLive);
+    const statusFlags = getSurpriseSetFlags(status);
     return {
       ...template,
       ...saved,
@@ -361,14 +403,33 @@ const normalizeWeeklySurpriseSets = (items = [], weekStart = getWeekStartISO()) 
       streamKey: template.streamKey,
       streamLabel: template.streamLabel,
       streamTime: template.streamTime,
-      brand: saved.brand || "",
+      brand: normalizeSurpriseSetBrandValue(saved.brand) || template.brand,
       streamer: saved.streamer || "Jonny",
       setName: saved.setName || "",
       status,
       notes: saved.notes || "",
-      ...getSurpriseSetFlags(status),
+      warehouseListReceived: typeof saved.warehouseListReceived === "boolean" ? saved.warehouseListReceived : statusFlags.warehouseListReceived,
+      convertedSetSheet: typeof saved.convertedSetSheet === "boolean" ? saved.convertedSetSheet : statusFlags.convertedSetSheet,
+      downloadedSetSheet: typeof saved.downloadedSetSheet === "boolean" ? saved.downloadedSetSheet : statusFlags.downloadedSetSheet,
+      importedDesktop: typeof saved.importedDesktop === "boolean" ? saved.importedDesktop : statusFlags.importedDesktop,
+      quantitiesVerified: typeof saved.quantitiesVerified === "boolean" ? saved.quantitiesVerified : statusFlags.quantitiesVerified,
+      readyForLive: typeof saved.readyForLive === "boolean" ? saved.readyForLive : statusFlags.readyForLive,
     };
   });
+
+  const unassignedLegacy = safeItems.filter(item => {
+    const day = item.day || "";
+    const streamKey = item.streamKey || (["PM Stream", "PM Shift"].includes(item.streamLabel) ? "pm" : ["AM Stream", "AM Shift"].includes(item.streamLabel) ? "am" : "");
+    return day && streamKey && !normalizeSurpriseSetBrandValue(item.brand);
+  }).map(item => ({
+    ...item,
+    id: item.id || `${weekStart}-${String(item.day || "unassigned").toLowerCase()}-${item.streamKey || "shift"}-unassigned-${uid()}`,
+    weekStart,
+    brand: "",
+    status: normalizeSurpriseSetStatus(item.status, item.readyForLive),
+  }));
+
+  return [...normalizedTemplates, ...unassignedLegacy];
 };
 
 const loadWeeklySurpriseSets = () => {
@@ -383,6 +444,137 @@ const loadWeeklySurpriseSets = () => {
     }
   } catch {}
   return createDefaultWeeklySurpriseSets(weekStart);
+};
+
+const detectSetSheetType = (productName) => {
+  const name = String(productName || "").toUpperCase();
+  if (SETSHEET_PACK_KEYWORDS.some(keyword => name.includes(keyword))) return "pack";
+  if (SETSHEET_BOX_KEYWORDS.some(keyword => name.includes(keyword))) return "box";
+  return "unknown";
+};
+
+const normalizeSetSheetProductName = (name) =>
+  String(name || "").replace(/\t/g, " ").replace(/\s+/g, " ").trim();
+
+const getSetSheetDefaults = (type) => {
+  if (type === "box") return SETSHEET_BOX_DEFAULTS;
+  if (type === "pack") return SETSHEET_PACK_DEFAULTS;
+  return { weight: "", height: "", width: "", length: "" };
+};
+
+const parseSetSheetLine = (line, index) => {
+  const productName = normalizeSetSheetProductName(line);
+  if (!productName) return null;
+  const type = detectSetSheetType(productName);
+  const defaults = getSetSheetDefaults(type);
+  return {
+    order: index + 1,
+    productName,
+    quantity: 1,
+    type,
+    weight: defaults.weight,
+    height: defaults.height,
+    width: defaults.width,
+    length: defaults.length,
+  };
+};
+
+const combineSetSheetRowsKeepOrder = (rows) => {
+  const combined = new Map();
+  (Array.isArray(rows) ? rows : []).forEach(row => {
+    const key = normalizeSetSheetProductName(row.productName).toUpperCase();
+    if (!combined.has(key)) {
+      combined.set(key, { ...row });
+    } else {
+      const existing = combined.get(key);
+      existing.quantity += row.quantity;
+    }
+  });
+  return Array.from(combined.values()).map((row, index) => ({ ...row, order: index + 1 }));
+};
+
+const reverseSetSheetRows = (rows) =>
+  [...(Array.isArray(rows) ? rows : [])].reverse().map((row, index) => ({ ...row, order: index + 1 }));
+
+const sanitizeSetSheetFileName = (name) => {
+  const trimmed = String(name || "").trim();
+  if (!trimmed) return "setsheet_export";
+  return trimmed.replace(/[<>:"/\\|?*]+/g, "").replace(/\s+/g, "_");
+};
+
+const parseSetSheetInput = (input) => {
+  const parsed = String(input || "")
+    .split(/\r?\n/)
+    .map((line, index) => parseSetSheetLine(line, index))
+    .filter(Boolean);
+  return reverseSetSheetRows(combineSetSheetRowsKeepOrder(parsed));
+};
+
+const getSetSheetSummary = (rows) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  return {
+    totalRows: safeRows.length,
+    totalQuantity: safeRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+    unknownCount: safeRows.filter(row => row.type === "unknown").length,
+  };
+};
+
+const escapeSpreadsheetCell = (value) =>
+  String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const buildSetSheetSpreadsheet = (rows) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const rowXml = safeRows.map(row => `
+    <Row>
+      <Cell><Data ss:Type="String">${escapeSpreadsheetCell(row.productName)}</Data></Cell>
+      <Cell><Data ss:Type="Number">${Number(row.quantity || 0)}</Data></Cell>
+      <Cell><Data ss:Type="${row.weight === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.weight)}</Data></Cell>
+      <Cell><Data ss:Type="${row.height === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.height)}</Data></Cell>
+      <Cell><Data ss:Type="${row.width === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.width)}</Data></Cell>
+      <Cell><Data ss:Type="${row.length === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.length)}</Data></Cell>
+    </Row>`).join("");
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="SetSheet">
+    <Table>
+      <Row>
+        <Cell><Data ss:Type="String">Product Name</Data></Cell>
+        <Cell><Data ss:Type="String">Quantity</Data></Cell>
+        <Cell><Data ss:Type="String">Weight</Data></Cell>
+        <Cell><Data ss:Type="String">Height</Data></Cell>
+        <Cell><Data ss:Type="String">Width</Data></Cell>
+        <Cell><Data ss:Type="String">Length</Data></Cell>
+      </Row>${rowXml}
+    </Table>
+  </Worksheet>
+</Workbook>`;
+};
+
+const downloadSetSheetRows = (rows, fileName) => {
+  const workbook = buildSetSheetSpreadsheet(rows);
+  const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${sanitizeSetSheetFileName(fileName)}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const loadSetSheetConverterEntries = () => {
+  try {
+    const saved = localStorage.getItem(SETSHEET_CONVERTER_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 const DEMO_SETS = [
@@ -3506,36 +3698,127 @@ const StudioReadinessView = ({ studios, setStudios }) => {
 
 // ─── SURPRISE SET TRACKER ─────────────────────────────────────────────────────
 const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
+  const defaultConverterForm = {
+    brand: "Vaulted Rarities",
+    warehouse: "US Warehouse",
+    day: "Monday",
+    shift: "am",
+    fileName: "",
+    input: "",
+  };
+  const [converterForm, setConverterForm] = useState(defaultConverterForm);
+  const [converterRows, setConverterRows] = useState([]);
+  const [converterError, setConverterError] = useState("");
+  const [converterConverted, setConverterConverted] = useState(false);
+  const [convertedEntries, setConvertedEntries] = useState(() => loadSetSheetConverterEntries());
+
   useEffect(() => {
     setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev));
   }, [setSurpriseSets]);
 
+  useEffect(() => {
+    try { localStorage.setItem(SETSHEET_CONVERTER_STORAGE_KEY, JSON.stringify(convertedEntries.slice(0, 20))); } catch {}
+  }, [convertedEntries]);
+
   const weeklyBlocks = normalizeWeeklySurpriseSets(surpriseSets);
   const safeSurpriseSets = Array.isArray(weeklyBlocks) ? weeklyBlocks : [];
-  const totalBlocks = safeSurpriseSets.length;
-  const liveReady = safeSurpriseSets.filter(s => s.status === "Live Ready").length;
-  const needsSetup = safeSurpriseSets.filter(s => s.status === "Not Started").length;
-  const checkedBuilt = safeSurpriseSets.filter(s => s.status === "Built" || s.status === "Checked").length;
+  const trackerBlocks = safeSurpriseSets.filter(block => normalizeSurpriseSetBrandValue(block.brand));
+  const totalBlocks = trackerBlocks.length;
+  const liveReady = trackerBlocks.filter(s => s.status === "Live Ready" || s.readyForLive).length;
+  const notDone = Math.max(0, totalBlocks - liveReady);
+  const summary = getSetSheetSummary(converterRows);
 
-  const statusStyle = {
-    "Not Started": "bg-gray-100 text-gray-500 border-gray-200",
-    "Built": "bg-blue-50 text-blue-700 border-blue-200",
-    "Checked": "bg-amber-50 text-amber-700 border-amber-200",
-    "Live Ready": "bg-green-50 text-green-700 border-green-200",
+  const updateConverterField = (field, value) => {
+    setConverterForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const updateBlock = (id, patch) => {
+  const getTrackerBlock = (day, streamKey, brand) =>
+    trackerBlocks.find(block => block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === brand);
+
+  const patchTrackerBlock = (brand, day, streamKey, patch) => {
     setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev).map(block => {
-      if (block.id !== id) return block;
+      const matches = block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === brand;
+      if (!matches) return block;
       const next = { ...block, ...patch };
-      const status = Object.prototype.hasOwnProperty.call(patch, "status")
-        ? normalizeSurpriseSetStatus(patch.status, false)
-        : normalizeSurpriseSetStatus(next.status, next.readyForLive);
-      return { ...next, status, ...getSurpriseSetFlags(status) };
+      const done = Boolean(next.readyForLive);
+      return { ...next, status: done ? "Live Ready" : "Not Started" };
     }));
   };
 
-  const markLiveReady = (id) => updateBlock(id, { status: "Live Ready" });
+  const toggleTrackerDone = (brand, day, streamKey, done) => {
+    patchTrackerBlock(brand, day, streamKey, { readyForLive: done });
+  };
+
+  const handleConvert = () => {
+    setConverterError("");
+    setConverterConverted(false);
+    const rows = parseSetSheetInput(converterForm.input);
+    if (!rows.length) {
+      setConverterRows([]);
+      setConverterError("Paste some surprise set lines first.");
+      return;
+    }
+    const nextSummary = getSetSheetSummary(rows);
+    const safeFileName = converterForm.fileName || `${BRAND_SHORT[converterForm.brand] || converterForm.brand}_${converterForm.day}_${converterForm.shift}_setsheet`;
+    const entry = {
+      id: uid(),
+      createdAt: nowISO(),
+      ...converterForm,
+      fileName: safeFileName,
+      rows,
+      summary: nextSummary,
+    };
+    setConverterForm(prev => ({ ...prev, fileName: safeFileName }));
+    setConverterRows(rows);
+    setConverterConverted(true);
+    setConvertedEntries(prev => [entry, ...(Array.isArray(prev) ? prev : [])].slice(0, 20));
+    patchTrackerBlock(converterForm.brand, converterForm.day, converterForm.shift, {
+      convertedSetSheet: true,
+      readyForLive: true,
+      setName: safeFileName,
+      quantity: nextSummary.totalQuantity,
+    });
+  };
+
+  const handleDownload = (entry = null) => {
+    const rows = entry?.rows || converterRows;
+    const fileName = entry?.fileName || converterForm.fileName || "setsheet_export";
+    if (!Array.isArray(rows) || rows.length === 0) {
+      setConverterError("Convert a surprise set before downloading.");
+      return;
+    }
+    downloadSetSheetRows(rows, fileName);
+    const brand = entry?.brand || converterForm.brand;
+    const day = entry?.day || converterForm.day;
+    const shift = entry?.shift || converterForm.shift;
+    patchTrackerBlock(brand, day, shift, { downloadedSetSheet: true, readyForLive: true });
+    if (entry?.id) {
+      setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === entry.id ? { ...item, downloadedAt: nowISO() } : item));
+    }
+  };
+
+  const handleDownloadAll = () => {
+    const safeEntries = Array.isArray(convertedEntries) ? convertedEntries : [];
+    if (!safeEntries.length) {
+      setConverterError("Convert at least one surprise set first.");
+      return;
+    }
+    safeEntries.forEach(entry => handleDownload(entry));
+  };
+
+  const handleResetConverter = () => {
+    setConverterForm(defaultConverterForm);
+    setConverterRows([]);
+    setConverterError("");
+    setConverterConverted(false);
+  };
+
+  const handleAddAnother = () => {
+    setConverterForm(prev => ({ ...prev, fileName: "", input: "" }));
+    setConverterRows([]);
+    setConverterError("");
+    setConverterConverted(false);
+  };
 
   const clearWeek = () => {
     if (!window.confirm("Clear this week's surprise set setup?")) return;
@@ -3544,37 +3827,14 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setSurpriseSets(fresh);
   };
 
-  const checklistBrands = [
-    { key: "CardKing47", label: "CardKing47", aliases: ["cardking47", "card king 47", "ck47"] },
-    { key: "PokeSpins", label: "PokeSpins", aliases: ["pokespins", "poke spins"] },
-    { key: "Vaulted Rarities", label: "Vaulted Rarities", aliases: ["vaulted", "vaulted rarities"] },
-    { key: "Pokiemart", label: "PokieMart", aliases: ["pokiemart", "pokie mart"] },
-  ];
-  const getChecklistBrandKey = (brandValue) => {
-    const rawBrand = String(brandValue || "").trim().toLowerCase();
-    if (!rawBrand) return "Unassigned";
-    const match = checklistBrands.find(brand => brand.aliases.some(alias => rawBrand === alias || rawBrand.includes(alias)));
-    return match ? match.key : "Unassigned";
-  };
-  const checklistSections = [
-    ...checklistBrands.map(brand => ({
-      ...brand,
-      blocks: safeSurpriseSets.filter(block => getChecklistBrandKey(block.brand) === brand.key),
-    })),
-    {
-      key: "Unassigned",
-      label: "Unassigned",
-      aliases: [],
-      blocks: safeSurpriseSets.filter(block => getChecklistBrandKey(block.brand) === "Unassigned"),
-    },
-  ].filter(section => section.blocks.length > 0);
+  const dayShort = { Monday: "M", Tuesday: "T", Wednesday: "W", Thursday: "T", Friday: "F" };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Surprise Sets</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{getWeekOfLabel()} - Monday through Friday stream setup</p>
+          <p className="text-xs text-gray-400 mt-0.5">{getWeekOfLabel()} - SetSheet converter and weekly readiness tracker</p>
         </div>
         <button
           onClick={clearWeek}
@@ -3583,94 +3843,174 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           Clear Week
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
           { label: "Total stream blocks", value: totalBlocks, cls: "border-l-slate-400" },
-          { label: "Live Ready", value: liveReady, cls: "border-l-green-500" },
-          { label: "Needs Setup", value: needsSetup, cls: "border-l-gray-400" },
-          { label: "Checked/Built", value: checkedBuilt, cls: "border-l-blue-500" },
+          { label: "Done", value: liveReady, cls: "border-l-green-500" },
+          { label: "Not Done", value: notDone, cls: "border-l-gray-400" },
         ].map(item => (
-          <Card key={item.label} className={`p-4 border-l-4 ${item.cls}`}>
+          <Card key={item.label} className={`p-3 border-l-4 ${item.cls}`}>
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{item.label}</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{item.value}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{item.value}</p>
           </Card>
         ))}
       </div>
-      <div className="space-y-4">
-        {checklistSections.map(section => {
-          const readyCount = section.blocks.filter(block => block.status === "Live Ready").length;
-          return (
-            <section key={section.key} className="rounded-lg border border-gray-200 bg-white">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <BrandPip brand={section.key} />
-                  <h3 className="text-sm font-bold text-gray-900">{section.label}</h3>
-                </div>
-                <span className="text-[10px] font-medium text-gray-400">{readyCount}/{section.blocks.length} live ready</span>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+        <Card className="p-4">
+          <div className="border-b border-gray-100 pb-3">
+            <p className="text-sm font-bold text-gray-900">SetSheet Converter</p>
+            <p className="mt-0.5 text-xs text-gray-400">Paste a surprise set, convert it, then download the file.</p>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <FL>Account / Brand</FL>
+              <Sel value={converterForm.brand} onChange={value => updateConverterField("brand", value)} options={BRANDS} placeholder="" />
+            </label>
+            <label className="space-y-1">
+              <FL>Warehouse</FL>
+              <Sel value={converterForm.warehouse} onChange={value => updateConverterField("warehouse", value)} options={SETSHEET_WAREHOUSES} placeholder="" />
+            </label>
+            <label className="space-y-1">
+              <FL>Day</FL>
+              <Sel value={converterForm.day} onChange={value => updateConverterField("day", value)} options={SURPRISE_SET_DAYS} placeholder="" />
+            </label>
+            <label className="space-y-1">
+              <FL>Shift</FL>
+              <select
+                value={converterForm.shift}
+                onChange={event => updateConverterField("shift", event.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-slate-500 focus:outline-none"
+              >
+                <option value="am">AM</option>
+                <option value="pm">PM</option>
+              </select>
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <FL>File name</FL>
+              <Inp value={converterForm.fileName} onChange={value => updateConverterField("fileName", value)} placeholder="name_date_channel" />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <FL>Insert surprise set</FL>
+              <Txt value={converterForm.input} onChange={value => updateConverterField("input", value)} placeholder="Paste lines here..." rows={13} className="font-mono text-xs" />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <BtnPrimary onClick={handleConvert}>Convert</BtnPrimary>
+            <button
+              onClick={() => handleDownload()}
+              disabled={!converterRows.length}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Download file
+            </button>
+            <BtnSecondary onClick={handleResetConverter}>Reset</BtnSecondary>
+            <BtnSecondary onClick={handleAddAnother}>Add another surprise set</BtnSecondary>
+            <button
+              onClick={handleDownloadAll}
+              disabled={!convertedEntries.length}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Download all converted files
+            </button>
+          </div>
+          {converterError && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{converterError}</div>
+          )}
+          {converterConverted && (
+            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div><p className="text-lg font-bold text-gray-900">{summary.totalRows}</p><p className="text-[10px] text-gray-400">unique products</p></div>
+                <div><p className="text-lg font-bold text-gray-900">{summary.totalQuantity}</p><p className="text-[10px] text-gray-400">total items</p></div>
+                <div><p className="text-lg font-bold text-gray-900">{summary.unknownCount}</p><p className="text-[10px] text-gray-400">unknown items</p></div>
               </div>
-              <div className="divide-y divide-gray-100">
-                {SURPRISE_SET_DAYS.map(day => {
-                  const dayBlocks = section.blocks.filter(block => block.day === day);
-                  const amBlock = dayBlocks.find(block => block.streamKey === "am" || block.streamLabel === "AM Stream");
-                  const pmBlock = dayBlocks.find(block => block.streamKey === "pm" || block.streamLabel === "PM Stream");
-                  const rowBlocks = [amBlock, pmBlock].filter(Boolean);
-                  if (rowBlocks.length === 0) return null;
-                  return (
-                    <div key={`${section.key}-${day}`} className="grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[110px_minmax(0,1fr)_minmax(0,1fr)]">
-                      <div className="text-xs font-bold text-gray-700 lg:pt-2">{day}</div>
-                      {[amBlock, pmBlock].map((block, index) => (
-                        <div key={block?.id || `${section.key}-${day}-${index}`} className="min-w-0">
-                          {block ? (
-                            <div className={`rounded-lg border p-3 ${block.status === "Live Ready" ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-gray-50"}`}>
-                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-xs font-bold text-gray-900">{block.streamLabel}</p>
-                                  <p className="text-[10px] text-gray-400">{block.streamTime}</p>
-                                </div>
-                                <Badge label={block.status} className={statusStyle[block.status] || statusStyle["Not Started"]} />
-                              </div>
-                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                <label className="space-y-1">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Brand</span>
-                                  <Sel value={block.brand} onChange={value => updateBlock(block.id, { brand: value })} options={BRANDS} placeholder="Select brand" />
-                                </label>
-                                <label className="space-y-1">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</span>
-                                  <Sel value={block.status} onChange={value => updateBlock(block.id, { status: value })} options={SURPRISE_SET_STATUS_OPTIONS} placeholder="" />
-                                </label>
-                                <label className="space-y-1">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Streamer</span>
-                                  <Inp value={block.streamer} onChange={value => updateBlock(block.id, { streamer: value })} placeholder="Streamer" />
-                                </label>
-                                <label className="space-y-1">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Set name</span>
-                                  <Inp value={block.setName} onChange={value => updateBlock(block.id, { setName: value })} placeholder="Set name" />
-                                </label>
-                                <label className="space-y-1 sm:col-span-2">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</span>
-                                  <Txt value={block.notes} onChange={value => updateBlock(block.id, { notes: value })} placeholder="Setup notes..." rows={2} />
-                                </label>
-                              </div>
-                              <button
-                                onClick={() => markLiveReady(block.id)}
-                                disabled={block.status === "Live Ready"}
-                                className="mt-2 inline-flex items-center justify-center rounded-lg border border-green-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-green-700 transition-colors hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                Mark Live Ready
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="hidden rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3 text-xs text-gray-300 lg:block">No block</div>
-                          )}
-                        </div>
-                      ))}
+              <div className="mt-3 max-h-44 overflow-auto rounded border border-gray-200 bg-white">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="sticky top-0 bg-gray-50 text-gray-400">
+                    <tr>
+                      <th className="px-2 py-1 font-semibold">Product</th>
+                      <th className="px-2 py-1 font-semibold">Qty</th>
+                      <th className="px-2 py-1 font-semibold">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {converterRows.map(row => (
+                      <tr key={`${row.order}-${row.productName}`}>
+                        <td className="px-2 py-1 text-gray-700">{row.productName}</td>
+                        <td className="px-2 py-1 text-gray-600">{row.quantity}</td>
+                        <td className="px-2 py-1 text-gray-500">{row.type}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {convertedEntries.length > 0 && (
+            <div className="mt-4 border-t border-gray-100 pt-3">
+              <p className="text-xs font-bold text-gray-800">Converted files</p>
+              <div className="mt-2 space-y-2">
+                {convertedEntries.slice(0, 5).map(entry => (
+                  <div key={entry.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-gray-800">{entry.fileName}</p>
+                      <p className="text-[10px] text-gray-400">{entry.day} {String(entry.shift).toUpperCase()} - {entry.summary?.totalQuantity || 0} items</p>
                     </div>
-                  );
-                })}
+                    <button onClick={() => handleDownload(entry)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Download</button>
+                  </div>
+                ))}
               </div>
-            </section>
-          );
-        })}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Weekly Surprise Set Tracker</p>
+              <p className="mt-0.5 text-xs text-gray-400">Done boxes by day, brand, and shift.</p>
+            </div>
+            <span className="text-[10px] font-semibold text-gray-400">{liveReady}/{totalBlocks} done</span>
+          </div>
+          <div className="mt-4 space-y-2">
+            <div className="grid grid-cols-[30px_repeat(4,minmax(0,1fr))] items-center gap-2">
+              <div />
+              {SURPRISE_SET_TRACKER_BRANDS.map(({ brand, code }) => (
+                <div key={brand} className="flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                  <BrandPip brand={brand} />
+                  {code}
+                </div>
+              ))}
+            </div>
+            {SURPRISE_SET_DAYS.map(day => (
+              <div key={day} className="grid grid-cols-[30px_repeat(4,minmax(0,1fr))] items-center gap-2">
+                <div className="flex h-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700">
+                  {dayShort[day]}
+                </div>
+                {SURPRISE_SET_TRACKER_BRANDS.map(({ brand }) => (
+                  <div key={`${day}-${brand}`} className="rounded-lg border border-gray-200 bg-white p-2">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {SURPRISE_SET_STREAMS.map(stream => {
+                        const block = getTrackerBlock(day, stream.key, brand);
+                        const done = Boolean(block?.readyForLive || block?.status === "Live Ready");
+                        return (
+                          <button
+                            key={`${day}-${brand}-${stream.key}`}
+                            type="button"
+                            onClick={() => toggleTrackerDone(brand, day, stream.key, !done)}
+                            className={`h-8 rounded-md border text-[10px] font-bold transition-colors ${done ? "border-slate-700 bg-slate-700 text-white" : "border-gray-300 bg-gray-50 text-gray-500 hover:bg-gray-100"}`}
+                            aria-pressed={done}
+                          >
+                            {stream.key.toUpperCase()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
     </div>
   );
