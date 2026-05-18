@@ -3476,65 +3476,263 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
 };
 
 // ─── WEEKLY RAISE TRACKER ─────────────────────────────────────────────────────
-const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseScores, setRaiseScores }) => {
-  const [improvements, setImprovements] = useState("");
-  const [risks, setRisks] = useState("");
-  const [nextFocus, setNextFocus] = useState("");
-  const [mode, setMode] = useState("full");
-  const [copied, setCopied] = useState(false);
+// ─── OPERATIONS IMPACT REPORT ────────────────────────────────────────────────
 
-  const data = { tickets, replacements, studios, surpriseSets, raiseScores, improvements, risks, nextFocus };
-  const report = mode === "slack" ? buildSlackSummary(data) : buildFullReport(data);
+// Week range helpers
+const getWeekRange = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  const start = new Date(d);
+  start.setDate(d.getDate() - d.getDay()); // Sunday
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);        // Saturday
+  const fmt = (dt) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const fmtFull = (dt) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return {
+    label:   `Week of ${start.getMonth() + 1}/${start.getDate()}`,
+    range:   `${fmt(start)} - ${fmtFull(end)}`,
+    start,
+    end,
+  };
+};
 
-  const copy = () => { navigator.clipboard.writeText(report); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const exportTxt = () => {
-    const b = new Blob([report], { type: "text/plain" });
+const isThisWeek = (isoStr, weekStart, weekEnd) => {
+  if (!isoStr) return false;
+  try {
+    const d = new Date(isoStr);
+    return d >= weekStart && d <= weekEnd;
+  } catch { return false; }
+};
+
+const REPORT_BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "Pokiemart"];
+
+const OpsImpactMetricCard = ({ label, value, accent = false, sub }) => (
+  <div className={`bg-white border rounded-lg px-3 py-3 ${accent ? "border-l-4 border-l-slate-400 border-t border-r border-b border-gray-200" : "border-gray-200"}`}>
+    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider leading-tight">{label}</p>
+    <p className={`text-2xl font-bold mt-1 ${accent ? "text-slate-800" : "text-gray-900"}`}>{value}</p>
+    {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+  </div>
+);
+
+const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseScores, setRaiseScores, inboundMessages }) => {
+  // ── Safe arrays ─────────────────────────────────────────────────────────────
+  const safeInbound      = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const safeReplacements = Array.isArray(replacements)    ? replacements    : [];
+  const safeStudios      = Array.isArray(studios)         ? studios         : [];
+  const safeSets         = Array.isArray(surpriseSets)    ? surpriseSets    : [];
+
+  // ── Week range ───────────────────────────────────────────────────────────────
+  const week = getWeekRange();
+
+  // ── localStorage-persisted notes (all hooks at top level) ───────────────────
+  const [wins,      setWins]      = useState(() => { try { return localStorage.getItem("ops_report_wins_v1")  || ""; } catch { return ""; } });
+  const [risks,     setRisks]     = useState(() => { try { return localStorage.getItem("ops_report_risks_v1") || ""; } catch { return ""; } });
+  const [nextFocus, setNextFocus] = useState(() => { try { return localStorage.getItem("ops_report_focus_v1") || ""; } catch { return ""; } });
+  const [copied,    setCopied]    = useState(false);
+
+  const saveWins      = (v) => { setWins(v);      try { localStorage.setItem("ops_report_wins_v1",  v); } catch {} };
+  const saveRisks     = (v) => { setRisks(v);     try { localStorage.setItem("ops_report_risks_v1", v); } catch {} };
+  const saveNextFocus = (v) => { setNextFocus(v); try { localStorage.setItem("ops_report_focus_v1", v); } catch {} };
+
+  // ── Core metric counts ───────────────────────────────────────────────────────
+  const msgsImported    = safeInbound.filter(m => isThisWeek(m.received_at || m.created_at, week.start, week.end)).length || safeInbound.length;
+  const needsReply      = safeInbound.filter(m => m.status === "Needs Reply" && !m.archived_at).length;
+  const closedMsgs      = safeInbound.filter(m => m.status === "Closed").length;
+  const refundsReviewed = safeInbound.filter(m => isTikTokRefund(m) && !m.archived_at).length;
+  const replacementsLogged = safeReplacements.filter(r => isThisWeek(r.created_at || r.date, week.start, week.end)).length || safeReplacements.length;
+  const followUpsNeeded = safeReplacements.filter(r => !r.archived_at && (r.followUp === "Yes" || r.follow_up === "Yes")).length;
+  const studioReady     = safeStudios.filter(s => s.streamReady).length;
+  const studioScore     = safeStudios.length ? Math.round((studioReady / safeStudios.length) * 100) : 0;
+  const setsReady       = safeSets.filter(s => s.readyForLive).length;
+  const draftsGenerated = safeInbound.filter(m => m.ai_draft).length;
+
+  // ── Brand breakdown ──────────────────────────────────────────────────────────
+  const brandRows = REPORT_BRANDS.map(brand => ({
+    brand,
+    open:        safeInbound.filter(m => m.brand === brand && m.status !== "Closed" && !m.archived_at).length,
+    closed:      safeInbound.filter(m => m.brand === brand && m.status === "Closed").length,
+    refunds:     safeInbound.filter(m => m.brand === brand && isTikTokRefund(m) && !m.archived_at).length,
+    replacements: safeReplacements.filter(r => r.brand === brand).length,
+  }));
+
+  // ── Estimated time saved ─────────────────────────────────────────────────────
+  const timeMins = (msgsImported * 2) + (draftsGenerated * 5) + (safeReplacements.length * 3) + (setsReady * 5);
+  const timeHours = (timeMins / 60).toFixed(1);
+
+  // ── Plain-text summary builder ───────────────────────────────────────────────
+  const buildSummary = () => {
+    const sep = "─".repeat(52);
+    const brandTable = brandRows.map(b =>
+      `  ${b.brand.padEnd(18)} open: ${b.open}  closed: ${b.closed}  refunds: ${b.refunds}  replacements: ${b.replacements}`
+    ).join("\n");
+    return [
+      "OPERATIONS IMPACT REPORT",
+      week.range,
+      sep,
+      "",
+      "TOP METRICS",
+      `  Messages Imported:       ${msgsImported}`,
+      `  Needs Reply:             ${needsReply}`,
+      `  Closed Messages:         ${closedMsgs}`,
+      `  Refunds / Returns:       ${refundsReviewed}`,
+      `  Replacements Logged:     ${replacementsLogged}`,
+      `  Follow-Ups Needed:       ${followUpsNeeded}`,
+      `  Studio Readiness:        ${studioScore}%`,
+      `  Surprise Sets Ready:     ${setsReady} of ${safeSets.length}`,
+      "",
+      "BRAND BREAKDOWN",
+      brandTable,
+      "",
+      "ESTIMATED TIME SAVED",
+      `  ~${timeMins} minutes  (~${timeHours} hours)`,
+      `  Formula: ${msgsImported} msgs x2 + ${draftsGenerated} drafts x5 + ${safeReplacements.length} replacements x3 + ${setsReady} sets x5`,
+      "",
+      "PROCESS IMPROVEMENTS / WINS",
+      wins || "  None noted.",
+      "",
+      "RISKS / BLOCKERS",
+      risks || "  None noted.",
+      "",
+      "NEXT WEEK FOCUS",
+      nextFocus || "  Not set.",
+      "",
+      sep,
+      `Generated by Ops Command Hub  |  ${new Date().toLocaleString()}`,
+    ].join("\n");
+  };
+
+  const handleCopy = () => {
+    try {
+      navigator.clipboard.writeText(buildSummary());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      alert("Could not copy summary. Please copy it manually.");
+    }
+  };
+
+  const handleExport = () => {
+    const b = new Blob([buildSummary()], { type: "text/plain" });
     const u = URL.createObjectURL(b);
-    const a = document.createElement("a"); a.href = u; a.download = `jonny-ops-report-${todayDate()}.txt`; a.click();
+    const a = document.createElement("a");
+    a.href = u;
+    a.download = `ops-impact-report-${todayDate()}.txt`;
+    a.click();
     URL.revokeObjectURL(u);
   };
 
-  const RF = [
-    { key: "consistency", label: "Consistency" },
-    { key: "accuracy", label: "Accuracy" },
-    { key: "lossReduction", label: "Loss Reduction" },
-    { key: "ownership", label: "Ownership" },
-    { key: "processImprovement", label: "Process Improvement" },
-  ];
-
   return (
-    <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold text-gray-900">Ops Impact Report</h2><p className="text-xs text-gray-400 mt-0.5">Leadership-ready - auto-generated from your logged data</p></div>
-      <Card className="p-4">
-        <p className="text-sm font-bold text-gray-900 mb-3">Raise Path Self-Score</p>
-        <div className="space-y-3">
-          {RF.map(({ key, label }) => (
-            <div key={key} className="flex items-center gap-3">
-              <span className="text-xs text-gray-500 w-36">{label}</span>
-              <input type="range" min="0" max="100" step="5" value={raiseScores[key]} onChange={e => setRaiseScores(s => ({ ...s, [key]: parseInt(e.target.value) }))} className="flex-1 accent-slate-700" />
-              <span className="text-xs text-gray-500 w-8 text-right font-mono">{raiseScores[key]}%</span>
-            </div>
-          ))}
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Operations Impact Report</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Weekly summary of workload, follow-ups, replacements, readiness, and system impact.</p>
+          <p className="text-xs text-gray-500 font-medium mt-1">{week.label} <span className="text-gray-400 font-normal">· {week.range}</span></p>
         </div>
-      </Card>
-      <div className="space-y-3">
-        <div><FL>Process Improvements Made This Week</FL><Txt value={improvements} onChange={setImprovements} placeholder="e.g. Added photo request step to damage workflow. Cleaned up Shop Chat sweep process." rows={3} /></div>
-        <div><FL>Risks / Blockers</FL><Txt value={risks} onChange={setRisks} placeholder="e.g. TT-04 still not stream-ready. 3 SLA risk tickets require same-day action." rows={3} /></div>
-        <div><FL>Next Week's Focus</FL><Txt value={nextFocus} onChange={setNextFocus} placeholder="e.g. Clear SLA risk queue. Complete TT-04 readiness. Review repeat replacement root causes." rows={2} /></div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={handleCopy}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">
+            {copied ? "Copied!" : "Copy Summary"}
+          </button>
+          <button onClick={handleExport}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+            Export TXT
+          </button>
+        </div>
       </div>
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex gap-2">
-            <button onClick={() => setMode("full")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer transition-colors ${mode === "full" ? "bg-slate-700 text-white border-slate-800" : "bg-white text-gray-700 border-gray-300 hover:border-slate-400"}`}>Full Report</button>
-            <button onClick={() => setMode("slack")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer transition-colors ${mode === "slack" ? "bg-slate-700 text-white border-slate-800" : "bg-white text-gray-700 border-gray-300 hover:border-slate-400"}`}>Slack Summary</button>
-          </div>
-          <div className="flex gap-2">
-            <BtnSuccess onClick={copy} size="sm">{copied ? "Copied!" : "Copy"}</BtnSuccess>
-            <BtnSecondary onClick={exportTxt} size="sm">Export TXT</BtnSecondary>
-          </div>
+
+      {/* Top Metric Cards — 4 col on md, 2 col on mobile */}
+      <div>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Top Metrics</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <OpsImpactMetricCard label="Messages Imported"       value={msgsImported}      accent />
+          <OpsImpactMetricCard label="Needs Reply"             value={needsReply}         sub="status: Needs Reply" />
+          <OpsImpactMetricCard label="Closed Messages"         value={closedMsgs} />
+          <OpsImpactMetricCard label="Refunds / Returns"       value={refundsReviewed}    sub="TikTok Shop only" />
+          <OpsImpactMetricCard label="Replacements Logged"     value={replacementsLogged} />
+          <OpsImpactMetricCard label="Follow-Ups Needed"       value={followUpsNeeded}    sub="replacements" />
+          <OpsImpactMetricCard label="Studio Readiness"        value={`${studioScore}%`}  sub={`${studioReady} of ${safeStudios.length} ready`} />
+          <OpsImpactMetricCard label="Surprise Sets Ready"     value={setsReady}          sub={`of ${safeSets.length} total`} />
         </div>
-        <pre className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-xs text-gray-700 whitespace-pre-wrap font-mono max-h-96 overflow-y-auto leading-relaxed">{report}</pre>
-      </Card>
+      </div>
+
+      {/* Brand Breakdown */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          <p className="text-xs font-bold text-gray-700">Brand Breakdown</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-100">
+                {["Brand", "Open", "Closed", "Refunds / Returns", "Replacements"].map(h => (
+                  <th key={h} className="text-left px-4 py-2.5 font-semibold text-gray-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {brandRows.map(row => (
+                <tr key={row.brand} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-medium text-gray-800">{row.brand}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{row.open}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{row.closed}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{row.refunds > 0 ? <span className="text-orange-600 font-semibold">{row.refunds}</span> : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{row.replacements}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Estimated Time Saved */}
+      <div className="bg-white border border-gray-200 rounded-lg px-4 py-4">
+        <p className="text-xs font-bold text-gray-700 mb-2">Estimated Manual Time Saved</p>
+        <div className="flex items-baseline gap-3 mb-2">
+          <span className="text-3xl font-bold text-slate-800">{timeMins}</span>
+          <span className="text-sm text-gray-500">minutes</span>
+          <span className="text-lg font-semibold text-slate-600 ml-2">{timeHours}</span>
+          <span className="text-sm text-gray-500">hours</span>
+        </div>
+        <p className="text-[10px] text-gray-400 leading-relaxed">
+          Formula: {msgsImported} messages x 2 min + {draftsGenerated} AI drafts x 5 min + {safeReplacements.length} replacements x 3 min + {setsReady} sets x 5 min
+        </p>
+      </div>
+
+      {/* Editable Notes */}
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Process Improvements / Wins This Week</label>
+          <textarea
+            value={wins}
+            onChange={e => saveWins(e.target.value)}
+            rows={3}
+            placeholder="Example: Improved intake reliability, cleared refunds faster, logged replacement cases, completed surprise set setup."
+            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-700 placeholder-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Risks / Blockers</label>
+          <textarea
+            value={risks}
+            onChange={e => saveRisks(e.target.value)}
+            rows={3}
+            placeholder="Example: TikTok DMs still require manual checks, replacement follow-ups need review, surprise set sheet import not automated yet."
+            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-700 placeholder-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Next Week's Focus</label>
+          <textarea
+            value={nextFocus}
+            onChange={e => saveNextFocus(e.target.value)}
+            rows={2}
+            placeholder="Example: Improve AI reply tone, polish mobile inbox, add export for replacements, build morning brief agent."
+            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-700 placeholder-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400"
+          />
+        </div>
+      </div>
     </div>
   );
 };
@@ -3930,7 +4128,7 @@ export default function JonnyOpsCommandCenter() {
       case "replacements": return <ReplacementLogView replacements={replacements} setReplacements={setReplacements} replacementsLoading={replacementsLoading} replacementsError={replacementsError} onRefresh={refreshReplacements} />;
       case "studio": return <StudioReadinessView studios={studios} setStudios={setStudios} />;
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
-      case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} />;
+      case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} inboundMessages={inboundMessages} />;
       case "data": return <DataManagementView {...common} />;
       default: return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} />;
     }
