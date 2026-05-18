@@ -1025,6 +1025,27 @@ const RISK_LEVEL_STYLE = {
 };
 const INBOX_FILTER_OPTIONS = ["All", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority"];
 
+const INBOX_BRAND_BORDER_CLASS = {
+  "Vaulted Rarities": "border-l-yellow-400",
+  "Vaulted": "border-l-yellow-400",
+  "PokeSpins": "border-l-red-600",
+  "CardKing47": "border-l-blue-600",
+  "Pokiemart": "border-l-green-600",
+  "PokieMart": "border-l-green-600",
+  "Unknown": "border-l-slate-300",
+};
+
+const getInboxBrandBorderClass = (brand) => {
+  const value = (brand || "").trim();
+  if (INBOX_BRAND_BORDER_CLASS[value]) return INBOX_BRAND_BORDER_CLASS[value];
+  const lower = value.toLowerCase();
+  if (lower.includes("vaulted")) return INBOX_BRAND_BORDER_CLASS["Vaulted"];
+  if (lower.includes("pokespins")) return INBOX_BRAND_BORDER_CLASS["PokeSpins"];
+  if (lower.includes("cardking47")) return INBOX_BRAND_BORDER_CLASS["CardKing47"];
+  if (lower.includes("pokiemart")) return INBOX_BRAND_BORDER_CLASS["Pokiemart"];
+  return INBOX_BRAND_BORDER_CLASS["Unknown"];
+};
+
 // ─── INBOX MESSAGE CLASSIFICATION HELPERS ────────────────────────────────────
 
 // Format an ISO timestamp in Pacific time. Gracefully returns "" on bad input.
@@ -1050,17 +1071,34 @@ const getInboundTimestamp = (msg) => {
 
 // Detect if an inbound message is a TikTok refund/return notification.
 const isTikTokRefund = (msg) => {
-  const subj = (msg.subject || "").toLowerCase();
-  const body = (msg.message_body || "").toLowerCase();
-  const lbl  = (msg.label || "").toLowerCase();
-  const chan  = (msg.channel || "").toLowerCase();
-  if (/return\s*\/?\s*refund request received/i.test(msg.subject || "")) return true;
-  if (/refund request received/i.test(msg.subject || "")) return true;
-  if (/return request received/i.test(msg.subject || "")) return true;
-  if ((chan.includes("tiktok") || lbl.includes("tiktok")) &&
-      (subj.includes("refund") || subj.includes("return"))) return true;
-  if (body.includes("refund request") || body.includes("return request")) return true;
-  return false;
+  const subject = msg.subject || "";
+  const subj = subject.toLowerCase();
+  const lbl = (msg.label || "").toLowerCase();
+  const chan = (msg.channel || "").toLowerCase();
+  const src = (msg.source || "").toLowerCase();
+  const messageType = (msg.message_type || msg.messageType || "").toLowerCase();
+  const issueType = (msg.issue_type || msg.issueType || "").toLowerCase();
+  const customerIntent = (msg.customer_intent || msg.customerIntent || "").toLowerCase();
+  const hasRefundReturn = (...values) => values.some(value =>
+    /\b(refund|return)\b/i.test(String(value || "").replace(/[_/-]+/g, " "))
+  );
+  const hasTikTokSource = [chan, src, lbl].some(value => value.includes("tiktok") || value.includes("tik tok"));
+  const compactMessageType = messageType.replace(/[^a-z0-9]/g, "");
+  const clearlyTikTokRefundType =
+    messageType === "tiktok refund" ||
+    (messageType.includes("tiktok") && hasRefundReturn(messageType)) ||
+    (compactMessageType.includes("tiktok") && (compactMessageType.includes("refund") || compactMessageType.includes("return")));
+  const hasRefundNotificationSubject =
+    /return\s*\/?\s*refund request received/i.test(subject) ||
+    /refund request received/i.test(subject) ||
+    /return request received/i.test(subject);
+  const isTikTokShopChatSubject = subj.includes("a new message from tiktok shop customer");
+
+  if (clearlyTikTokRefundType) return true;
+  if (!hasTikTokSource) return false;
+  if (hasRefundNotificationSubject) return true;
+  if (isTikTokShopChatSubject) return false;
+  return hasRefundReturn(messageType, subj, issueType, customerIntent);
 };
 
 // Returns a source category string for a message.
@@ -1121,6 +1159,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [collapsedDrafts, setCollapsedDrafts] = useState({});
+  const [expandedMessages, setExpandedMessages] = useState({});
 
   const needsReply    = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
   const inProgress    = inboundMessages.filter(m => m.status === "In Progress").length;
@@ -1142,6 +1181,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (activeFilter === "High Priority")       return m.risk_level === "High" || m.priority === "High" || m.triage_status === "High Priority";
     return true;
   });
+
+  const toggleMessageExpanded = (id) => {
+    setExpandedMessages(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // ── handlers ──────────────────────────────────────────────────────────────────
   const handleArchive = async (id) => {
@@ -1256,6 +1299,23 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
   const [draftBusyId, setDraftBusyId] = useState(null);   // separate from action busyId
   const [copiedDraftId, setCopiedDraftId] = useState(null);
+
+  const handleCopyDraft = async (msg) => {
+    try {
+      await navigator.clipboard.writeText(msg.ai_draft || "");
+      setCopiedDraftId(msg.id);
+      setTimeout(() => setCopiedDraftId(null), 2000);
+      return true;
+    } catch (_) {
+      alert("Could not copy draft. Please copy it manually.");
+      return false;
+    }
+  };
+
+  const handleCopyDraftAndOpen = async (msg) => {
+    const copied = await handleCopyDraft(msg);
+    if (copied) window.open("https://seller.tiktok.com", "_blank", "noopener,noreferrer");
+  };
 
   const handleGenerateDraft = async (msg, instruction = null) => {
     setDraftBusyId(msg.id);
@@ -1461,7 +1521,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Command Inbox</h2>
           <div className="flex items-center gap-2 mt-0.5">
@@ -1481,12 +1541,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             }
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {/* Process Queue */}
           <button
             onClick={handleProcessQueue}
             disabled={queueRunning || inboundLoading}
-            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg border border-blue-700 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg border border-blue-700 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
           >
             {queueRunning ? (
               <>
@@ -1502,7 +1562,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           <button
             onClick={handleCheckGmail}
             disabled={gmailChecking || gmailCooldown || queueRunning || inboundLoading}
-            className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
           >
             {gmailChecking ? (
               <>
@@ -1512,13 +1572,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 </svg>
                 Checking…
               </>
-            ) : gmailCooldown ? "Checked ✓" : "Check Gmail Now"}
+            ) : gmailCooldown ? "Checked" : "Check Gmail Now"}
           </button>
           {/* Refresh */}
           <button
             onClick={onRefresh}
             disabled={inboundLoading || queueRunning}
-            className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={inboundLoading ? "animate-spin" : ""}>
               <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -1579,12 +1639,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 no-scrollbar">
+      <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 -mb-1 no-scrollbar">
         {INBOX_FILTER_OPTIONS.map(opt => (
           <button
             key={opt}
             onClick={() => setActiveFilter(opt)}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
               activeFilter === opt
                 ? "bg-slate-700 text-white border-slate-800"
                 : "bg-white text-gray-600 border-gray-300 hover:border-slate-400 hover:text-slate-700"
@@ -1593,7 +1653,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             {opt}
           </button>
         ))}
-        <span className="text-[10px] text-gray-400 ml-1">{filtered.length} shown</span>
+        <span className="flex-shrink-0 text-[10px] text-gray-400 ml-1">{filtered.length} shown</span>
       </div>
 
       {/* Loading skeleton */}
@@ -1638,15 +1698,19 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const orderNum       = msg.order_number || msg.orderNumber || null;
         const isRefund       = sourceType === "TikTok Refund";
         const isNoise        = sourceType === "Noise";
+        const isMessageExpanded = expandedMessages[msg.id] === true;
+        const sourceBadgeLabel = isRefund ? "Refund / Return" : sourceType;
+        const brandBorderCls = getInboxBrandBorderClass(msg.brand);
+        const showSubjectLine = msg.subject && msg.subject !== cardTitle;
 
         return (
-          <Card key={msg.id} className={`p-4 ${isRefund ? "border-l-4 border-l-red-400" : isNoise ? "opacity-75" : ""}`}>
+          <Card key={msg.id} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
             {/* Card header row */}
-            <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 {msg.brand && <BrandPip brand={msg.brand} />}
                 {msg.brand && <span className="text-xs font-semibold text-gray-700">{msg.brand}</span>}
-                <Badge label={sourceType} className={`text-[10px] ${sourceBadgeCls}`} />
+                <Badge label={sourceBadgeLabel} className={`text-[10px] ${sourceBadgeCls}`} />
                 {msg.channel && msg.channel !== "TikTok Shop" && (
                   <span className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{msg.channel}</span>
                 )}
@@ -1665,7 +1729,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </div>
               {/* Timestamp — Pacific time, labeled Received or Imported */}
               {ts.display && (
-                <div className="flex flex-col items-end flex-shrink-0">
+                <div className="flex flex-col items-start flex-shrink-0 sm:items-end">
                   <span className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">{ts.label}</span>
                   <span className="text-[10px] text-gray-500 font-medium whitespace-nowrap">{ts.display} PT</span>
                 </div>
@@ -1673,7 +1737,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             </div>
 
             {/* Card title — source-aware */}
-            <p className={`text-xs font-bold mb-1.5 ${isRefund ? "text-red-700" : "text-gray-900"}`}>{cardTitle}</p>
+            <p className={`text-xs font-bold mb-1.5 ${isRefund ? "text-orange-700" : "text-gray-900"}`}>{cardTitle}</p>
 
             {/* Refund-specific info row */}
             {isRefund && (
@@ -1681,7 +1745,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {orderNum         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Order:</span> {orderNum}</span>}
                 {showName         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Customer:</span> {showName}</span>}
                 {msg.sender_email && <span className="text-[11px] text-gray-400">{msg.sender_email}</span>}
-                <span className="text-[11px] text-red-600 font-medium">→ Review in TikTok Seller Center</span>
+                <span className="text-[11px] text-orange-700 font-medium">Review in TikTok Seller Center</span>
               </div>
             )}
 
@@ -1693,26 +1757,38 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </p>
             )}
 
-            {/* Subject (non-TikTok-DM, non-refund) */}
-            {msg.subject && sourceType !== "TikTok Shop Chat" && !isRefund && (
-              <p className="text-xs text-gray-500 italic mb-1.5 truncate">{msg.subject}</p>
+            {/* Subject */}
+            {showSubjectLine && (
+              <p className="text-xs text-gray-500 italic mb-1.5 truncate">
+                <span className="not-italic font-medium text-gray-500">Subject:</span> {msg.subject}
+              </p>
             )}
 
             {/* Message body */}
-            {displayBody && !isRefund && (
-              <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 mb-2">
-                <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-5">{displayBody}</p>
+            {displayBody && (
+              <div className="mb-2">
+                <button
+                  type="button"
+                  onClick={() => toggleMessageExpanded(msg.id)}
+                  aria-expanded={isMessageExpanded}
+                  className={`text-[10px] font-semibold rounded border px-2 py-1 transition-colors cursor-pointer ${
+                    isRefund
+                      ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:text-gray-700"
+                  }`}
+                >
+                  {isMessageExpanded ? "Hide Message" : "View Message"}
+                </button>
+                {isMessageExpanded && (
+                  <div className={`border rounded-lg px-3 py-2.5 mt-2 ${
+                    isRefund ? "bg-orange-50 border-orange-100" : "bg-gray-50 border-gray-100"
+                  }`}>
+                    <p className={`text-xs leading-relaxed whitespace-pre-wrap ${
+                      isRefund ? "text-orange-900" : "text-gray-700"
+                    }`}>{displayBody}</p>
+                  </div>
+                )}
               </div>
-            )}
-
-            {/* Refund body — collapsed */}
-            {isRefund && displayBody && (
-              <details className="mb-2">
-                <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600 select-none">Show notification body</summary>
-                <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-1">
-                  <p className="text-[11px] text-gray-600 leading-relaxed whitespace-pre-wrap line-clamp-6">{displayBody}</p>
-                </div>
-              </details>
             )}
 
             {/* History note */}
@@ -1737,7 +1813,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   {msg.confidence_score != null && <span className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Confidence:</span> {msg.confidence_score}%</span>}
                 </div>
                 {msg.triage_summary && <p className="text-[11px] text-gray-600"><span className="font-semibold text-gray-700">Summary:</span> {msg.triage_summary}</p>}
-                {msg.next_action    && <p className="text-[11px] text-slate-600">→ {msg.next_action}</p>}
+                {msg.next_action    && <p className="text-[11px] text-slate-600"><span className="font-semibold text-gray-700">Next:</span> {msg.next_action}</p>}
               </div>
             )}
 
@@ -1747,7 +1823,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               const toggleCollapse = () => setCollapsedDrafts(prev => ({ ...prev, [msg.id]: !prev[msg.id] }));
               return (
               <div className="border border-blue-100 rounded-lg bg-blue-50 px-3 py-2.5 mb-3">
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex flex-col gap-2 mb-1.5 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">AI Draft</p>
                   <div className="flex items-center gap-2">
                     {msg.draft_status && (
@@ -1762,19 +1838,23 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   <>
                     <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
                     <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-blue-100">
-                      <button onClick={() => { navigator.clipboard.writeText(msg.ai_draft); setCopiedDraftId(msg.id); setTimeout(() => setCopiedDraftId(null), 2000); }}
-                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors">
+                      <button onClick={() => handleCopyDraft(msg)}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors whitespace-nowrap">
                         {copiedDraftId === msg.id ? "Copied!" : "Copy Draft"}
+                      </button>
+                      <button onClick={() => handleCopyDraftAndOpen(msg)}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 cursor-pointer transition-colors whitespace-nowrap">
+                        Copy & Open
                       </button>
                       {msg.draft_status !== "Approved" && (
                         <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
-                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors">
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                           Approve Draft
                         </button>
                       )}
                       {[["redraft","Redraft"], ["make_shorter","Shorter"], ["make_warmer","Warmer"], ["make_firmer","Firmer"]].map(([inst, lbl]) => (
                         <button key={inst} disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg, inst)}
-                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors">
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                           {isDraftBusy && inst === "redraft" ? "..." : lbl}
                         </button>
                       ))}
@@ -1786,53 +1866,53 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             })()}
 
             {/* Action buttons */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {msg.status !== "In Progress" && msg.status !== "Closed" && msg.status !== "Ticket Created" && (
                 <button disabled={isBusy} onClick={() => handleStatus(msg.id, "In Progress")}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 cursor-pointer transition-colors">
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                   In Progress
                 </button>
               )}
               {msg.status !== "Closed" && (
                 <button disabled={isBusy} onClick={() => handleStatus(msg.id, "Closed")}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 cursor-pointer transition-colors">
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                   Mark Closed
                 </button>
               )}
               {msg.status !== "Ticket Created" && (
                 <button disabled={isBusy} onClick={() => handleCreateTicket(msg)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 cursor-pointer transition-colors">
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                   Create Ticket
                 </button>
               )}
               <button onClick={() => handleCopy(msg.id, msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors whitespace-nowrap">
                 {copiedId === msg.id ? "Copied!" : "Copy Message"}
               </button>
               <button disabled={isBusy} onClick={() => handleRunTriage(msg.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50 cursor-pointer transition-colors">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isBusy ? "Triaging…" : "Run Triage"}
               </button>
               <button disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors">
-                {isDraftBusy ? "Drafting…" : "✦ Generate Draft"}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                {isDraftBusy ? "Drafting…" : "Generate Draft"}
               </button>
               {(() => {
                 const hasOpenAction = opsActions.some(a => a.inbound_message_id === msg.id && a.status !== "Completed");
                 return (
                   <button disabled={isBusy || hasOpenAction} onClick={() => handleCreateAction(msg)}
                     title={hasOpenAction ? "An open action already exists for this message" : "Create a Next Action from this message"}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
                       hasOpenAction
                         ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
                         : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
                     }`}>
-                    {hasOpenAction ? "✓ Action exists" : "+ Action"}
+                    {hasOpenAction ? "Action exists" : "+ Action"}
                   </button>
                 );
               })()}
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 disabled:opacity-50 cursor-pointer transition-colors ml-auto">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
                 <svg width="11" height="11" viewBox="0 0 13 13" fill="none">
                   <path d="M1.5 3.5h10M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M2.5 3.5l.5 7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1l.5-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M5 6v3M8 6v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
