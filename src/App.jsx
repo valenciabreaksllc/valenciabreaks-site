@@ -547,11 +547,16 @@ const ICONS = {
   inbox: <><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></>,
   actions: <><path d="M2 4h9M2 8h7M2 12h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="12" cy="11" r="3" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M14.5 13.5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></>,
 };
-const NavItem = ({ id, label, active, onClick, badge }) => (
-  <button onClick={() => onClick(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left ${active ? "bg-slate-700 text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}>
+const NavItem = ({ id, label, active, onClick, badge, showLabel = true }) => (
+  <button
+    onClick={() => onClick(id)}
+    title={!showLabel ? label : undefined}
+    className={`relative w-full flex items-center ${showLabel ? "gap-2.5 px-3 justify-start" : "justify-center px-0"} py-2 rounded-lg text-sm font-medium transition-all text-left overflow-hidden ${active ? "bg-slate-700 text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
+  >
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={`flex-shrink-0 ${active ? "text-white" : "text-gray-400"}`}>{ICONS[id]}</svg>
-    <span className="flex-1 truncate">{label}</span>
-    {badge > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">{badge}</span>}
+    {showLabel && <span className="flex-1 truncate">{label}</span>}
+    {badge > 0 && showLabel && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">{badge}</span>}
+    {badge > 0 && !showLabel && <span className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />}
   </button>
 );
 
@@ -1128,7 +1133,7 @@ const RISK_LEVEL_STYLE = {
   "Medium": "bg-amber-50 text-amber-700 border-amber-200",
   "Low":    "bg-gray-100 text-gray-500 border-gray-200",
 };
-const INBOX_FILTER_OPTIONS = ["All", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority"];
+const INBOX_FILTER_OPTIONS = ["All", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority", "Closed", "Archived"];
 
 const INBOX_BRAND_BORDER_CLASS = {
   "Vaulted Rarities": "border-l-yellow-400",
@@ -1260,20 +1265,22 @@ const getInboundCardTitle = (msg, sourceType, displayName) => {
 
 // ─── COMMAND INBOX VIEW ───────────────────────────────────────────────────────
 const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
-  const [copiedId, setCopiedId] = useState(null);
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [collapsedDrafts, setCollapsedDrafts] = useState({});
   const [expandedMessages, setExpandedMessages] = useState({});
 
-  const needsReply    = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
-  const inProgress    = inboundMessages.filter(m => m.status === "In Progress").length;
-  const ticketCreated = inboundMessages.filter(m => m.status === "Ticket Created").length;
-  const closed        = inboundMessages.filter(m => m.status === "Closed").length;
+  const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
+
+  const needsReply    = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
+  const inProgress    = safeInboundMessages.filter(m => m.status === "In Progress").length;
+  const ticketCreated = safeInboundMessages.filter(m => m.status === "Ticket Created").length;
+  const closed        = safeInboundMessages.filter(m => m.status === "Closed").length;
 
   // ── filter logic ─────────────────────────────────────────────────────────────
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
-  const filtered = inboundMessages.filter(m => {
+  const filtered = safeInboundMessages.filter(m => {
     if (activeFilter === "All")                 return true;
     if (activeFilter === "TikTok Shop Chat")      return classifyInboundSource(m) === "TikTok Shop Chat";
     if (activeFilter === "Refunds / Returns")   return classifyInboundSource(m) === "TikTok Refund";
@@ -1284,6 +1291,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (activeFilter === "Untriaged")           return isUntriaged(m);
     if (activeFilter === "Needs Human Review")  return m.needs_human_review === true || m.needs_human_review === "true" || m.triage_status === "Needs Human Review";
     if (activeFilter === "High Priority")       return m.risk_level === "High" || m.priority === "High" || m.triage_status === "High Priority";
+    if (activeFilter === "Closed")              return m.status === "Closed";
+    if (activeFilter === "Archived")            return false;
     return true;
   });
 
@@ -1377,13 +1386,6 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (inserted) setOpsActions(prev => [inserted, ...prev]);
   };
 
-  const handleCopy = (id, msg) => {
-    const { displayBody } = getDisplayInboundMessage(msg);
-    navigator.clipboard.writeText(displayBody || "");
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
   const handleRunTriage = async (msgId) => {
     setBusyId(msgId);
     try {
@@ -1417,9 +1419,20 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
   };
 
-  const handleCopyDraftAndOpen = async (msg) => {
-    const copied = await handleCopyDraft(msg);
-    if (copied) window.open("https://seller.tiktok.com", "_blank", "noopener,noreferrer");
+  const handleCopyReply = async (msg) => {
+    const replyText = msg.approved_reply || msg.ai_draft || "";
+    if (!replyText) {
+      alert("Generate or approve a draft first.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(replyText);
+      setCopiedDraftId(msg.id);
+      setTimeout(() => setCopiedDraftId(null), 2000);
+    } catch (_) {
+      alert("Could not copy draft. Please copy it manually.");
+    }
   };
 
   const handleGenerateDraft = async (msg, instruction = null) => {
@@ -1507,7 +1520,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   };
 
   const handleProcessQueue = async () => {
-    const candidates = inboundMessages.filter(
+    const candidates = safeInboundMessages.filter(
       m => !m.triage_status || m.triage_status === "Untriaged"
     );
     if (candidates.length === 0) {
@@ -1585,7 +1598,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         : !!triaged.next_action;
 
       if (shouldCreateAction) {
-        const alreadyHasAction = opsActions.some(
+        const alreadyHasAction = safeOpsActions.some(
           a => a.inbound_message_id === triaged.id && a.status !== "Completed"
         );
         if (!alreadyHasAction) {
@@ -1743,26 +1756,26 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         ))}
       </div>
 
-      {/* Filter bar */}
-      <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 -mb-1 no-scrollbar">
-        {INBOX_FILTER_OPTIONS.map(opt => (
-          <button
-            key={opt}
-            onClick={() => setActiveFilter(opt)}
-            className={`flex-shrink-0 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
-              activeFilter === opt
-                ? "bg-slate-700 text-white border-slate-800"
-                : "bg-white text-gray-600 border-gray-300 hover:border-slate-400 hover:text-slate-700"
-            }`}
+      {/* Filter control */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+          <span className="whitespace-nowrap">Filter:</span>
+          <select
+            value={activeFilter}
+            onChange={e => setActiveFilter(e.target.value)}
+            className="min-w-0 bg-transparent text-xs font-semibold text-slate-800 outline-none"
           >
-            {opt}
-          </button>
-        ))}
-        <span className="flex-shrink-0 text-[10px] text-gray-400 ml-1">{filtered.length} shown</span>
+            {INBOX_FILTER_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+        </label>
+        <span className="text-[10px] text-gray-400">{filtered.length} shown</span>
+        {activeFilter === "Archived" && (
+          <span className="text-[10px] font-medium text-gray-400">Archived message viewer coming soon.</span>
+        )}
       </div>
 
       {/* Loading skeleton */}
-      {inboundLoading && inboundMessages.length === 0 && (
+      {inboundLoading && safeInboundMessages.length === 0 && (
         <div className="space-y-3">
           {[1,2,3].map(i => (
             <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 animate-pulse">
@@ -1780,8 +1793,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             <rect x="4" y="8" width="32" height="24" rx="3" stroke="currentColor" strokeWidth="1.8" fill="none"/>
             <path d="M4 14l16 10 16-10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
           </svg>
-          <p className="text-sm font-medium">{activeFilter === "All" ? "Inbox is clear" : `No messages match "${activeFilter}"`}</p>
-          <p className="text-xs mt-1">{activeFilter === "All" ? "No active inbound messages." : "Try a different filter."}</p>
+          <p className="text-sm font-medium">{activeFilter === "Archived" ? "Archived message viewer coming soon" : activeFilter === "All" ? "Inbox is clear" : `No messages match "${activeFilter}"`}</p>
+          <p className="text-xs mt-1">{activeFilter === "Archived" ? "Archived messages are not loaded in this active inbox view yet." : activeFilter === "All" ? "No active inbound messages." : "Try a different filter."}</p>
         </div>
       )}
 
@@ -1807,6 +1820,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const sourceBadgeLabel = isRefund ? "Refund / Return" : sourceType;
         const brandBorderCls = getInboxBrandBorderClass(msg.brand);
         const showSubjectLine = msg.subject && msg.subject !== cardTitle;
+        const hasReplyText = Boolean(msg.approved_reply || msg.ai_draft);
 
         return (
           <Card key={msg.id} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
@@ -1944,12 +1958,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                     <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
                     <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-blue-100">
                       <button onClick={() => handleCopyDraft(msg)}
-                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 cursor-pointer transition-colors whitespace-nowrap">
-                        {copiedDraftId === msg.id ? "Copied!" : "Copy Draft"}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors whitespace-nowrap">
+                        {copiedDraftId === msg.id ? "Copied" : "Copy Draft"}
                       </button>
-                      <button onClick={() => handleCopyDraftAndOpen(msg)}
-                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 cursor-pointer transition-colors whitespace-nowrap">
-                        Copy & Open
+                      <button disabled={!hasReplyText} onClick={() => handleCopyReply(msg)}
+                        title={hasReplyText ? "Copy the approved reply or AI draft" : "Generate or approve a draft first"}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors whitespace-nowrap">
+                        {copiedDraftId === msg.id ? "Copied" : "Copy Reply"}
                       </button>
                       {msg.draft_status !== "Approved" && (
                         <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
@@ -1972,52 +1987,29 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
             {/* Action buttons */}
             <div className="flex flex-wrap items-center gap-2">
-              {msg.status !== "In Progress" && msg.status !== "Closed" && msg.status !== "Ticket Created" && (
-                <button disabled={isBusy} onClick={() => handleStatus(msg.id, "In Progress")}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                  In Progress
+              {hasReplyText && (!msg.ai_draft || collapsedDrafts[msg.id] === true) && (
+                <button disabled={!hasReplyText} onClick={() => handleCopyReply(msg)}
+                  title={hasReplyText ? "Copy the approved reply or AI draft" : "Generate or approve a draft first"}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors whitespace-nowrap">
+                  {copiedDraftId === msg.id ? "Copied" : "Copy Reply"}
                 </button>
               )}
               {msg.status !== "Closed" && (
                 <button disabled={isBusy} onClick={() => handleStatus(msg.id, "Closed")}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                   Mark Closed
                 </button>
               )}
-              {msg.status !== "Ticket Created" && (
-                <button disabled={isBusy} onClick={() => handleCreateTicket(msg)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                  Create Ticket
-                </button>
-              )}
-              <button onClick={() => handleCopy(msg.id, msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors whitespace-nowrap">
-                {copiedId === msg.id ? "Copied!" : "Copy Message"}
-              </button>
               <button disabled={isBusy} onClick={() => handleRunTriage(msg.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isBusy ? "Triaging…" : "Run Triage"}
               </button>
               <button disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isDraftBusy ? "Drafting…" : "Generate Draft"}
               </button>
-              {(() => {
-                const hasOpenAction = opsActions.some(a => a.inbound_message_id === msg.id && a.status !== "Completed");
-                return (
-                  <button disabled={isBusy || hasOpenAction} onClick={() => handleCreateAction(msg)}
-                    title={hasOpenAction ? "An open action already exists for this message" : "Create a Next Action from this message"}
-                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
-                      hasOpenAction
-                        ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                        : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
-                    }`}>
-                    {hasOpenAction ? "Action exists" : "+ Action"}
-                  </button>
-                );
-              })()}
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
                 <svg width="11" height="11" viewBox="0 0 13 13" fill="none">
                   <path d="M1.5 3.5h10M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M2.5 3.5l.5 7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1l.5-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M5 6v3M8 6v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
@@ -2399,12 +2391,15 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
 const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setActiveView }) => {
   const [open, setOpen] = useState(false);
 
+  const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+  const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
   const now = new Date();
   const isOverdue = (a) => a.due_at && new Date(a.due_at) < now;
 
   // Group refund/return messages by brand
   const refundsByBrand = {};
-  inboundMessages.forEach(m => {
+  safeInboundMessages.forEach(m => {
     if (isTikTokRefund(m)) {
       const b = m.brand || "Unknown";
       refundsByBrand[b] = (refundsByBrand[b] || 0) + 1;
@@ -2413,16 +2408,16 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
 
   // Group Shop Chat messages by brand
   const chatsByBrand = {};
-  inboundMessages.forEach(m => {
+  safeInboundMessages.forEach(m => {
     if (classifyInboundSource(m) === "TikTok Shop Chat" && !isTikTokRefund(m)) {
       const b = m.brand || "Unknown";
       chatsByBrand[b] = (chatsByBrand[b] || 0) + 1;
     }
   });
 
-  const draftsReady        = inboundMessages.filter(m => m.draft_status === "Draft Ready").length;
-  const followUpNeeded     = replacements.filter(r => r.followUp === "Yes" || r.follow_up === "Yes").length;
-  const overdueActionsCount = opsActions.filter(isOverdue).length;
+  const draftsReady        = safeInboundMessages.filter(m => m.draft_status === "Draft Ready").length;
+  const followUpNeeded     = safeReplacements.filter(r => r.followUp === "Yes" || r.follow_up === "Yes").length;
+  const overdueActionsCount = safeOpsActions.filter(isOverdue).length;
 
   const totalCount = Object.values(refundsByBrand).reduce((a, b) => a + b, 0)
     + Object.values(chatsByBrand).reduce((a, b) => a + b, 0)
@@ -2510,8 +2505,13 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   };
 
   // Safe array guards — prevents crash if props arrive undefined during loading
-  const safeInbound      = Array.isArray(inboundMessages) ? inboundMessages : [];
-  const safeReplacements = Array.isArray(replacements)     ? replacements    : [];
+  const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+  const safeStudios = Array.isArray(studios) ? studios : [];
+  const safeSurpriseSets = Array.isArray(surpriseSets) ? surpriseSets : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+  const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
+  const safeInbound = safeInboundMessages;
 
   // Primary counts driven by Command Inbox data
   const openInboxMessages   = safeInbound.filter(m => !m.archived_at && m.status !== "Closed" && m.status !== "Done");
@@ -2523,8 +2523,8 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const actionRequired      = actionRequiredCount; // alias used by metric card
 
   const totalLoss   = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || r.market_value || 0), 0);
-  const studioReady = studios.filter(s => s.streamReady).length;
-  const studioScore = studios.length ? Math.round((studioReady / studios.length) * 100) : 0;
+  const studioReady = safeStudios.filter(s => s.streamReady).length;
+  const studioScore = safeStudios.length ? Math.round((studioReady / safeStudios.length) * 100) : 0;
 
   // Morning Brief — deterministic, no AI
   const morningBrief = (() => {
@@ -2545,6 +2545,23 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
 
   const SET_STEPS = ["warehouseListReceived", "convertedSetSheet", "importedDesktop", "quantitiesVerified", "readyForLive"];
   const SET_LABELS = { warehouseListReceived: "Warehouse List", convertedSetSheet: "SetSheet", importedDesktop: "Imported", quantitiesVerified: "Verified", readyForLive: "Ready" };
+  const surpriseReadinessBrands = [
+    { key: "Vaulted Rarities", label: "Vaulted Rarities", aliases: ["vaulted", "vaulted rarities"] },
+    { key: "PokeSpins", label: "PokeSpins", aliases: ["pokespins", "poke spins"] },
+    { key: "CardKing47", label: "CardKing47", aliases: ["cardking47", "card king 47", "ck47"] },
+    { key: "Pokiemart", label: "PokieMart", aliases: ["pokiemart", "pokie mart"] },
+  ];
+  const surpriseReadiness = surpriseReadinessBrands.map(brand => {
+    const blocks = safeSurpriseSets.filter(block => {
+      const rawBrand = String(block.brand || "").trim().toLowerCase();
+      return rawBrand && brand.aliases.some(alias => rawBrand === alias || rawBrand.includes(alias));
+    });
+    const ready = blocks.filter(block => block.status === "Live Ready" || block.readyForLive === true).length;
+    const total = blocks.length;
+    return { ...brand, ready, total, status: total > 0 && ready === total ? "Ready" : "Needs Setup" };
+  });
+  const surpriseReadyTotal = surpriseReadiness.reduce((sum, row) => sum + row.ready, 0);
+  const surpriseBlockTotal = surpriseReadiness.reduce((sum, row) => sum + row.total, 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -2564,9 +2581,9 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
 
       {/* Today's Ops Brief */}
       <DailyOpsBrief
-        inboundMessages={inboundMessages}
-        opsActions={opsActions}
-        tickets={tickets}
+        inboundMessages={safeInboundMessages}
+        opsActions={safeOpsActions}
+        tickets={safeTickets}
         setActiveView={setActiveView}
       />
 
@@ -2600,50 +2617,29 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
       <div className="flex flex-col md:flex-row gap-4">
         {/* Ticket table */}
         <div className="flex-1 min-w-0">
-          <Card className="flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <p className="text-sm font-bold text-gray-900">TikTok SPS Defense Queue</p>
-              <BtnPrimary size="sm" onClick={() => setShowForm(true)}>+ New Ticket</BtnPrimary>
+          <Card className="p-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <p className="text-sm font-bold text-gray-900">Surprise Set Readiness</p>
+              <span className="text-[10px] font-semibold text-gray-400">{surpriseReadyTotal}/{surpriseBlockTotal} live ready</span>
             </div>
-            <div className="overflow-auto">
-              {/* ── PATCH 4a: Archive button column added to Dashboard table ── */}
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-4 py-2.5 font-semibold text-gray-500 w-28">Brand</th>
-                    <th className="text-left px-2 py-2.5 font-semibold text-gray-500">Issue Type</th>
-                    <th className="text-left px-2 py-2.5 font-semibold text-gray-500 w-28">Status</th>
-                    <th className="text-left px-2 py-2.5 font-semibold text-gray-500 w-20">SLA</th>
-                    <th className="w-8" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {tickets.slice(0, 14).map(t => {
-                    const cd = slaDisplay(t.createdAt);
-                    const showSla = t.slaRisk === "Yes" && t.status !== "Resolved";
-                    return (
-                      <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <BrandPip brand={t.brand} />
-                            <span className="text-gray-700 font-medium">{BRAND_SHORT[t.brand]}</span>
-                          </div>
-                        </td>
-                        <td className="px-2 py-2.5 text-gray-800">{t.issueType}</td>
-                        <td className="px-2 py-2.5"><StatusBadge status={t.status} /></td>
-                        <td className="px-2 py-2.5">
-                          {showSla
-                            ? <span className={`font-mono font-bold ${cd.urgent ? "text-red-600" : cd.warning ? "text-amber-500" : "text-gray-500"}`}>{cd.display}</span>
-                            : <span className="text-gray-300 font-mono">—</span>}
-                        </td>
-                        <td className="px-2 py-2.5">
-                          <ArchiveBtn ticketId={t.id} setTickets={setTickets} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
+              {surpriseReadiness.map(row => (
+                <div key={row.key} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <BrandPip brand={row.key} />
+                      <p className="truncate text-xs font-semibold text-slate-800">{row.label}</p>
+                    </div>
+                    <Badge
+                      label={row.status}
+                      className={row.status === "Ready"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"}
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">{row.ready}/{row.total} stream blocks live ready</p>
+                </div>
+              ))}
             </div>
           </Card>
         </div>
@@ -2651,29 +2647,9 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         {/* Right rail */}
         <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-4">
           <Card className="p-4">
-            <p className="text-sm font-bold text-gray-900 mb-3">Surprise Set Tracker</p>
-            {surpriseSets.map(s => {
-              const done = SET_STEPS.filter(st => s[st]).length;
-              return (
-                <div key={s.id} className="mb-3 last:mb-0">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-1.5"><BrandPip brand={s.brand} /><span className="text-xs font-medium text-gray-700 truncate max-w-[110px]">{s.setName}</span></div>
-                    <span className={`text-[10px] font-bold ${s.readyForLive ? "text-green-600" : "text-amber-500"}`}>{done}/{SET_STEPS.length}</span>
-                  </div>
-                  <div className="flex gap-1 flex-wrap">
-                    {SET_STEPS.map(step => (
-                      <span key={step} className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${s[step] ? "bg-green-600 text-white border-green-700" : "bg-gray-100 text-gray-400 border-gray-200"}`}>{SET_LABELS[step]}</span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </Card>
-
-          <Card className="p-4">
             <p className="text-sm font-bold text-gray-900 mb-3">Inventory &amp; Studio Readiness</p>
             <div className="grid grid-cols-4 gap-2">
-              {studios.map(s => (
+              {safeStudios.map(s => (
                 <div key={s.id} className="text-center">
                   <p className="text-[10px] font-semibold text-gray-400 mb-1">{s.id}</p>
                   <input type="checkbox" checked={s.streamReady} readOnly className="accent-slate-700 mb-1" />
@@ -2697,9 +2673,9 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
               <p>• {safeReplacements.length} replacement cases — ${totalLoss.toFixed(2)} tracked</p>
               <p>• {safeReplacements.filter(r => r.preventable === "Yes").length} preventable</p>
               <p className="font-semibold text-gray-800 pt-1">Studios</p>
-              <p>• {studioReady}/{studios.length} stream-ready — {studioScore}% readiness</p>
+              <p>• {studioReady}/{safeStudios.length} stream-ready — {studioScore}% readiness</p>
               <p className="font-semibold text-gray-800 pt-1">Sets</p>
-              <p>• {surpriseSets.filter(s => s.readyForLive).length}/{surpriseSets.length} sets ready for live</p>
+              <p>• {surpriseReadyTotal}/{surpriseBlockTotal} stream blocks live ready</p>
             </div>
           </Card>
         </div>
@@ -3354,10 +3330,11 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   }, [setSurpriseSets]);
 
   const weeklyBlocks = normalizeWeeklySurpriseSets(surpriseSets);
-  const totalBlocks = weeklyBlocks.length;
-  const liveReady = weeklyBlocks.filter(s => s.status === "Live Ready").length;
-  const needsSetup = weeklyBlocks.filter(s => s.status === "Not Started").length;
-  const checkedBuilt = weeklyBlocks.filter(s => s.status === "Built" || s.status === "Checked").length;
+  const safeSurpriseSets = Array.isArray(weeklyBlocks) ? weeklyBlocks : [];
+  const totalBlocks = safeSurpriseSets.length;
+  const liveReady = safeSurpriseSets.filter(s => s.status === "Live Ready").length;
+  const needsSetup = safeSurpriseSets.filter(s => s.status === "Not Started").length;
+  const checkedBuilt = safeSurpriseSets.filter(s => s.status === "Built" || s.status === "Checked").length;
 
   const statusStyle = {
     "Not Started": "bg-gray-100 text-gray-500 border-gray-200",
@@ -3385,6 +3362,31 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     try { localStorage.removeItem(SURPRISE_SET_STORAGE_KEY); } catch {}
     setSurpriseSets(fresh);
   };
+
+  const checklistBrands = [
+    { key: "CardKing47", label: "CardKing47", aliases: ["cardking47", "card king 47", "ck47"] },
+    { key: "PokeSpins", label: "PokeSpins", aliases: ["pokespins", "poke spins"] },
+    { key: "Vaulted Rarities", label: "Vaulted Rarities", aliases: ["vaulted", "vaulted rarities"] },
+    { key: "Pokiemart", label: "PokieMart", aliases: ["pokiemart", "pokie mart"] },
+  ];
+  const getChecklistBrandKey = (brandValue) => {
+    const rawBrand = String(brandValue || "").trim().toLowerCase();
+    if (!rawBrand) return "Unassigned";
+    const match = checklistBrands.find(brand => brand.aliases.some(alias => rawBrand === alias || rawBrand.includes(alias)));
+    return match ? match.key : "Unassigned";
+  };
+  const checklistSections = [
+    ...checklistBrands.map(brand => ({
+      ...brand,
+      blocks: safeSurpriseSets.filter(block => getChecklistBrandKey(block.brand) === brand.key),
+    })),
+    {
+      key: "Unassigned",
+      label: "Unassigned",
+      aliases: [],
+      blocks: safeSurpriseSets.filter(block => getChecklistBrandKey(block.brand) === "Unassigned"),
+    },
+  ].filter(section => section.blocks.length > 0);
 
   return (
     <div className="space-y-4">
@@ -3414,58 +3416,76 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
         ))}
       </div>
       <div className="space-y-4">
-        {SURPRISE_SET_DAYS.map(day => {
-          const dayBlocks = weeklyBlocks.filter(block => block.day === day);
+        {checklistSections.map(section => {
+          const readyCount = section.blocks.filter(block => block.status === "Live Ready").length;
           return (
-            <section key={day} className="space-y-2">
-              <div className="flex items-center justify-between border-b border-gray-200 pb-1">
-                <h3 className="text-sm font-bold text-gray-900">{day}</h3>
-                <span className="text-[10px] font-medium text-gray-400">{dayBlocks.filter(block => block.status === "Live Ready").length}/2 live ready</span>
+            <section key={section.key} className="rounded-lg border border-gray-200 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <BrandPip brand={section.key} />
+                  <h3 className="text-sm font-bold text-gray-900">{section.label}</h3>
+                </div>
+                <span className="text-[10px] font-medium text-gray-400">{readyCount}/{section.blocks.length} live ready</span>
               </div>
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {dayBlocks.map(block => (
-                  <Card key={block.id} className={`p-4 ${block.status === "Live Ready" ? "border-green-300" : ""}`}>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-bold text-gray-900">{block.streamLabel}</p>
-                          <Badge label={block.status} className={statusStyle[block.status] || statusStyle["Not Started"]} />
+              <div className="divide-y divide-gray-100">
+                {SURPRISE_SET_DAYS.map(day => {
+                  const dayBlocks = section.blocks.filter(block => block.day === day);
+                  const amBlock = dayBlocks.find(block => block.streamKey === "am" || block.streamLabel === "AM Stream");
+                  const pmBlock = dayBlocks.find(block => block.streamKey === "pm" || block.streamLabel === "PM Stream");
+                  const rowBlocks = [amBlock, pmBlock].filter(Boolean);
+                  if (rowBlocks.length === 0) return null;
+                  return (
+                    <div key={`${section.key}-${day}`} className="grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[110px_minmax(0,1fr)_minmax(0,1fr)]">
+                      <div className="text-xs font-bold text-gray-700 lg:pt-2">{day}</div>
+                      {[amBlock, pmBlock].map((block, index) => (
+                        <div key={block?.id || `${section.key}-${day}-${index}`} className="min-w-0">
+                          {block ? (
+                            <div className={`rounded-lg border p-3 ${block.status === "Live Ready" ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-gray-50"}`}>
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-xs font-bold text-gray-900">{block.streamLabel}</p>
+                                  <p className="text-[10px] text-gray-400">{block.streamTime}</p>
+                                </div>
+                                <Badge label={block.status} className={statusStyle[block.status] || statusStyle["Not Started"]} />
+                              </div>
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <label className="space-y-1">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Brand</span>
+                                  <Sel value={block.brand} onChange={value => updateBlock(block.id, { brand: value })} options={BRANDS} placeholder="Select brand" />
+                                </label>
+                                <label className="space-y-1">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</span>
+                                  <Sel value={block.status} onChange={value => updateBlock(block.id, { status: value })} options={SURPRISE_SET_STATUS_OPTIONS} placeholder="" />
+                                </label>
+                                <label className="space-y-1">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Streamer</span>
+                                  <Inp value={block.streamer} onChange={value => updateBlock(block.id, { streamer: value })} placeholder="Streamer" />
+                                </label>
+                                <label className="space-y-1">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Set name</span>
+                                  <Inp value={block.setName} onChange={value => updateBlock(block.id, { setName: value })} placeholder="Set name" />
+                                </label>
+                                <label className="space-y-1 sm:col-span-2">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</span>
+                                  <Txt value={block.notes} onChange={value => updateBlock(block.id, { notes: value })} placeholder="Setup notes..." rows={2} />
+                                </label>
+                              </div>
+                              <button
+                                onClick={() => markLiveReady(block.id)}
+                                disabled={block.status === "Live Ready"}
+                                className="mt-2 inline-flex items-center justify-center rounded-lg border border-green-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-green-700 transition-colors hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Mark Live Ready
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="hidden rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3 text-xs text-gray-300 lg:block">No block</div>
+                          )}
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{block.streamTime}</p>
-                      </div>
-                      <button
-                        onClick={() => markLiveReady(block.id)}
-                        disabled={block.status === "Live Ready"}
-                        className="inline-flex items-center justify-center rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Mark Live Ready
-                      </button>
+                      ))}
                     </div>
-
-                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <label className="space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Brand</span>
-                        <Sel value={block.brand} onChange={value => updateBlock(block.id, { brand: value })} options={BRANDS} placeholder="Select brand" />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Streamer</span>
-                        <Inp value={block.streamer} onChange={value => updateBlock(block.id, { streamer: value })} placeholder="Streamer" />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Set name</span>
-                        <Inp value={block.setName} onChange={value => updateBlock(block.id, { setName: value })} placeholder="Set name" />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</span>
-                        <Sel value={block.status} onChange={value => updateBlock(block.id, { status: value })} options={SURPRISE_SET_STATUS_OPTIONS} placeholder="" />
-                      </label>
-                      <label className="space-y-1 sm:col-span-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</span>
-                        <Txt value={block.notes} onChange={value => updateBlock(block.id, { notes: value })} placeholder="Setup notes..." rows={2} />
-                      </label>
-                    </div>
-                  </Card>
-                ))}
+                  );
+                })}
               </div>
             </section>
           );
@@ -4110,10 +4130,17 @@ export default function JonnyOpsCommandCenter() {
     insertSidekickTicket();
   }, []);
 
-  const openCount = tickets.filter(t => t.status !== "Resolved").length;
-  const criticalSlaCount = tickets.filter(isActiveSlaRisk).length;
-  const inboxNeedsReplyCount = inboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
-  const opsOpenCount = opsActions.length;
+  const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+  const safeStudios = Array.isArray(studios) ? studios : [];
+  const safeSurpriseSets = Array.isArray(surpriseSets) ? surpriseSets : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+  const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
+
+  const openCount = safeTickets.filter(t => t.status !== "Resolved").length;
+  const criticalSlaCount = safeTickets.filter(isActiveSlaRisk).length;
+  const inboxNeedsReplyCount = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
+  const opsOpenCount = safeOpsActions.length;
 
   const renderView = () => {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores };
@@ -4153,7 +4180,7 @@ export default function JonnyOpsCommandCenter() {
   // Shared nav content rendered inside both the desktop sidebar and the mobile drawer
   const NavContent = ({ showLabels }) => (
     <>
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-4">
         {NAV.map((section, si) => (
           <div key={si}>
             {section.section && showLabels && (
@@ -4162,22 +4189,13 @@ export default function JonnyOpsCommandCenter() {
             <div className="space-y-0.5">
               {section.items.map(item => (
                 <NavItem key={item.id} {...item} active={activeView === item.id} onClick={handleNavClick}
+                  showLabel={showLabels}
                   badge={item.id === "tickets" ? criticalSlaCount : item.id === "inbox" ? inboxNeedsReplyCount : item.id === "actions" ? opsOpenCount : 0} />
               ))}
             </div>
           </div>
         ))}
       </nav>
-      <div className="border-t border-gray-100 px-3 py-3 flex-shrink-0">
-        {showLabels ? (
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0"><span className="text-xs font-bold text-gray-600">JV</span></div>
-            <div className="overflow-hidden"><p className="text-xs font-semibold text-gray-700 truncate">Jonny Valencia</p><p className="text-[10px] text-gray-400 truncate">Outerplanesgames</p></div>
-          </div>
-        ) : (
-          <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center mx-auto"><span className="text-xs font-bold text-gray-600">JV</span></div>
-        )}
-      </div>
     </>
   );
 
@@ -4203,9 +4221,6 @@ export default function JonnyOpsCommandCenter() {
       <div className={`fixed inset-y-0 left-0 z-50 w-72 bg-white flex flex-col shadow-xl transition-transform duration-200 md:hidden ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}>
         {/* Drawer header */}
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="1.4"/><path d="M8 5.5v2.5l1.5 1.5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </div>
           <div className="flex-1 overflow-hidden">
             <p className="text-sm font-bold text-gray-900">Ops Command Hub</p>
             <p className="text-[10px] text-gray-400">Command Center v1.5</p>
@@ -4221,35 +4236,23 @@ export default function JonnyOpsCommandCenter() {
         className="hidden md:flex flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden"
       >
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="1.4"/><path d="M8 5.5v2.5l1.5 1.5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </div>
           {sidebar && <div className="overflow-hidden flex-1"><p className="text-sm font-bold text-gray-900 truncate">Ops Command Hub</p><p className="text-[10px] text-gray-400 truncate">Command Center v1.5</p></div>}
           <button onClick={() => setSidebar(s => !s)} className="text-gray-300 hover:text-gray-600 flex-shrink-0 text-xs ml-auto">{sidebar ? "«" : "»"}</button>
         </div>
-        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-4">
           {NAV.map((section, si) => (
             <div key={si}>
               {section.section && sidebar && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-1">{section.section}</p>}
               <div className="space-y-0.5">
                 {section.items.map(item => (
                   <NavItem key={item.id} {...item} active={activeView === item.id} onClick={setActiveView}
+                    showLabel={sidebar}
                     badge={item.id === "tickets" ? criticalSlaCount : item.id === "inbox" ? inboxNeedsReplyCount : item.id === "actions" ? opsOpenCount : 0} />
                 ))}
               </div>
             </div>
           ))}
         </nav>
-        <div className="border-t border-gray-100 px-3 py-3 flex-shrink-0">
-          {sidebar ? (
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0"><span className="text-xs font-bold text-gray-600">JV</span></div>
-              <div className="overflow-hidden"><p className="text-xs font-semibold text-gray-700 truncate">Jonny Valencia</p><p className="text-[10px] text-gray-400 truncate">Outerplanesgames</p></div>
-            </div>
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center mx-auto"><span className="text-xs font-bold text-gray-600">JV</span></div>
-          )}
-        </div>
       </aside>
 
       {/* ── MAIN CONTENT ── */}
@@ -4269,7 +4272,7 @@ export default function JonnyOpsCommandCenter() {
               </svg>
             </button>
             <div>
-              <p className="text-sm font-bold text-gray-900 leading-tight">Ops Command Hub</p>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Ops Command Hub v1.5</p>
               <p className="text-[10px] text-gray-400 leading-tight">{PAGE_LABELS[activeView] || activeView}</p>
             </div>
           </div>
@@ -4291,15 +4294,14 @@ export default function JonnyOpsCommandCenter() {
 
         {/* ── DESKTOP TOP BAR (hidden on mobile) ── */}
         <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
-          <p className="text-sm font-bold text-gray-900">Ops Command Hub</p>
+          <p className="text-sm font-bold text-gray-900">Ops Command Hub v1.5</p>
           <div className="flex items-center gap-3">
             <NotificationDropdown
-              inboundMessages={inboundMessages}
-              opsActions={opsActions}
-              replacements={replacements}
+              inboundMessages={safeInboundMessages}
+              opsActions={safeOpsActions}
+              replacements={safeReplacements}
               setActiveView={setActiveView}
             />
-            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"><span className="text-xs font-bold text-gray-600">JV</span></div>
           </div>
         </header>
 
