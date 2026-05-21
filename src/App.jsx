@@ -7,6 +7,7 @@ const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
+const MAKE_INTAKE_WEBHOOK_URL = "https://hook.us2.make.com/ndd4uty3uvua7lmgqxg9lsmjvd61i3ih";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -34,7 +35,7 @@ const isActiveSlaRisk = (t) => t.slaRisk === "Yes" && t.status !== "Resolved" &&
 const BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "Pokiemart"];
 const BRAND_SHORT = { "Vaulted Rarities": "VR", "CardKing47": "CK47", "PokeSpins": "PS", "Pokiemart": "PM" };
 // Exact brand colors per spec
-const BRAND_DOT = { "Vaulted Rarities": "#FACC15", "CardKing47": "#2563EB", "PokeSpins": "#DC2626", "Pokiemart": "#16A34A" };
+const BRAND_DOT = { "Vaulted Rarities": "#FACC15", "Vaulted": "#FACC15", "VR": "#FACC15", "CardKing47": "#2563EB", "CardKing": "#2563EB", "CK47": "#2563EB", "CK": "#2563EB", "PokeSpins": "#DC2626", "PS": "#DC2626", "Pokiemart": "#16A34A", "PokieMart": "#16A34A", "PM": "#16A34A", "Unassigned": "#CBD5E1" };
 
 const CHANNELS = ["TikTok Shop", "Refund / Return", "Shop Chat", "TikTok DM", "Instagram DM", "Email"];
 const ISSUE_TYPES = ["Where is my order", "Refund request", "Return request", "Surprise set dispute", "Missing item", "Damaged item", "Wrong item", "Label created / no scan", "Hostile customer", "Other"];
@@ -1330,11 +1331,18 @@ const INBOX_FILTER_OPTIONS = ["All", "TikTok Shop Chat", "Refunds / Returns", "S
 const INBOX_BRAND_BORDER_CLASS = {
   "Vaulted Rarities": "border-l-yellow-400",
   "Vaulted": "border-l-yellow-400",
+  "VR": "border-l-yellow-400",
   "PokeSpins": "border-l-red-600",
+  "PS": "border-l-red-600",
   "CardKing47": "border-l-blue-600",
+  "CardKing": "border-l-blue-600",
+  "CK47": "border-l-blue-600",
+  "CK": "border-l-blue-600",
   "Pokiemart": "border-l-green-600",
   "PokieMart": "border-l-green-600",
+  "PM": "border-l-green-600",
   "Unknown": "border-l-slate-300",
+  "Unassigned": "border-l-slate-300",
 };
 
 const getInboxBrandBorderClass = (brand) => {
@@ -1346,6 +1354,36 @@ const getInboxBrandBorderClass = (brand) => {
   if (lower.includes("cardking47")) return INBOX_BRAND_BORDER_CLASS["CardKing47"];
   if (lower.includes("pokiemart")) return INBOX_BRAND_BORDER_CLASS["Pokiemart"];
   return INBOX_BRAND_BORDER_CLASS["Unknown"];
+};
+
+const inferInboxBrandFromText = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  const spaced = ` ${lower.replace(/[^a-z0-9]+/g, " ")} `;
+  const hasToken = (token) => spaced.includes(` ${token} `);
+
+  if (lower.includes("tts_vaulted") || lower.includes("vaulted rarities") || lower.includes("vaulted") || hasToken("vr")) return "Vaulted Rarities";
+  if (lower.includes("tts_cardking") || lower.includes("cardking47") || lower.includes("cardking") || hasToken("ck47") || hasToken("ck")) return "CardKing47";
+  if (lower.includes("tts_pokespins") || lower.includes("pokespins") || hasToken("ps")) return "PokeSpins";
+  if (lower.includes("tts_pokiemart") || lower.includes("pokiemart") || lower.includes("pokie mart") || hasToken("pm")) return "PokieMart";
+  return "";
+};
+
+const getDisplayBrand = (message) => {
+  const msg = message || {};
+  const brand = String(msg.brand || "").trim();
+  const rawBrand = brand.toLowerCase();
+  if (brand && rawBrand !== "unassigned" && rawBrand !== "unknown") {
+    return inferInboxBrandFromText(brand) || brand;
+  }
+
+  const sources = [msg.label, msg.external_id, msg.source, msg.channel, msg.subject];
+  for (const source of sources) {
+    const inferred = inferInboxBrandFromText(source);
+    if (inferred) return inferred;
+  }
+  return "Unassigned";
 };
 
 // ─── INBOX MESSAGE CLASSIFICATION HELPERS ────────────────────────────────────
@@ -1365,7 +1403,7 @@ const fmtPacific = (iso) => {
 
 // Returns the best display timestamp + a label ("Received" or "Imported").
 const getInboundTimestamp = (msg) => {
-  const recv = msg.email_received_at || msg.received_at;
+  const recv = msg.email_received_at;
   if (recv) return { iso: recv, label: "Received", display: fmtPacific(recv) };
   if (msg.created_at) return { iso: msg.created_at, label: "Imported", display: fmtPacific(msg.created_at) };
   return { iso: null, label: "", display: "" };
@@ -1459,6 +1497,7 @@ const getInboundCardTitle = (msg, sourceType, displayName) => {
 const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [sortMode, setSortMode] = useState("Newest first");
   const [collapsedDrafts, setCollapsedDrafts] = useState({});
   const [expandedMessages, setExpandedMessages] = useState({});
   const emptyManualMessageForm = {
@@ -1481,7 +1520,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const needsReply    = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
   const inProgress    = safeInboundMessages.filter(m => m.status === "In Progress").length;
   const ticketCreated = safeInboundMessages.filter(m => m.status === "Ticket Created").length;
-  const closed        = safeInboundMessages.filter(m => m.status === "Closed").length;
+  const complete      = safeInboundMessages.filter(m => m.status === "Closed" || m.status === "Archived" || m.archived_at).length;
+  const openMessages  = safeInboundMessages.filter(m => m.status !== "Closed" && m.status !== "Archived" && !m.archived_at).length;
 
   // ── filter logic ─────────────────────────────────────────────────────────────
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
@@ -1496,9 +1536,24 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (activeFilter === "Untriaged")           return isUntriaged(m);
     if (activeFilter === "Needs Human Review")  return m.needs_human_review === true || m.needs_human_review === "true" || m.triage_status === "Needs Human Review";
     if (activeFilter === "High Priority")       return m.risk_level === "High" || m.priority === "High" || m.triage_status === "High Priority";
-    if (activeFilter === "Closed")              return m.status === "Closed";
+    if (activeFilter === "Closed")              return m.status === "Closed" || m.status === "Archived" || m.archived_at;
     if (activeFilter === "Archived")            return false;
     return true;
+  });
+  const getSortTime = (message) => new Date(message.email_received_at || message.created_at || 0).getTime() || 0;
+  const getPriorityRank = (priority) => ({ High: 0, Medium: 1, Low: 2 }[priority] ?? 3);
+  const newestFirst = (a, b) => getSortTime(b) - getSortTime(a);
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    if (sortMode === "Oldest first") return getSortTime(a) - getSortTime(b);
+    if (sortMode === "Brand") {
+      const brandCompare = getDisplayBrand(a).localeCompare(getDisplayBrand(b));
+      return brandCompare || newestFirst(a, b);
+    }
+    if (sortMode === "Priority") {
+      const priorityCompare = getPriorityRank(a.priority) - getPriorityRank(b.priority);
+      return priorityCompare || newestFirst(a, b);
+    }
+    return newestFirst(a, b);
   });
 
   const toggleMessageExpanded = (id) => {
@@ -1768,33 +1823,56 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [queueSummary, setQueueSummary]   = useState(null);
 
   // ── Check Gmail state ─────────────────────────────────────────────────────────
-  const [gmailChecking, setGmailChecking] = useState(false);
-  const [gmailCooldown, setGmailCooldown] = useState(false);
-  const [gmailMessage,  setGmailMessage]  = useState("");
+  const [isCheckingGmail, setIsCheckingGmail] = useState(false);
+  const [lastGmailCheckAt, setLastGmailCheckAt] = useState(null);
+  const [gmailCheckError, setGmailCheckError] = useState("");
+  const [gmailCheckCooldownUntil, setGmailCheckCooldownUntil] = useState(0);
+  const [gmailCooldownSeconds, setGmailCooldownSeconds] = useState(0);
 
-  const handleCheckGmail = async () => {
-    setGmailChecking(true);
-    setGmailMessage("");
+  useEffect(() => {
+    if (!gmailCheckCooldownUntil) {
+      setGmailCooldownSeconds(0);
+      return undefined;
+    }
+
+    const updateCooldown = () => {
+      const seconds = Math.max(0, Math.ceil((gmailCheckCooldownUntil - Date.now()) / 1000));
+      setGmailCooldownSeconds(seconds);
+      if (seconds <= 0) setGmailCheckCooldownUntil(0);
+    };
+
+    updateCooldown();
+    const timer = setInterval(updateCooldown, 1000);
+    return () => clearInterval(timer);
+  }, [gmailCheckCooldownUntil]);
+
+  const handleCheckGmailNow = async () => {
+    if (isCheckingGmail || gmailCooldownSeconds > 0) return;
+
+    setIsCheckingGmail(true);
+    setGmailCheckError("");
+    setGmailCheckCooldownUntil(Date.now() + 120000);
+
     try {
-      const res = await fetch("/api/trigger-make-intake-refresh", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) {
-        alert(`Gmail check failed: ${data.error || res.statusText || "Unknown error"}`);
-        setGmailChecking(false);
-        return;
+      try {
+        const res = await fetch(MAKE_INTAKE_WEBHOOK_URL, { method: "POST" });
+        if (!res.ok) {
+          const statusError = new Error(res.statusText || "Webhook request failed.");
+          statusError.skipCorsFallback = true;
+          throw statusError;
+        }
+      } catch (err) {
+        if (err?.skipCorsFallback) throw err;
+        await fetch(MAKE_INTAKE_WEBHOOK_URL, { method: "POST", mode: "no-cors" });
       }
-      setGmailMessage("Gmail check started. Refreshing inbox shortly.");
-      // Start 30-second cooldown to prevent spam
-      setGmailCooldown(true);
-      setTimeout(() => setGmailCooldown(false), 30000);
-      // Wait 5 seconds then pull fresh messages from Supabase
-      setTimeout(async () => {
-        await onRefresh();
-        setGmailChecking(false);
-      }, 5000);
-    } catch (err) {
-      alert(`Gmail check failed: ${err?.message || "Network error"}`);
-      setGmailChecking(false);
+
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      await onRefresh();
+      setLastGmailCheckAt(new Date());
+    } catch (_) {
+      setGmailCheckError("Gmail check failed. Try again in a moment.");
+    } finally {
+      setIsCheckingGmail(false);
     }
   };
 
@@ -1921,22 +1999,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Command Inbox</h2>
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-xs text-gray-400">Active inbound messages: {safeInboundMessages.length} unarchived</p>
-            {/* Automation rules indicator */}
-            {automationRulesLoading
-              ? <span className="text-[10px] text-gray-400 italic">Loading rules...</span>
-              : <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
-                  automationRules.length > 0
-                    ? "bg-teal-50 text-teal-700 border-teal-200"
-                    : "bg-gray-100 text-gray-400 border-gray-200"
-                }`}>
-                  {automationRules.length > 0
-                    ? `${automationRules.length} automation rule${automationRules.length !== 1 ? "s" : ""} active`
-                    : "No automation rules"}
-                </span>
-            }
-          </div>
+          <p className="text-xs text-gray-400 mt-0.5">Active inbound messages: {openMessages} open</p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {/* Manual Message */}
@@ -1947,38 +2010,32 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           >
             + Manual Message
           </button>
-          {/* Process Queue */}
-          <button
-            onClick={handleProcessQueue}
-            disabled={queueRunning || inboundLoading}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold rounded-lg border border-slate-800 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
-          >
-            {queueRunning ? (
-              <>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin flex-shrink-0">
-                  <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                  <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {queueProgress || "Processing..."}
-              </>
-            ) : "Process Queue"}
-          </button>
           {/* Check Gmail Now */}
-          <button
-            onClick={handleCheckGmail}
-            disabled={gmailChecking || gmailCooldown || queueRunning || inboundLoading}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
-          >
-            {gmailChecking ? (
-              <>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin flex-shrink-0">
-                  <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                  <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Checking...
-              </>
-            ) : gmailCooldown ? "Checked" : "Check Gmail Now"}
-          </button>
+          <div className="flex flex-1 flex-col gap-0.5 sm:flex-none">
+            <button
+              onClick={handleCheckGmailNow}
+              disabled={isCheckingGmail || gmailCooldownSeconds > 0 || queueRunning || inboundLoading}
+              className="inline-flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap"
+            >
+              {isCheckingGmail ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin flex-shrink-0">
+                    <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Checking...
+                </>
+              ) : gmailCooldownSeconds > 0 ? `Available in ${gmailCooldownSeconds}s` : "Check Gmail Now"}
+            </button>
+            {lastGmailCheckAt && (
+              <span className="text-[10px] text-gray-400 text-center">
+                Last checked at {lastGmailCheckAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </span>
+            )}
+            {gmailCheckError && (
+              <span className="text-[10px] text-red-500 text-center">{gmailCheckError}</span>
+            )}
+          </div>
           {/* Refresh */}
           <button
             onClick={onRefresh}
@@ -2067,14 +2124,6 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         </div>
       )}
 
-      {/* Gmail check success banner */}
-      {gmailMessage && (
-        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
-          <span className="text-xs text-green-700 font-medium">{gmailMessage}</span>
-          <button onClick={() => setGmailMessage("")} className="text-green-400 hover:text-green-700 text-lg leading-none ml-3">×</button>
-        </div>
-      )}
-
       {/* Queue summary banner */}
       {queueSummary && (
         <div className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-lg px-4 py-3">
@@ -2104,12 +2153,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       {/* Count chips */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Needs Reply",    count: needsReply,    cls: "border-l-blue-500"   },
-          { label: "In Progress",    count: inProgress,    cls: "border-l-purple-500" },
-          { label: "Ticket Created", count: ticketCreated, cls: "border-l-cyan-500"   },
-          { label: "Closed",         count: closed,        cls: "border-l-green-500"  },
-        ].map(({ label, count, cls }) => (
-          <Card key={label} className={`p-4 border-l-4 ${cls}`}>
+          { label: "Needs Reply", count: needsReply },
+          { label: "In Progress", count: inProgress },
+          { label: "Ticket Created", count: ticketCreated },
+          { label: "Closed / Archived", count: complete },
+        ].map(({ label, count }) => (
+          <Card key={label} className="p-4">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
             <p className="text-3xl font-bold text-gray-900 mt-1">{count}</p>
           </Card>
@@ -2117,21 +2166,33 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       </div>
 
       {/* Filter control */}
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
-          <span className="whitespace-nowrap">Filter:</span>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+            <span className="whitespace-nowrap">Filter:</span>
+            <select
+              value={activeFilter}
+              onChange={e => setActiveFilter(e.target.value)}
+              className="min-w-0 bg-transparent text-xs font-semibold text-slate-800 outline-none"
+            >
+              {INBOX_FILTER_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </label>
+          <span className="text-[10px] text-gray-400">{sortedFiltered.length} shown</span>
+          {activeFilter === "Archived" && (
+            <span className="text-[10px] font-medium text-gray-400">Archived message viewer coming soon.</span>
+          )}
+        </div>
+        <label className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 sm:ml-auto">
+          <span className="whitespace-nowrap">Sort:</span>
           <select
-            value={activeFilter}
-            onChange={e => setActiveFilter(e.target.value)}
+            value={sortMode}
+            onChange={e => setSortMode(e.target.value)}
             className="min-w-0 bg-transparent text-xs font-semibold text-slate-800 outline-none"
           >
-            {INBOX_FILTER_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            {["Newest first", "Oldest first", "Brand", "Priority"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
         </label>
-        <span className="text-[10px] text-gray-400">{filtered.length} shown</span>
-        {activeFilter === "Archived" && (
-          <span className="text-[10px] font-medium text-gray-400">Archived message viewer coming soon.</span>
-        )}
       </div>
 
       {/* Loading skeleton */}
@@ -2147,7 +2208,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       )}
 
       {/* Empty state */}
-      {!inboundLoading && filtered.length === 0 && !inboundError && (
+      {!inboundLoading && sortedFiltered.length === 0 && !inboundError && (
         <div className="text-center py-16 text-gray-300">
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none" className="mx-auto mb-3 text-gray-200">
             <rect x="4" y="8" width="32" height="24" rx="3" stroke="currentColor" strokeWidth="1.8" fill="none"/>
@@ -2159,7 +2220,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       )}
 
       {/* Message cards */}
-      {filtered.map(msg => {
+      {sortedFiltered.map(msg => {
         const isBusy      = busyId === msg.id;
         const isDraftBusy = draftBusyId === msg.id;
         const statusStyle    = INBOX_STATUS_STYLE[msg.status]        || "bg-gray-100 text-gray-500 border-gray-200";
@@ -2178,7 +2239,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const isNoise        = sourceType === "Noise";
         const isMessageExpanded = expandedMessages[msg.id] === true;
         const sourceBadgeLabel = isRefund ? "Refund / Return" : sourceType;
-        const brandBorderCls = getInboxBrandBorderClass(msg.brand);
+        const displayBrand = getDisplayBrand(msg);
+        const brandBorderCls = getInboxBrandBorderClass(displayBrand);
         const showSubjectLine = msg.subject && msg.subject !== cardTitle;
         const hasReplyText = Boolean(msg.approved_reply || msg.ai_draft);
 
@@ -2187,10 +2249,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             {/* Card header row */}
             <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
-                {msg.brand && <BrandPip brand={msg.brand} />}
-                {msg.brand && <span className="text-xs font-semibold text-gray-700">{msg.brand}</span>}
+                <BrandPip brand={displayBrand} />
+                <span className={`text-xs font-semibold ${displayBrand === "Unassigned" ? "text-gray-400" : "text-gray-700"}`}>{displayBrand}</span>
                 <Badge label={sourceBadgeLabel} className={`text-[10px] ${sourceBadgeCls}`} />
-                {msg.channel && msg.channel !== "TikTok Shop" && (
+                {msg.channel && msg.channel !== "TikTok Shop" && msg.channel !== sourceBadgeLabel && (
                   <span className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">{msg.channel}</span>
                 )}
                 {msg.priority && <Badge label={msg.priority} className={priorityStyle} />}
