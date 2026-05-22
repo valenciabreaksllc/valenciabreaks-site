@@ -36,6 +36,11 @@ const BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "Pokiemart"];
 const BRAND_SHORT = { "Vaulted Rarities": "VR", "CardKing47": "CK47", "PokeSpins": "PS", "Pokiemart": "PM" };
 // Exact brand colors per spec
 const BRAND_DOT = { "Vaulted Rarities": "#FACC15", "Vaulted": "#FACC15", "VR": "#FACC15", "CardKing47": "#2563EB", "CardKing": "#2563EB", "CK47": "#2563EB", "CK": "#2563EB", "PokeSpins": "#DC2626", "PS": "#DC2626", "Pokiemart": "#16A34A", "PokieMart": "#16A34A", "PM": "#16A34A", "Unassigned": "#CBD5E1" };
+const replacementBrandLabel = (brand) => {
+  if (brand === "CardKing47" || brand === "CardKing") return "CardKing";
+  if (brand === "PokeSpins" || brand === "PS") return "PokeSpins";
+  return brand || "";
+};
 
 const CHANNELS = ["TikTok Shop", "Refund / Return", "Shop Chat", "TikTok DM", "Instagram DM", "Email"];
 const ISSUE_TYPES = ["Where is my order", "Refund request", "Return request", "Surprise set dispute", "Missing item", "Damaged item", "Wrong item", "Label created / no scan", "Hostile customer", "Other"];
@@ -213,16 +218,16 @@ const archiveTicketInSupabase = async (id, reason) => {
 };
 
 const STATUS_STYLE = {
-  "New": "bg-blue-50 text-blue-700 border-blue-200",
-  "In Progress": "bg-purple-50 text-purple-700 border-purple-200",
-  "Waiting on Customer": "bg-amber-50 text-amber-700 border-amber-200",
-  "Backend Lookup": "bg-cyan-50 text-cyan-700 border-cyan-200",
-  "Resolved": "bg-green-50 text-green-700 border-green-200",
-  "Escalated": "bg-red-50 text-red-700 border-red-200",
+  "New": "bg-slate-50 text-slate-700 border-slate-200",
+  "In Progress": "bg-slate-100 text-slate-700 border-slate-200",
+  "Waiting on Customer": "bg-gray-50 text-gray-700 border-gray-200",
+  "Backend Lookup": "bg-gray-50 text-gray-700 border-gray-200",
+  "Resolved": "bg-gray-100 text-gray-600 border-gray-200",
+  "Escalated": "bg-black text-white border-black",
 };
 const PRIORITY_STYLE = {
-  "High": "bg-red-50 text-red-700 border-red-200",
-  "Medium": "bg-amber-50 text-amber-700 border-amber-200",
+  "High": "bg-black text-white border-black",
+  "Medium": "bg-slate-50 text-slate-700 border-slate-200",
   "Low": "bg-gray-100 text-gray-600 border-gray-200",
 };
 
@@ -628,12 +633,12 @@ const generateTemplate = (brand, issueType, tone, orderNum, customerName) => {
   const templates = {
     "Where is my order": `${greeting}\n\nThank you for reaching out about ${oNum}. I can see your order has been processed and a shipping label has been created. Carriers can take 24-48 hours to scan packages after pickup, especially during high-volume periods.\n\nI'm monitoring your shipment and will follow up as soon as there's a tracking update. If you don't see movement within 2 business days, please let me know and I'll open a carrier investigation right away.\n\nThank you for your patience.${sign}`,
     "Label created / no scan": `${greeting}\n\nThank you for checking in on ${oNum}. I can confirm your shipping label was created and the order has been handed off to the carrier. I'm currently seeing that the package has not received a carrier scan yet - this can happen during high-volume pickup windows.\n\nI've flagged this for investigation. If we don't see a scan update within 48 hours, I will file a carrier trace on your behalf and keep you updated.\n\nThank you for your patience.${sign}`,
-    "Refund request": `${greeting}\n\nI've received your refund request for ${oNum} and I'm reviewing it right away. We take all refund requests seriously and want to make sure this is handled fairly for you.\n\nTo process this quickly, could you confirm:\n• The reason for the refund request\n• Whether the item is still sealed or has been opened\n• Your preferred resolution - refund or replacement\n\nI'll follow up within 1 business day once I have those details.${sign}`,
-    "Return request": `${greeting}\n\nThank you for reaching out about ${oNum}. I've received your return request and I'm reviewing your order now.\n\nTo make sure I process this correctly, could you confirm:\n• Whether the item is sealed or opened\n• The reason for the return request\n\nI'll follow up within 1 business day with next steps.${sign}`,
-    "Surprise set dispute": `${greeting}\n\nThank you for reaching out about ${oNum}. I want to make sure this gets resolved for you.\n\nSurprise sets are curated ahead of each stream, and contents may vary from what is shown during live. To investigate your concern, could you please:\n• Share a short unboxing video or photos of the contents received\n• Describe the specific concern with the set\n\nOnce I've reviewed the details, I'll follow up with next steps.${sign}`,
-    "Missing item": `${greeting}\n\nI'm sorry to hear ${oNum} arrived with a missing item - that's not the experience we want for you.\n\nTo investigate and process a resolution, could you please send:\n• A photo of the package as it arrived (outside and inside)\n• A photo of all items included in the shipment\n• A photo of the packing slip, if one was included\n\nI'll review everything and get back to you within 24 hours.${sign}`,
-    "Damaged item": `${greeting}\n\nI'm so sorry to hear that ${oNum} arrived damaged. That's not acceptable and I want to make this right for you immediately.\n\nTo file a damage claim and process your replacement or refund, I'll need:\n• Clear photos of the damaged item(s)\n• A photo of the outer packaging showing any damage\n\nPlease send those over and I'll prioritize your case right away.${sign}`,
-    "Wrong item": `${greeting}\n\nThank you for letting me know about ${oNum}. I apologize for the mix-up on our end.\n\nTo get the correct item to you as quickly as possible, could you please:\n• Send a photo of the item(s) you received\n• Confirm the item(s) you originally ordered\n\nOnce I verify the details, I'll get a replacement shipped out promptly.${sign}`,
+    "Refund request": `${greeting}\n\nI've received your refund request for ${oNum} and I'm reviewing it right away. We take all refund requests seriously and want to make sure this is handled fairly for you.\n\nTo process this quickly, could you confirm:\n- The reason for the refund request\n- Whether the item is still sealed or has been opened\n- Your preferred resolution - refund or replacement\n\nI'll follow up within 1 business day once I have those details.${sign}`,
+    "Return request": `${greeting}\n\nThank you for reaching out about ${oNum}. I've received your return request and I'm reviewing your order now.\n\nTo make sure I process this correctly, could you confirm:\n- Whether the item is sealed or opened\n- The reason for the return request\n\nI'll follow up within 1 business day with next steps.${sign}`,
+    "Surprise set dispute": `${greeting}\n\nThank you for reaching out about ${oNum}. I want to make sure this gets resolved for you.\n\nSurprise sets are curated ahead of each stream, and contents may vary from what is shown during live. To investigate your concern, could you please:\n- Share a short unboxing video or photos of the contents received\n- Describe the specific concern with the set\n\nOnce I've reviewed the details, I'll follow up with next steps.${sign}`,
+    "Missing item": `${greeting}\n\nI'm sorry to hear ${oNum} arrived with a missing item - that's not the experience we want for you.\n\nTo investigate and process a resolution, could you please send:\n- A photo of the package as it arrived (outside and inside)\n- A photo of all items included in the shipment\n- A photo of the packing slip, if one was included\n\nI'll review everything and get back to you within 24 hours.${sign}`,
+    "Damaged item": `${greeting}\n\nI'm so sorry to hear that ${oNum} arrived damaged. That's not acceptable and I want to make this right for you immediately.\n\nTo file a damage claim and process your replacement or refund, I'll need:\n- Clear photos of the damaged item(s)\n- A photo of the outer packaging showing any damage\n\nPlease send those over and I'll prioritize your case right away.${sign}`,
+    "Wrong item": `${greeting}\n\nThank you for letting me know about ${oNum}. I apologize for the mix-up on our end.\n\nTo get the correct item to you as quickly as possible, could you please:\n- Send a photo of the item(s) you received\n- Confirm the item(s) you originally ordered\n\nOnce I verify the details, I'll get a replacement shipped out promptly.${sign}`,
     "Hostile customer": `${greeting}\n\nThank you for reaching out. I understand you're frustrated and I assure you that we take your concern seriously.\n\nI am reviewing ${oNum} now and will respond with a complete update by end of day. We are committed to resolving this professionally and fairly.\n\nIf you'd prefer to continue this conversation through another channel, please let me know.${sign}`,
   };
   return templates[issueType] || `${greeting}\n\nThank you for reaching out about ${oNum}. I'm reviewing your case now and will follow up with an update shortly.${sign}`;
@@ -641,11 +646,11 @@ const generateTemplate = (brand, issueType, tone, orderNum, customerName) => {
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
 const Card = ({ children, className = "" }) => (
-  <div className={`bg-white border border-gray-200 rounded-lg ${className}`}>{children}</div>
+  <div className={`bg-white border border-gray-200 rounded-xl shadow-sm ${className}`}>{children}</div>
 );
 
 const Badge = ({ label, className = "" }) => (
-  <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded border font-medium ${className}`}>{label}</span>
+  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${className}`}>{label}</span>
 );
 const StatusBadge = ({ status }) => <Badge label={status} className={STATUS_STYLE[status] || "bg-gray-100 text-gray-600 border-gray-200"} />;
 const PriorityBadge = ({ priority }) => <Badge label={priority} className={PRIORITY_STYLE[priority] || "bg-gray-100 text-gray-600 border-gray-200"} />;
@@ -664,34 +669,34 @@ const ProgressBar = ({ pct, color = "bg-slate-500" }) => (
 );
 
 const BtnPrimary = ({ children, onClick, size = "sm", disabled = false }) => (
-  <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold rounded-lg border border-slate-800 transition-colors cursor-pointer ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
+  <button onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-700 font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
 );
-const BtnSecondary = ({ children, onClick, size = "sm" }) => (
-  <button onClick={onClick} className={`inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
+const BtnSecondary = ({ children, onClick, size = "sm", disabled = false }) => (
+  <button onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
 );
-const BtnSuccess = ({ children, onClick, size = "sm" }) => (
-  <button onClick={onClick} className={`inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg border border-green-700 transition-colors cursor-pointer ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
+const BtnSuccess = ({ children, onClick, size = "sm", disabled = false }) => (
+  <button onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-700 font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
 );
-const BtnDanger = ({ children, onClick, size = "sm" }) => (
-  <button onClick={onClick} className={`inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg border border-red-700 transition-colors cursor-pointer ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
+const BtnDanger = ({ children, onClick, size = "sm", disabled = false }) => (
+  <button onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`}>{children}</button>
 );
 
 const Sel = ({ value, onChange, options, placeholder = "Select...", className = "" }) => (
-  <select value={value} onChange={e => onChange(e.target.value)} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-500 w-full ${className}`}>
+  <select value={value} onChange={e => onChange(e.target.value)} className={`w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 transition-colors focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-100 ${className}`}>
     {placeholder && <option value="">{placeholder}</option>}
     {options.map(o => <option key={o} value={o}>{o}</option>)}
   </select>
 );
 const Inp = ({ value, onChange, placeholder, type = "text", className = "" }) => (
-  <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-500 w-full placeholder-gray-400 ${className}`} />
+  <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 transition-colors focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-100 ${className}`} />
 );
 const Txt = ({ value, onChange, placeholder, rows = 3, className = "" }) => (
-  <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows} className={`bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-500 w-full placeholder-gray-400 resize-none ${className}`} />
+  <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows} className={`w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 transition-colors focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-100 ${className}`} />
 );
 const Chk = ({ checked, onChange, label }) => (
   <label className="flex items-center gap-2.5 cursor-pointer group">
     <div onClick={() => onChange(!checked)} className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${checked ? "bg-slate-700 border-slate-700" : "border-gray-300 hover:border-slate-400"}`}>
-      {checked && <span className="text-white text-[9px] font-bold">✓</span>}
+      {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-white"><path d="M2 5.2 4.1 7.2 8 2.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
     </div>
     <span className={`text-sm ${checked ? "line-through text-gray-400" : "text-gray-700 group-hover:text-gray-900"}`}>{label}</span>
   </label>
@@ -744,7 +749,7 @@ const NavItem = ({ id, label, active, onClick, badge, showLabel = true }) => (
   <button
     onClick={() => onClick(id)}
     title={!showLabel ? label : undefined}
-    className={`relative w-full flex items-center ${showLabel ? "gap-2.5 px-3 justify-start" : "justify-center px-0"} py-2 rounded-lg text-sm font-medium transition-all text-left overflow-hidden ${active ? "bg-slate-700 text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
+    className={`relative w-full flex items-center ${showLabel ? "gap-2.5 px-3 justify-start" : "justify-center px-0"} py-2 rounded-lg text-sm font-medium transition-all text-left overflow-hidden ${active ? "bg-slate-800 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
   >
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={`flex-shrink-0 ${active ? "text-white" : "text-gray-400"}`}>{ICONS[id]}</svg>
     {showLabel && <span className="flex-1 truncate">{label}</span>}
@@ -837,17 +842,17 @@ const deriveActionTitle = (msg) => {
 
 // ─── ACTION PRIORITY / STATUS STYLES ─────────────────────────────────────────
 const ACTION_PRIORITY_STYLE = {
-  Critical: "bg-red-100 text-red-800 border-red-300",
-  High:     "bg-red-50 text-red-700 border-red-200",
-  Medium:   "bg-amber-50 text-amber-700 border-amber-200",
+  Critical: "bg-black text-white border-black",
+  High:     "bg-black text-white border-black",
+  Medium:   "bg-slate-50 text-slate-700 border-slate-200",
   Low:      "bg-gray-100 text-gray-600 border-gray-200",
 };
 const ACTION_STATUS_STYLE = {
-  "Open":                "bg-blue-50 text-blue-700 border-blue-200",
-  "In Progress":         "bg-purple-50 text-purple-700 border-purple-200",
-  "Waiting on Customer": "bg-amber-50 text-amber-700 border-amber-200",
-  "Replacement Needed":  "bg-orange-50 text-orange-700 border-orange-200",
-  "Completed":           "bg-green-50 text-green-700 border-green-200",
+  "Open":                "bg-slate-50 text-slate-700 border-slate-200",
+  "In Progress":         "bg-slate-100 text-slate-700 border-slate-200",
+  "Waiting on Customer": "bg-gray-50 text-gray-700 border-gray-200",
+  "Replacement Needed":  "bg-gray-50 text-gray-700 border-gray-200",
+  "Completed":           "bg-gray-100 text-gray-600 border-gray-200",
 };
 const ACTION_FILTERS = ["All", "Due Today", "Overdue", "High Priority", "Waiting on Customer", "Replacement Needed"];
 
@@ -920,10 +925,10 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
       {/* Count chips */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Open",         count: openCount,     cls: "border-l-blue-500"  },
-          { label: "Due Today",    count: dueTodayCount, cls: "border-l-amber-500" },
-          { label: "Overdue",      count: overdueCount,  cls: "border-l-red-500"   },
-          { label: "High Priority",count: highCount,     cls: "border-l-orange-500"},
+          { label: "Open",         count: openCount,     cls: "border-l-slate-300" },
+          { label: "Due Today",    count: dueTodayCount, cls: "border-l-slate-300" },
+          { label: "Overdue",      count: overdueCount,  cls: "border-l-slate-300" },
+          { label: "High Priority",count: highCount,     cls: "border-l-slate-300" },
         ].map(({ label, count, cls }) => (
           <Card key={label} className={`p-4 border-l-4 ${cls}`}>
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
@@ -990,10 +995,10 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
                   {action.action_type && <span className="text-[10px] text-gray-500 border border-gray-200 bg-gray-50 rounded px-1.5 py-0.5">{action.action_type}</span>}
                   {action.priority && <Badge label={action.priority} className={prStyle} />}
                   {action.status   && <Badge label={action.status}   className={stStyle} />}
-                  {overdue && <Badge label="Overdue" className="bg-red-100 text-red-700 border-red-300" />}
+                  {overdue && <Badge label="Overdue" className="bg-black text-white border-black" />}
                 </div>
                 {dueDisplay && (
-                  <span className={`text-[10px] flex-shrink-0 whitespace-nowrap font-medium ${overdue ? "text-red-600" : "text-gray-400"}`}>{dueDisplay}</span>
+                  <span className={`text-[10px] flex-shrink-0 whitespace-nowrap font-medium ${overdue ? "text-black" : "text-gray-400"}`}>{dueDisplay}</span>
                 )}
               </div>
 
@@ -1013,30 +1018,30 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
               <div className="flex flex-wrap gap-1.5">
                 {action.status !== "In Progress" && (
                   <button disabled={isBusy} onClick={() => handleStatus(action.id, "In Progress")}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 cursor-pointer transition-colors">
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors">
                     In Progress
                   </button>
                 )}
                 {action.status !== "Waiting on Customer" && (
                   <button disabled={isBusy} onClick={() => handleStatus(action.id, "Waiting on Customer")}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 cursor-pointer transition-colors">
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors">
                     Waiting
                   </button>
                 )}
                 <button disabled={isBusy} onClick={() => handleStatus(action.id, "Completed")}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 cursor-pointer transition-colors">
-                  ✓ Complete
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer transition-colors">
+                  Complete
                 </button>
                 {action.inbound_message_id && (
                   <button onClick={() => setActiveView("inbox")}
                     className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
-                    Open Message ↗
+                    Open Message
                   </button>
                 )}
                 {action.ticket_id && (
                   <button onClick={() => setActiveView("tickets")}
                     className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
-                    Open Ticket ↗
+                    Open Ticket
                   </button>
                 )}
               </div>
@@ -1304,26 +1309,27 @@ const getDisplayInboundMessage = (msg) => {
 
 // ─── INBOX PRIORITY / STATUS STYLES ──────────────────────────────────────────
 const INBOX_PRIORITY_STYLE = {
-  "High":   "bg-red-50 text-red-700 border-red-200",
-  "Medium": "bg-amber-50 text-amber-700 border-amber-200",
+  "High":   "bg-black text-white border-black",
+  "Medium": "bg-slate-50 text-slate-700 border-slate-200",
   "Low":    "bg-gray-100 text-gray-600 border-gray-200",
 };
 const INBOX_STATUS_STYLE = {
-  "Needs Reply":    "bg-blue-50 text-blue-700 border-blue-200",
-  "In Progress":   "bg-purple-50 text-purple-700 border-purple-200",
-  "Ticket Created":"bg-cyan-50 text-cyan-700 border-cyan-200",
-  "Closed":        "bg-green-50 text-green-700 border-green-200",
+  "Needs Reply":    "bg-slate-50 text-slate-700 border-slate-200",
+  "In Progress":   "bg-slate-100 text-slate-700 border-slate-200",
+  "Ticket Created":"bg-gray-50 text-gray-700 border-gray-200",
+  "Draft Ready":   "bg-gray-50 text-gray-700 border-gray-200",
+  "Closed":        "bg-gray-100 text-gray-600 border-gray-200",
 };
 const TRIAGE_STATUS_STYLE = {
   "Untriaged":          "bg-gray-100 text-gray-500 border-gray-200",
-  "Triaged":            "bg-teal-50 text-teal-700 border-teal-200",
-  "Needs Human Review": "bg-orange-50 text-orange-700 border-orange-200",
+  "Triaged":            "bg-slate-50 text-slate-700 border-slate-200",
+  "Needs Human Review": "bg-black text-white border-black",
   "Noise / Not CS":     "bg-gray-100 text-gray-400 border-gray-200",
-  "High Priority":      "bg-red-50 text-red-700 border-red-200",
+  "High Priority":      "bg-black text-white border-black",
 };
 const RISK_LEVEL_STYLE = {
-  "High":   "bg-red-50 text-red-700 border-red-200",
-  "Medium": "bg-amber-50 text-amber-700 border-amber-200",
+  "High":   "bg-black text-white border-black",
+  "Medium": "bg-slate-50 text-slate-700 border-slate-200",
   "Low":    "bg-gray-100 text-gray-500 border-gray-200",
 };
 const INBOX_FILTER_OPTIONS = ["All", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority", "Closed", "Archived"];
@@ -1465,7 +1471,7 @@ const classifyInboundSource = (msg) => {
 const SOURCE_BADGE_STYLE = {
   "TikTok Shop Chat": "bg-black text-white border-black",
   "TikTok Refund":    "bg-black text-white border-black",
-  "Shopify":          "bg-green-700 text-white border-green-800",
+  "Shopify":          "bg-slate-700 text-white border-slate-800",
   "Outlook":          "bg-slate-600 text-white border-slate-700",
   "Noise":            "bg-gray-200 text-gray-500 border-gray-300",
   "Other":            "bg-gray-100 text-gray-500 border-gray-200",
@@ -2272,10 +2278,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   : <Badge label={msg.triage_status} className={triageStyle} />
                 }
                 {msg.draft_status === "Approved" && (
-                  <Badge label="Draft Approved" className="bg-green-50 text-green-700 border-green-200" />
+                  <Badge label="Draft Approved" className="bg-slate-100 text-slate-700 border-slate-200" />
                 )}
                 {(msg.needs_human_review === true || msg.needs_human_review === "true") && (
-                  <Badge label="Human Review" className="bg-orange-50 text-orange-700 border-orange-200" />
+                  <Badge label="Human Review" className="bg-black text-white border-black" />
                 )}
               </div>
               {/* Timestamp - Pacific time, labeled Received or Imported */}
@@ -2288,7 +2294,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             </div>
 
             {/* Card title - source-aware */}
-            <p className={`text-xs font-bold mb-1.5 ${isRefund ? "text-orange-700" : "text-gray-900"}`}>{cardTitle}</p>
+            <p className="text-xs font-bold mb-1.5 text-gray-900">{cardTitle}</p>
 
             {/* Refund-specific info row */}
             {isRefund && (
@@ -2296,7 +2302,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {orderNum         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Order:</span> {orderNum}</span>}
                 {showName         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Customer:</span> {showName}</span>}
                 {msg.sender_email && <span className="text-[11px] text-gray-400">{msg.sender_email}</span>}
-                <span className="text-[11px] text-orange-700 font-medium">Review in TikTok Seller Center</span>
+                <span className="text-[11px] text-gray-700 font-medium">Review in TikTok Seller Center</span>
               </div>
             )}
 
@@ -2324,7 +2330,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   aria-expanded={isMessageExpanded}
                   className={`text-[10px] font-semibold rounded border px-2 py-1 transition-colors cursor-pointer ${
                     isRefund
-                      ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                      ? "bg-black text-white border-black hover:bg-slate-800"
                       : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:text-gray-700"
                   }`}
                 >
@@ -2332,10 +2338,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 </button>
                 {isMessageExpanded && (
                   <div className={`border rounded-lg px-3 py-2.5 mt-2 ${
-                    isRefund ? "bg-orange-50 border-orange-100" : "bg-gray-50 border-gray-100"
+                    isRefund ? "bg-slate-50 border-slate-200" : "bg-gray-50 border-gray-100"
                   }`}>
                     <p className={`text-xs leading-relaxed whitespace-pre-wrap ${
-                      isRefund ? "text-orange-900" : "text-gray-700"
+                      isRefund ? "text-gray-800" : "text-gray-700"
                     }`}>{displayBody}</p>
                   </div>
                 )}
@@ -2373,14 +2379,14 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               const isDraftCollapsed = collapsedDrafts[msg.id] === true;
               const toggleCollapse = () => setCollapsedDrafts(prev => ({ ...prev, [msg.id]: !prev[msg.id] }));
               return (
-              <div className="border border-blue-100 rounded-lg bg-blue-50 px-3 py-2.5 mb-3">
+              <div className="border border-slate-200 rounded-lg bg-slate-50 px-3 py-2.5 mb-3">
                 <div className="flex flex-col gap-2 mb-1.5 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">AI Draft</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">AI Draft</p>
                   <div className="flex items-center gap-2">
                     {msg.draft_status && (
-                      <Badge label={msg.draft_status} className={msg.draft_status === "Approved" ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-100 text-blue-600 border-blue-200"} />
+                      <Badge label={msg.draft_status} className={msg.draft_status === "Approved" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-600 border-gray-200"} />
                     )}
-                    <button onClick={toggleCollapse} className="text-[10px] text-blue-400 hover:text-blue-700 cursor-pointer">
+                    <button onClick={toggleCollapse} className="text-[10px] text-slate-500 hover:text-slate-800 cursor-pointer">
                       {isDraftCollapsed ? "Show Draft" : "Hide"}
                     </button>
                   </div>
@@ -2388,7 +2394,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {!isDraftCollapsed && (
                   <>
                     <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
-                    <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-blue-100">
+                    <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-slate-200">
                       <button onClick={() => handleCopyDraft(msg)}
                         className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors whitespace-nowrap">
                         {copiedDraftId === msg.id ? "Copied" : "Copy Draft"}
@@ -2400,7 +2406,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                       </button>
                       {msg.draft_status !== "Approved" && (
                         <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
-                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-green-300 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                           Approve Draft
                         </button>
                       )}
@@ -2473,22 +2479,22 @@ const buildSlackSummary = ({ tickets, replacements, studios, surpriseSets, raise
   return `*Jonny Ops - Weekly Shift Summary*
 
 *TikTok SPS / Customer Support*
-• ${safeTickets.length} tickets reviewed across VR, CK47, PS, and PM
-• ${slaRisks.length} SLA risk ticket${slaRisks.length !== 1 ? "s" : ""} identified
-• ${resolved.length} ticket${resolved.length !== 1 ? "s" : ""} resolved | ${escalated.length} escalated | ${open.length} still open
+- ${safeTickets.length} tickets reviewed across VR, CK47, PS, and PM
+- ${slaRisks.length} SLA risk ticket${slaRisks.length !== 1 ? "s" : ""} identified
+- ${resolved.length} ticket${resolved.length !== 1 ? "s" : ""} resolved | ${escalated.length} escalated | ${open.length} still open
 
 *Inventory & Studio Readiness*
-• ${studioReady.map(s => s.id).join(", ")} stream-ready
-• ${safeStudios.filter(s => !s.streamReady).map(s => s.id).join(", ") || "All studios"} ${safeStudios.filter(s => !s.streamReady).length > 0 ? "not ready" : "stream-ready"}
-• Overall studio readiness: ${studioScore}%
+- ${studioReady.map(s => s.id).join(", ")} stream-ready
+- ${safeStudios.filter(s => !s.streamReady).map(s => s.id).join(", ") || "All studios"} ${safeStudios.filter(s => !s.streamReady).length > 0 ? "not ready" : "stream-ready"}
+- Overall studio readiness: ${studioScore}%
 
 *Shipping Loss Prevention*
-• ${safeReplacements.length} replacement case${safeReplacements.length !== 1 ? "s" : ""} logged
-• Estimated loss tracked: $${totalLoss.toFixed(2)}
-• Preventable cases: ${safeReplacements.filter(r => r.preventable === "Yes").length}
+- ${safeReplacements.length} replacement case${safeReplacements.length !== 1 ? "s" : ""} logged
+- Estimated loss tracked: $${totalLoss.toFixed(2)}
+- Preventable cases: ${safeReplacements.filter(r => r.preventable === "Yes").length}
 
 *Surprise Set Execution*
-• ${setsReady.length} of ${safeSurpriseSets.length} surprise set${safeSurpriseSets.length !== 1 ? "s" : ""} ready for live
+- ${setsReady.length} of ${safeSurpriseSets.length} surprise set${safeSurpriseSets.length !== 1 ? "s" : ""} ready for live
 
 *Raise Path - Self Score*
 Consistency ${raiseScores.consistency}% | Accuracy ${raiseScores.accuracy}% | Loss Reduction ${raiseScores.lossReduction}% | Ownership ${raiseScores.ownership}% | Process ${raiseScores.processImprovement}%`;
@@ -2548,13 +2554,13 @@ SHIPPING LOSS PREVENTION
   Estimated loss tracked:     $${totalLoss.toFixed(2)}
   Preventable cases:          ${preventable.length}${preventable.length > 0 ? ` (${preventable.map(r => r.orderNum).join(", ")})` : ""}
   Follow-up required:         ${safeReplacements.filter(r => r.followUp === "Yes").length}
-${topCauses.length > 0 ? `\n  Top root causes:\n${topCauses.map(([c, n]) => `  • ${c}: ${n} case${n > 1 ? "s" : ""}`).join("\n")}` : ""}
+${topCauses.length > 0 ? `\n  Top root causes:\n${topCauses.map(([c, n]) => `  - ${c}: ${n} case${n > 1 ? "s" : ""}`).join("\n")}` : ""}
 
 SURPRISE SET EXECUTION
 ─────────────────────────────
   Sets tracked:       ${safeSurpriseSets.length}
   Ready for live:     ${setsReady.length}
-${safeSurpriseSets.map(s => `  • ${s.setName} (${s.brand}) - ${s.readyForLive ? "Ready" : "Not ready"}`).join("\n")}
+${safeSurpriseSets.map(s => `  - ${s.setName} (${s.brand}) - ${s.readyForLive ? "Ready" : "Not ready"}`).join("\n")}
 
 RAISE PATH - SELF ASSESSMENT
 ─────────────────────────────
@@ -2605,11 +2611,11 @@ const buildBriefSummary = ({ msgsNeedingReply, draftsReady, overdueActions, high
 };
 
 const START_HERE_TYPE_LABEL = {
-  overdue_action:   { label: "Overdue Action",     color: "bg-red-100 text-red-700 border-red-300" },
-  high_action:      { label: "High Priority",       color: "bg-red-50 text-red-700 border-red-200"  },
-  inbox_urgent:     { label: "Urgent Message",      color: "bg-orange-50 text-orange-700 border-orange-200" },
-  draft_ready:      { label: "Draft Ready",         color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  ticket_open:      { label: "Open Ticket",         color: "bg-blue-50 text-blue-700 border-blue-200" },
+  overdue_action:   { label: "Overdue Action",     color: "bg-black text-white border-black" },
+  high_action:      { label: "High Priority",       color: "bg-black text-white border-black" },
+  inbox_urgent:     { label: "Urgent Message",      color: "bg-black text-white border-black" },
+  draft_ready:      { label: "Draft Ready",         color: "bg-slate-50 text-slate-700 border-slate-200" },
+  ticket_open:      { label: "Open Ticket",         color: "bg-slate-50 text-slate-700 border-slate-200" },
 };
 
 const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) => {
@@ -2733,12 +2739,12 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   const allClear = !summary && startHere.length === 0;
 
   const metrics = [
-    { label: "Msgs Needing Reply", value: msgsNeedingReply, accent: msgsNeedingReply > 0 ? "text-blue-600" : "text-gray-900",  border: "border-l-blue-400"   },
-    { label: "Drafts Ready",       value: draftsReady,      accent: draftsReady > 0      ? "text-indigo-600" : "text-gray-900", border: "border-l-indigo-400" },
+    { label: "Msgs Needing Reply", value: msgsNeedingReply, accent: "text-gray-900",                                            border: "border-l-slate-300"  },
+    { label: "Drafts Ready",       value: draftsReady,      accent: "text-gray-900",                                            border: "border-l-slate-300"  },
     { label: "Open Actions",       value: openActions,      accent: "text-gray-900",                                            border: "border-l-gray-300"   },
-    { label: "Due Today",          value: dueTodayActions,  accent: dueTodayActions > 0  ? "text-amber-600" : "text-gray-900",  border: "border-l-amber-400"  },
-    { label: "Overdue",            value: overdueActions,   accent: overdueActions > 0   ? "text-red-600"   : "text-gray-900",  border: "border-l-red-500"    },
-    { label: "High Priority",      value: highActions,      accent: highActions > 0      ? "text-red-600"   : "text-gray-900",  border: "border-l-red-300"    },
+    { label: "Due Today",          value: dueTodayActions,  accent: "text-gray-900",                                            border: "border-l-slate-300"  },
+    { label: "Overdue",            value: overdueActions,   accent: overdueActions > 0   ? "text-black" : "text-gray-900",      border: "border-l-slate-300"  },
+    { label: "High Priority",      value: highActions,      accent: highActions > 0      ? "text-black" : "text-gray-900",      border: "border-l-slate-300"  },
     { label: "Waiting on Cust.",   value: waitingActions,   accent: "text-gray-900",                                            border: "border-l-gray-300"   },
     { label: "Tickets Today",      value: ticketsToday,     accent: "text-gray-900",                                            border: "border-l-gray-300"   },
   ];
@@ -2748,7 +2754,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
       {/* Section header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${allClear ? "bg-green-500" : overdueActions > 0 ? "bg-red-500 animate-pulse" : "bg-amber-400"}`} />
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${allClear ? "bg-slate-400" : overdueActions > 0 ? "bg-black" : "bg-slate-500"}`} />
           <p className="text-sm font-bold text-gray-900">Today's Ops Brief</p>
           <span className="text-[10px] text-gray-400">{todayStr()}</span>
         </div>
@@ -2778,12 +2784,11 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
 
         {/* Plain-English summary */}
         {allClear ? (
-          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-            <span className="text-green-500 text-base">✓</span>
-            <p className="text-sm font-medium text-green-800">You're clear right now. No urgent ops items.</p>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+            <p className="text-sm font-medium text-slate-700">You're clear right now. No urgent ops items.</p>
           </div>
         ) : (
-          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
             <p className="text-sm text-gray-800 leading-relaxed">{summary}</p>
           </div>
         )}
@@ -2807,7 +2812,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
                       <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                         <Badge label={typeInfo.label} className={`text-[9px] ${typeInfo.color}`} />
                         {item.priority && <Badge label={item.priority} className={ACTION_PRIORITY_STYLE[item.priority] || "bg-gray-100 text-gray-500 border-gray-200"} />}
-                        {dueDisplay && <span className={`text-[10px] font-medium ${isOverdue({ due_at: item.due_at }) ? "text-red-600" : "text-amber-600"}`}>{isOverdue({ due_at: item.due_at }) ? "Overdue" : dueDisplay}</span>}
+                        {dueDisplay && <span className={`text-[10px] font-medium ${isOverdue({ due_at: item.due_at }) ? "text-black" : "text-gray-500"}`}>{isOverdue({ due_at: item.due_at }) ? "Overdue" : dueDisplay}</span>}
                       </div>
                       <p className="text-xs font-semibold text-gray-900 truncate">{item.title}</p>
                       {item.summary && <p className="text-[10px] text-gray-400 line-clamp-1 mt-0.5">{item.summary}</p>}
@@ -2817,7 +2822,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
                       onClick={() => setActiveView(item.nav)}
                       className="flex-shrink-0 text-[10px] font-medium text-slate-600 hover:text-slate-800 cursor-pointer whitespace-nowrap"
                     >
-                      Open →
+                      Open
                     </button>
                   </div>
                 );
@@ -2868,14 +2873,14 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
 
   const items = [];
   Object.entries(refundsByBrand).forEach(([brand, n]) => {
-    items.push({ label: `${brand}: ${n} refund/return${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-orange-600" });
+    items.push({ label: `${brand}: ${n} refund/return${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-900" });
   });
   Object.entries(chatsByBrand).forEach(([brand, n]) => {
     items.push({ label: `${brand}: ${n} shop chat${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-700" });
   });
-  if (draftsReady > 0)        items.push({ label: `${draftsReady} draft${draftsReady > 1 ? "s" : ""} ready to approve`, nav: "inbox", color: "text-indigo-600" });
-  if (followUpNeeded > 0)     items.push({ label: `${followUpNeeded} replacement${followUpNeeded > 1 ? "s" : ""} need follow-up`, nav: "replacements", color: "text-amber-600" });
-  if (overdueActionsCount > 0) items.push({ label: `${overdueActionsCount} overdue action${overdueActionsCount > 1 ? "s" : ""}`, nav: "actions", color: "text-red-600" });
+  if (draftsReady > 0)        items.push({ label: `${draftsReady} draft${draftsReady > 1 ? "s" : ""} ready to approve`, nav: "inbox", color: "text-gray-700" });
+  if (followUpNeeded > 0)     items.push({ label: `${followUpNeeded} replacement${followUpNeeded > 1 ? "s" : ""} need follow-up`, nav: "replacements", color: "text-gray-700" });
+  if (overdueActionsCount > 0) items.push({ label: `${overdueActionsCount} overdue action${overdueActionsCount > 1 ? "s" : ""}`, nav: "actions", color: "text-gray-900" });
 
   return (
     <div className="relative">
@@ -3131,11 +3136,11 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.7fr]">
+      <div className="grid grid-cols-1 gap-4">
         <Card className="p-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <p className="text-sm font-bold text-gray-900">Brand Snapshot</p>
-            <span className="text-[10px] font-semibold text-gray-400">Open support load</span>
+            <span className="text-[10px] font-semibold text-gray-400">Last loaded: {lastLoadedLabel}</span>
           </div>
           <div className="grid grid-cols-2 gap-2 pt-3 md:grid-cols-4">
             {brandCounts.map(row => (
@@ -3150,24 +3155,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
             ))}
           </div>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm font-bold text-gray-900">System Status</p>
-          <div className="mt-3 space-y-2 text-xs text-gray-600">
-            <p>Inbox data connected</p>
-            <p>Manual intake available</p>
-            <p>Scheduled intake managed in Make</p>
-            <p className="text-gray-400">Last loaded: {lastLoadedLabel}</p>
-          </div>
-        </Card>
       </div>
-
-      {/* Today's Ops Brief */}
-      <DailyOpsBrief
-        inboundMessages={safeInboundMessages}
-        opsActions={safeOpsActions}
-        tickets={safeTickets}
-        setActiveView={setActiveView}
-      />
 
       {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -3195,10 +3183,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         </Card>
       </div>
 
-      {/* 2-col layout - stacks on mobile */}
-      <div className="flex flex-col md:flex-row gap-4">
-        {/* Ticket table */}
-        <div className="flex-1 min-w-0">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Card className="p-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <p className="text-sm font-bold text-gray-900">Surprise Set Readiness</p>
@@ -3215,8 +3200,8 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
                     <Badge
                       label={row.status}
                       className={row.status === "Ready"
-                        ? "bg-green-50 text-green-700 border-green-200"
-                        : "bg-slate-100 text-slate-600 border-slate-200"}
+                        ? "bg-slate-100 text-slate-700 border-slate-200"
+                        : "bg-gray-100 text-gray-500 border-gray-200"}
                     />
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">{row.ready}/{row.total} stream blocks live ready</p>
@@ -3224,10 +3209,6 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
               ))}
             </div>
           </Card>
-        </div>
-
-        {/* Right rail */}
-        <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-4">
           <Card className="p-4">
             <p className="text-sm font-bold text-gray-900 mb-3">Inventory &amp; Studio Readiness</p>
             <div className="grid grid-cols-4 gap-2">
@@ -3235,32 +3216,30 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
                 <div key={s.id} className="text-center">
                   <p className="text-[10px] font-semibold text-gray-400 mb-1">{s.id}</p>
                   <input type="checkbox" checked={s.streamReady} readOnly className="accent-slate-700 mb-1" />
-                  <p className={`text-[9px] font-bold ${s.streamReady ? "text-green-600" : "text-red-500"}`}>{s.streamReady ? "READY" : "NOT READY"}</p>
+                  <p className="text-[9px] font-bold text-gray-500">{s.streamReady ? "READY" : "NOT READY"}</p>
                 </div>
               ))}
             </div>
           </Card>
 
-          {/* Weekly report preview - real data */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-bold text-gray-900">Weekly Report Preview</p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded p-3 text-[11px] text-gray-600 leading-relaxed space-y-1.5">
               <p className="font-semibold text-gray-800">Command Inbox</p>
-              <p>• {safeInbound.length} active messages</p>
-              <p>• {msgsNeedingReply} needing reply - {refundItems} refund/return item{refundItems !== 1 ? "s" : ""}</p>
-              <p>• {actionRequiredCount} total action required</p>
+              <p>{safeInbound.length} active messages</p>
+              <p>{msgsNeedingReply} needing reply - {refundItems} refund/return item{refundItems !== 1 ? "s" : ""}</p>
+              <p>{actionRequiredCount} total action required</p>
               <p className="font-semibold text-gray-800 pt-1">Shipping Loss</p>
-              <p>• {safeReplacements.length} replacement cases - ${totalLoss.toFixed(2)} tracked</p>
-              <p>• {safeReplacements.filter(r => r.preventable === "Yes").length} preventable</p>
+              <p>{safeReplacements.length} replacement cases - ${totalLoss.toFixed(2)} tracked</p>
+              <p>{safeReplacements.filter(r => r.preventable === "Yes").length} preventable</p>
               <p className="font-semibold text-gray-800 pt-1">Studios</p>
-              <p>• {studioReady}/{safeStudios.length} stream-ready - {studioScore}% readiness</p>
+              <p>{studioReady}/{safeStudios.length} stream-ready - {studioScore}% readiness</p>
               <p className="font-semibold text-gray-800 pt-1">Sets</p>
-              <p>• {surpriseReadyTotal}/{surpriseBlockTotal} stream blocks live ready</p>
+              <p>{surpriseReadyTotal}/{surpriseBlockTotal} stream blocks live ready</p>
             </div>
           </Card>
-        </div>
       </div>
     </div>
   );
@@ -3368,7 +3347,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
         <p className="text-[10px] text-gray-400 mb-1">{t.channel} · {fmtDate(t.createdAt)}</p>
         {showSla && <p className={`text-[10px] font-mono font-bold mb-1 ${cd.urgent ? "text-red-600" : cd.warning ? "text-amber-500" : "text-gray-500"}`}>SLA: {cd.display} remaining</p>}
         {t.notes && <p className="text-[10px] text-gray-500 mb-2 line-clamp-2">{t.notes}</p>}
-        {t.nextAction && <p className="text-[10px] text-slate-600">→ {t.nextAction}</p>}
+        {t.nextAction && <p className="text-[10px] text-slate-600">{t.nextAction}</p>}
         <select value={t.status} onChange={e => upd(t.id, e.target.value)} className="mt-2 w-full bg-gray-50 border border-gray-200 text-gray-700 text-[10px] rounded px-1.5 py-1 focus:outline-none">{KANBAN_COLS.map(c => <option key={c}>{c}</option>)}</select>
       </div>
     );
@@ -3692,8 +3671,8 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
       {/* Metric chips */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{safeReplacements.length}</p></Card>
-        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p><p className="text-3xl font-bold text-red-600 mt-1">${loss.toFixed(2)}</p></Card>
-        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-amber-600 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{safeReplacements.length > 0 ? Math.round((prev / safeReplacements.length) * 100) : 0}% of total</p></Card>
+        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p><p className="text-3xl font-bold text-gray-900 mt-1">${loss.toFixed(2)}</p></Card>
+        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-gray-900 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{safeReplacements.length > 0 ? Math.round((prev / safeReplacements.length) * 100) : 0}% of total</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Follow-Up Needed</p><p className="text-3xl font-bold text-slate-700 mt-1">{fu}</p></Card>
       </div>
 
@@ -3701,7 +3680,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
       {rc.length > 0 && (
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-3">Root Cause Breakdown</p>
-          <div className="space-y-2">{rc.slice(0, 5).map(({ c, n }) => <div key={c} className="flex items-center gap-3"><span className="text-xs text-gray-500 w-44 truncate">{c}</span><div className="flex-1"><ProgressBar pct={safeReplacements.length ? (n / safeReplacements.length) * 100 : 0} color="bg-red-400" /></div><span className="text-xs text-gray-400 w-6 text-right">{n}</span></div>)}</div>
+          <div className="space-y-2">{rc.slice(0, 5).map(({ c, n }) => <div key={c} className="flex items-center gap-3"><span className="text-xs text-gray-500 w-44 truncate">{c}</span><div className="flex-1"><ProgressBar pct={safeReplacements.length ? (n / safeReplacements.length) * 100 : 0} color="bg-slate-500" /></div><span className="text-xs text-gray-400 w-6 text-right">{n}</span></div>)}</div>
         </Card>
       )}
 
@@ -3760,12 +3739,12 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
               {displayRows.map(r => {
                 const isEditing = editRow === r.id;
                 return (
-                  <tr key={r.id} className={`border-b border-gray-50 ${isEditing ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                  <tr key={r.id} className={`border-b border-gray-50 ${isEditing ? "bg-slate-50" : "hover:bg-gray-50"}`}>
                     {isEditing ? (
                       /* ── Inline edit row ── */
                       <>
                         <td className="px-3 py-2">{r.date}</td>
-                        <td className="px-3 py-2"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{BRAND_SHORT[r.brand] || r.brand}</span></div></td>
+                        <td className="px-3 py-2"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{replacementBrandLabel(r.brand)}</span></div></td>
                         <td className="px-3 py-2"><Inp value={editForm.customerName || ""} onChange={ef("customerName")} placeholder="Customer" className="w-28" /></td>
                         <td className="px-3 py-2"><Inp value={editForm.orderNum || ""} onChange={ef("orderNum")} placeholder="Order #" className="w-24" /></td>
                         <td className="px-3 py-2"><Inp value={editForm.reason || ""} onChange={ef("reason")} placeholder="Reason" className="w-32" /></td>
@@ -3804,18 +3783,18 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                       /* ── Read row ── */
                       <>
                         <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.date}</td>
-                        <td className="px-3 py-2.5"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{BRAND_SHORT[r.brand] || r.brand}</span></div></td>
+                        <td className="px-3 py-2.5"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{replacementBrandLabel(r.brand)}</span></div></td>
                         <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{r.customerName || r.customer_name || "-"}</td>
                         <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{r.orderNum || r.order_number || "-"}</td>
                         <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">{r.reason || "-"}</td>
                         <td className="px-3 py-2.5 text-gray-500 max-w-[120px] truncate">{r.replacementItems || r.replacement_items || "-"}</td>
                         <td className="px-3 py-2.5 text-gray-400 max-w-[120px] truncate">{r.notes || "-"}</td>
-                        <td className="px-3 py-2.5 text-green-700 font-bold whitespace-nowrap">${parseFloat(r.marketValue || r.market_value || 0).toFixed(2)}</td>
-                        <td className="px-3 py-2.5"><Badge label={r.preventable} className={r.preventable === "Yes" ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
-                        <td className="px-3 py-2.5"><Badge label={r.followUp || r.follow_up} className={(r.followUp === "Yes" || r.follow_up === "Yes") ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
+                        <td className="px-3 py-2.5 text-gray-900 font-bold whitespace-nowrap">${parseFloat(r.marketValue || r.market_value || 0).toFixed(2)}</td>
+                        <td className="px-3 py-2.5"><Badge label={r.preventable} className={r.preventable === "Yes" ? "bg-black text-white border-black" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
+                        <td className="px-3 py-2.5"><Badge label={r.followUp || r.follow_up} className={(r.followUp === "Yes" || r.follow_up === "Yes") ? "bg-slate-50 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
                         <td className="px-3 py-2.5">
                           {r.status
-                            ? <Badge label={r.status} className={r.status === "Reshipped" || r.status === "Resolved" ? "bg-green-50 text-green-700 border-green-200" : r.status === "Open" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
+                            ? <Badge label={r.status} className={r.status === "Reshipped" || r.status === "Resolved" ? "bg-gray-100 text-gray-600 border-gray-200" : r.status === "Open" ? "bg-slate-50 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
                             : <span className="text-gray-300">-</span>
                           }
                         </td>
@@ -3825,14 +3804,14 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                             <button
                               title="Edit this row"
                               onClick={() => { setEditRow(r.id); setEditForm({ ...r }); }}
-                              className="text-gray-400 hover:text-blue-600 cursor-pointer text-sm leading-none"
-                            >✎</button>
+                              className="text-[10px] font-semibold text-gray-500 hover:text-slate-800 cursor-pointer leading-none"
+                            >Edit</button>
                             {/* Archive */}
                             <button
                               title="Archive this row"
                               onClick={() => handleArchive(r)}
-                              className="text-gray-300 hover:text-red-500 cursor-pointer text-sm leading-none"
-                            >🗑</button>
+                              className="text-[10px] font-semibold text-gray-400 hover:text-red-600 cursor-pointer leading-none"
+                            >Archive</button>
                           </div>
                         </td>
                       </>
@@ -3863,26 +3842,26 @@ const StudioReadinessView = ({ studios, setStudios }) => {
     <div className="space-y-4">
       <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness · <span className="font-medium text-gray-500">{getWeekOfLabel()}</span></p></div>
       <Card className="p-4 flex items-center gap-6">
-        <div className="text-center"><p className="text-xs text-gray-400 mb-1">Overall Readiness</p><p className={`text-5xl font-bold ${overall >= 75 ? "text-green-600" : overall >= 50 ? "text-amber-500" : "text-red-500"}`}>{overall}%</p></div>
-        <div className="flex-1"><ProgressBar pct={overall} color={overall >= 75 ? "bg-green-500" : overall >= 50 ? "bg-amber-400" : "bg-red-500"} /><p className="text-xs text-gray-400 mt-1.5">{safeStudios.filter(s => s.streamReady).length}/{safeStudios.length} stations stream-ready</p></div>
+        <div className="text-center"><p className="text-xs text-gray-400 mb-1">Overall Readiness</p><p className="text-5xl font-bold text-gray-900">{overall}%</p></div>
+        <div className="flex-1"><ProgressBar pct={overall} color="bg-slate-500" /><p className="text-xs text-gray-400 mt-1.5">{safeStudios.filter(s => s.streamReady).length}/{safeStudios.length} stations stream-ready</p></div>
       </Card>
       <div className="grid grid-cols-2 gap-4">
         {safeStudios.map(s => {
           const sc = score(s);
           const brandLabel = STUDIO_BRANDS[s.id];
           return (
-            <Card key={s.id} className={`p-5 ${s.streamReady ? "border-green-300" : ""}`}>
+            <Card key={s.id} className="p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-gray-900">{s.id}</h3>
                   {brandLabel && <span className="text-[10px] text-gray-400 font-medium border border-gray-200 rounded px-1.5 py-0.5">{brandLabel}</span>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-bold ${sc >= 75 ? "text-green-600" : sc >= 50 ? "text-amber-500" : "text-red-500"}`}>{sc}%</span>
-                  <Badge label={s.streamReady ? "Stream Ready" : "Not Ready"} className={s.streamReady ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"} />
+                  <span className="text-sm font-bold text-gray-900">{sc}%</span>
+                  <Badge label={s.streamReady ? "Stream Ready" : "Not Ready"} className={s.streamReady ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
                 </div>
               </div>
-              <ProgressBar pct={sc} color={sc >= 75 ? "bg-green-500" : sc >= 50 ? "bg-amber-400" : "bg-red-500"} />
+              <ProgressBar pct={sc} color="bg-slate-500" />
               <div className="mt-3 space-y-2">
                 {[["countCompleted", "Count Completed"], ["fullyStocked", "Fully Stocked"], ["streamReady", "Stream Ready"]].map(([field, label]) => (
                   <label key={field} className="flex items-center justify-between cursor-pointer">
@@ -4056,9 +4035,9 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
-          { label: "Total stream blocks", value: totalBlocks, cls: "border-l-slate-400" },
-          { label: "Done", value: liveReady, cls: "border-l-green-500" },
-          { label: "Not Done", value: notDone, cls: "border-l-gray-400" },
+          { label: "Total stream blocks", value: totalBlocks, cls: "border-l-slate-300" },
+          { label: "Done", value: liveReady, cls: "border-l-slate-300" },
+          { label: "Not Done", value: notDone, cls: "border-l-slate-300" },
         ].map(item => (
           <Card key={item.label} className={`p-3 border-l-4 ${item.cls}`}>
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{item.label}</p>
@@ -4388,7 +4367,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
             {copied ? "Copied!" : "Copy Summary"}
           </button>
           <button onClick={handleExport}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-700 text-white hover:bg-slate-800 cursor-pointer transition-colors">
             Export TXT
           </button>
         </div>
@@ -4429,7 +4408,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
                   <td className="px-4 py-2.5 font-medium text-gray-800">{row.brand}</td>
                   <td className="px-4 py-2.5 text-gray-600">{row.open}</td>
                   <td className="px-4 py-2.5 text-gray-600">{row.closed}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{row.refunds > 0 ? <span className="text-orange-600 font-semibold">{row.refunds}</span> : <span className="text-gray-300">-</span>}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{row.refunds > 0 ? <span className="font-semibold text-black">{row.refunds}</span> : <span className="text-gray-300">-</span>}</td>
                   <td className="px-4 py-2.5 text-gray-600">{row.replacements}</td>
                 </tr>
               ))}
@@ -4635,9 +4614,9 @@ const clearAll = async () => {
         )}
       </Card>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm font-bold text-blue-800 mb-1">Supabase Sync Active</p>
-        <p className="text-xs text-blue-700">All ticket data is read from and written to your Supabase <code className="font-mono bg-blue-100 px-1 rounded">tickets</code> table. Export a JSON backup regularly for off-database safety.</p>
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+        <p className="text-sm font-bold text-slate-800 mb-1">Supabase Sync Active</p>
+        <p className="text-xs text-slate-600">All ticket data is read from and written to your Supabase <code className="font-mono bg-white border border-slate-200 px-1 rounded">tickets</code> table. Export a JSON backup regularly for off-database safety.</p>
       </div>
     </div>
   );
@@ -4926,12 +4905,9 @@ export default function JonnyOpsCommandCenter() {
   // Shared nav content rendered inside both the desktop sidebar and the mobile drawer
   const NavContent = ({ showLabels }) => (
     <>
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-4">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-1.5">
         {NAV.map((section, si) => (
           <div key={si}>
-            {section.section && showLabels && (
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-1">{section.section}</p>
-            )}
             <div className="space-y-0.5">
               {section.items.map(item => (
                 <NavItem key={item.id} {...item} active={activeView === item.id} onClick={handleNavClick}
@@ -4949,8 +4925,8 @@ export default function JonnyOpsCommandCenter() {
     <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
       {/* Sidekick toast */}
       {sidekickToast && (
-        <div className="fixed right-4 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-green-700 bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-lg" role="status">
-          <span>✓</span>
+        <div className="fixed right-4 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-700 px-4 py-3 text-sm font-semibold text-white shadow-lg" role="status">
+          <span>Saved.</span>
           <span>Ticket pushed from OP Sidekick.</span>
         </div>
       )}
@@ -4969,9 +4945,9 @@ export default function JonnyOpsCommandCenter() {
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex-1 overflow-hidden">
             <p className="text-sm font-bold text-gray-900">Ops Command Hub</p>
-            <p className="text-[10px] text-gray-400">Command Center v1.5</p>
+            <p className="text-[10px] text-gray-400">Command Center v2.0</p>
           </div>
-          <button onClick={() => setMobileNavOpen(false)} className="text-gray-400 hover:text-gray-700 text-xl leading-none p-1">×</button>
+          <button onClick={() => setMobileNavOpen(false)} className="text-xs font-semibold text-gray-400 hover:text-gray-700 p-1">Close</button>
         </div>
         <NavContent showLabels={true} />
       </div>
@@ -4981,18 +4957,19 @@ export default function JonnyOpsCommandCenter() {
         style={{ width: sidebar ? 224 : 56, transition: "width .2s" }}
         className="hidden md:flex flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden"
       >
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-4">
+        <nav className={`flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 ${sidebar ? "space-y-1.5" : "space-y-1"}`}>
           <button
             onClick={() => setSidebar(s => !s)}
             title={sidebar ? "Collapse sidebar" : "Expand sidebar"}
-            className={`mb-2 flex h-8 items-center rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 ${sidebar ? "w-full justify-end px-3" : "w-full justify-center px-0"}`}
+            className={`mb-2 flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 ${sidebar ? "w-full" : "w-full"}`}
           >
-            {sidebar ? "<" : ">"}
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className={sidebar ? "" : "rotate-180"}>
+              <path d="M8.5 3.5 5 7l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
           {NAV.map((section, si) => (
             <div key={si}>
-              {section.section && sidebar && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-1">{section.section}</p>}
-              <div className="space-y-0.5">
+              <div className={sidebar ? "space-y-0.5" : "space-y-1"}>
                 {section.items.map(item => (
                   <NavItem key={item.id} {...item} active={activeView === item.id} onClick={setActiveView}
                     showLabel={sidebar}
@@ -5002,11 +4979,6 @@ export default function JonnyOpsCommandCenter() {
             </div>
           ))}
         </nav>
-        <div className={`border-t border-gray-100 px-3 py-3 flex-shrink-0 ${sidebar ? "flex justify-start" : "flex justify-center"}`}>
-          <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-gray-600">JV</span>
-          </div>
-        </div>
       </aside>
 
       {/* ── MAIN CONTENT ── */}
@@ -5026,7 +4998,7 @@ export default function JonnyOpsCommandCenter() {
               </svg>
             </button>
             <div>
-              <p className="text-sm font-bold text-gray-900 leading-tight">Ops Command Hub v1.5</p>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Ops Command Hub v2.0</p>
               <p className="text-[10px] text-gray-400 leading-tight">{PAGE_LABELS[activeView] || activeView}</p>
             </div>
           </div>
@@ -5043,12 +5015,21 @@ export default function JonnyOpsCommandCenter() {
                 <span className="absolute -top-1 -right-1 text-[9px] bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">{inboxNeedsReplyCount > 9 ? "9+" : inboxNeedsReplyCount}</span>
               </button>
             )}
+            <button
+              type="button"
+              className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600"
+            >
+              Locked
+            </button>
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[10px] font-bold text-gray-700">
+              JV
+            </div>
           </div>
         </div>
 
         {/* ── DESKTOP TOP BAR (hidden on mobile) ── */}
         <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
-          <p className="text-sm font-bold text-gray-900">Ops Command Hub v1.5</p>
+          <p className="text-sm font-bold text-gray-900">Ops Command Hub v2.0</p>
           <div className="flex items-center gap-3">
             <NotificationDropdown
               inboundMessages={safeInboundMessages}
@@ -5056,12 +5037,21 @@ export default function JonnyOpsCommandCenter() {
               replacements={safeReplacements}
               setActiveView={setActiveView}
             />
+            <button
+              type="button"
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              Locked
+            </button>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xs font-bold text-gray-700">
+              JV
+            </div>
           </div>
         </header>
 
         {/* ── PAGE CONTENT ── */}
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0" style={{ background: "#f3f4f6" }}>
-          <div className="max-w-screen-xl mx-auto px-3 md:px-6 py-4 md:py-5">{renderView()}</div>
+          <div className="mx-auto max-w-[1440px] px-3 py-4 md:px-6 md:py-6">{renderView()}</div>
         </main>
 
         {/* ── MOBILE BOTTOM QUICK NAV ── */}
