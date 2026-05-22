@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from '@supabase/supabase-js';
 
 // ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
@@ -8,6 +8,7 @@ const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 const MAKE_INTAKE_WEBHOOK_URL = "https://hook.us2.make.com/ndd4uty3uvua7lmgqxg9lsmjvd61i3ih";
+const LAST_SEEN_MESSAGE_STORAGE_KEY = "ops_command_hub_last_seen_message_at";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -1530,6 +1531,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const ticketCreated = safeInboundMessages.filter(m => m.status === "Ticket Created").length;
   const complete      = safeInboundMessages.filter(m => m.status === "Closed" || m.status === "Archived" || m.archived_at).length;
   const openMessages  = safeInboundMessages.filter(m => m.status !== "Closed" && m.status !== "Archived" && !m.archived_at).length;
+  const overdueMessages = getOverdueMessages(safeInboundMessages);
 
   // ── filter logic ─────────────────────────────────────────────────────────────
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
@@ -2061,6 +2063,18 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700">
           {manualMessageSuccess}
         </div>
+      )}
+
+      {overdueMessages.length > 0 && (
+        <Card className="flex flex-col gap-3 border-black p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold text-gray-900">Assistant reminder: {overdueMessages.length} open message{overdueMessages.length !== 1 ? "s are" : " is"} older than 24 hours.</p>
+          <button
+            onClick={() => { setActiveFilter("All"); setSortMode("Oldest first"); }}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+          >
+            Review overdue
+          </button>
+        </Card>
       )}
 
       {manualMessageOpen && (
@@ -2836,7 +2850,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
 };
 
 // ─── NOTIFICATION DROPDOWN ────────────────────────────────────────────────────
-const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setActiveView }) => {
+const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setActiveView, agentAlertCount = 0 }) => {
   const [open, setOpen] = useState(false);
 
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
@@ -2866,6 +2880,8 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
   const draftsReady        = safeInboundMessages.filter(m => m.draft_status === "Draft Ready").length;
   const followUpNeeded     = safeReplacements.filter(r => r.followUp === "Yes" || r.follow_up === "Yes").length;
   const overdueActionsCount = safeOpsActions.filter(isOverdue).length;
+  const overdueInboxCount = getOverdueMessages(safeInboundMessages).length;
+  const highPriorityInboxCount = getHighPriorityMessages(safeInboundMessages).length;
 
   const totalCount = Object.values(refundsByBrand).reduce((a, b) => a + b, 0)
     + Object.values(chatsByBrand).reduce((a, b) => a + b, 0)
@@ -2879,6 +2895,8 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
     items.push({ label: `${brand}: ${n} shop chat${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-700" });
   });
   if (draftsReady > 0)        items.push({ label: `${draftsReady} draft${draftsReady > 1 ? "s" : ""} ready to approve`, nav: "inbox", color: "text-gray-700" });
+  if (overdueInboxCount > 0)  items.push({ label: `${overdueInboxCount} overdue inbox message${overdueInboxCount !== 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-900" });
+  if (highPriorityInboxCount > 0) items.push({ label: `${highPriorityInboxCount} high priority message${highPriorityInboxCount !== 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-900" });
   if (followUpNeeded > 0)     items.push({ label: `${followUpNeeded} replacement${followUpNeeded > 1 ? "s" : ""} need follow-up`, nav: "replacements", color: "text-gray-700" });
   if (overdueActionsCount > 0) items.push({ label: `${overdueActionsCount} overdue action${overdueActionsCount > 1 ? "s" : ""}`, nav: "actions", color: "text-gray-900" });
 
@@ -2893,9 +2911,9 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
           <path d="M9 2a5 5 0 0 1 5 5v3l2 2H2l2-2V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.4" fill="none"/>
           <path d="M7 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
         </svg>
-        {totalCount > 0 && (
+        {agentAlertCount > 0 && (
           <span className="absolute -top-1 -right-1 text-[9px] bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">
-            {totalCount > 9 ? "9+" : totalCount}
+            {agentAlertCount > 9 ? "9+" : agentAlertCount}
           </span>
         )}
       </button>
@@ -3000,7 +3018,7 @@ const buildRecommendedNextAction = (messages) => {
   return { action: "No urgent action. Keep monitoring.", reason: "The open queue is clear enough to stay in watch mode." };
 };
 
-const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSets, raiseScores, inboundMessages, opsActions, setActiveView }) => {
+const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSets, raiseScores, inboundMessages, opsActions, setActiveView, newMessageNoticeCount = 0 }) => {
   const [showForm, setShowForm] = useState(false);
   const emptyF = { brand: "", channel: "", issueType: "", priority: "Medium", slaRisk: "No", status: "New", notes: "", nextAction: "" };
   const [form, setForm] = useState(emptyF);
@@ -3059,6 +3077,12 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
     highPriorityMessages.length > 0 ? { label: "High priority messages", detail: `${highPriorityMessages.length} waiting` } : null,
     manualEntries > 0 ? { label: "Manual entries", detail: `${manualEntries} open` } : null,
   ].filter(Boolean).slice(0, 3);
+  const agentAttention = [
+    newMessageNoticeCount > 0 ? `${newMessageNoticeCount} new message${newMessageNoticeCount !== 1 ? "s" : ""} came in since the last check.` : null,
+    refundItems > 0 ? "Refunds are active. Review those before normal chat." : null,
+    overdueMessages.length > 0 ? "Older messages are starting to stack up." : null,
+    highPriorityMessages.length > 0 ? "High priority messages are waiting for review." : null,
+  ].filter(Boolean).slice(0, 3);
 
   const SET_STEPS = ["warehouseListReceived", "convertedSetSheet", "importedDesktop", "quantitiesVerified", "readyForLive"];
   const SET_LABELS = { warehouseListReceived: "Warehouse List", convertedSetSheet: "SetSheet", importedDesktop: "Imported", quantitiesVerified: "Verified", readyForLive: "Ready" };
@@ -3089,6 +3113,18 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
           <p className="text-xs text-gray-400 mt-0.5">{todayStr()}</p>
         </div>
       </div>
+
+      {overdueMessages.length > 0 && (
+        <Card className="flex flex-col gap-3 border-black p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold text-gray-900">Assistant reminder: {overdueMessages.length} open message{overdueMessages.length !== 1 ? "s are" : " is"} older than 24 hours.</p>
+          <button
+            onClick={() => setActiveView("inbox")}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+          >
+            Review overdue
+          </button>
+        </Card>
+      )}
 
       {/* Ops Agent Assistant */}
       <Card className="p-5 shadow-sm">
@@ -3132,6 +3168,14 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-gray-100 bg-white p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Agent Attention</p>
+          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+            {(agentAttention.length ? agentAttention : ["No urgent alerts right now."]).map(item => (
+              <p key={item} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-700">{item}</p>
+            ))}
           </div>
         </div>
       </Card>
@@ -4743,6 +4787,9 @@ export default function JonnyOpsCommandCenter() {
   const [inboundMessages, setInboundMessages] = useState([]);
   const [inboundLoading, setInboundLoading] = useState(false);
   const [inboundError, setInboundError] = useState("");
+  const inboundWatcherInitialized = useRef(false);
+  const [assistantToast, setAssistantToast] = useState(null);
+  const [recentNewMessageCount, setRecentNewMessageCount] = useState(0);
 
   const refreshInbox = async () => {
     setInboundLoading(true);
@@ -4796,6 +4843,45 @@ export default function JonnyOpsCommandCenter() {
 
   // Fetch inbound messages on mount
   useEffect(() => { refreshInbox(); }, []);
+
+  useEffect(() => {
+    const safeMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+    if (!safeMessages.length) return;
+
+    const latestTime = Math.max(...safeMessages.map(message => getMessageSortTimestamp(message)).filter(Boolean));
+    if (!Number.isFinite(latestTime) || latestTime <= 0) return;
+
+    const storedValue = Number(localStorage.getItem(LAST_SEEN_MESSAGE_STORAGE_KEY) || 0);
+    if (!inboundWatcherInitialized.current) {
+      inboundWatcherInitialized.current = true;
+      if (latestTime > storedValue) {
+        localStorage.setItem(LAST_SEEN_MESSAGE_STORAGE_KEY, String(latestTime));
+      }
+      return;
+    }
+
+    if (latestTime <= storedValue) return;
+
+    const newMessages = safeMessages.filter(message => getMessageSortTimestamp(message) > storedValue);
+    const newCount = newMessages.length;
+    const latestMessage = [...newMessages].sort((a, b) => getMessageSortTimestamp(b) - getMessageSortTimestamp(a))[0];
+    const hasRefundUpdate = newMessages.some(message => isTikTokRefund(message));
+    const brand = latestMessage ? getDisplayBrand(latestMessage) : "Unassigned";
+    const message =
+      hasRefundUpdate ? "Refund queue updated." :
+      newCount === 1 && brand !== "Unassigned" ? `New ${brand} message received.` :
+      `${newCount} new message${newCount !== 1 ? "s" : ""} came in.`;
+
+    setRecentNewMessageCount(newCount);
+    setAssistantToast({ id: Date.now(), title: "Assistant update", message });
+    localStorage.setItem(LAST_SEEN_MESSAGE_STORAGE_KEY, String(latestTime));
+  }, [inboundMessages]);
+
+  useEffect(() => {
+    if (!assistantToast) return undefined;
+    const timer = setTimeout(() => setAssistantToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [assistantToast]);
 
   // Fetch ops actions on mount
   useEffect(() => { refreshOpsActions(); }, []);
@@ -4866,11 +4952,19 @@ export default function JonnyOpsCommandCenter() {
   const criticalSlaCount = safeTickets.filter(isActiveSlaRisk).length;
   const inboxNeedsReplyCount = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
   const opsOpenCount = safeOpsActions.length;
+  const agentOverdueMessages = getOverdueMessages(safeInboundMessages);
+  const agentRefundMessages = getRefundMessages(safeInboundMessages);
+  const agentHighPriorityMessages = getHighPriorityMessages(safeInboundMessages);
+  const agentAlertCount = [
+    agentOverdueMessages.length > 0,
+    agentRefundMessages.length > 0,
+    agentHighPriorityMessages.length > 0,
+  ].filter(Boolean).length;
 
   const renderView = () => {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores };
     switch (activeView) {
-      case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} />;
+      case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} newMessageNoticeCount={recentNewMessageCount} />;
       case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
       case "actions": return <NextActionQueueView opsActions={opsActions} setOpsActions={setOpsActions} opsLoading={opsLoading} opsError={opsError} onRefresh={refreshOpsActions} setActiveView={setActiveView} />;
       case "daily": return <DailyCommandView tickets={tickets} />;
@@ -4882,7 +4976,7 @@ export default function JonnyOpsCommandCenter() {
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
       case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} inboundMessages={inboundMessages} />;
       case "data": return <DataManagementView {...common} />;
-      default: return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} />;
+      default: return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} newMessageNoticeCount={recentNewMessageCount} />;
     }
   };
 
@@ -4928,6 +5022,23 @@ export default function JonnyOpsCommandCenter() {
         <div className="fixed right-4 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-700 px-4 py-3 text-sm font-semibold text-white shadow-lg" role="status">
           <span>Saved.</span>
           <span>Ticket pushed from OP Sidekick.</span>
+        </div>
+      )}
+
+      {assistantToast && (
+        <div className="fixed right-4 top-16 z-[9999] w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white p-4 shadow-lg" role="status">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-gray-900">{assistantToast.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-600">{assistantToast.message}</p>
+            </div>
+            <button
+              onClick={() => setAssistantToast(null)}
+              className="text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700"
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
 
@@ -5036,6 +5147,7 @@ export default function JonnyOpsCommandCenter() {
               opsActions={safeOpsActions}
               replacements={safeReplacements}
               setActiveView={setActiveView}
+              agentAlertCount={agentAlertCount}
             />
             <button
               type="button"
