@@ -312,7 +312,7 @@ const SURPRISE_SET_TRACKER_BRANDS = [
   { brand: "Vaulted Rarities", code: "VR" },
   { brand: "PokeSpins", code: "PS" },
   { brand: "CardKing47", code: "CK" },
-  { brand: "Pokiemart", code: "PM" },
+  { brand: "PokieMart", code: "PM" },
 ];
 const SETSHEET_WAREHOUSES = ["US Warehouse"];
 const SETSHEET_BOX_DEFAULTS = { weight: "0.88", height: "9", width: "7", length: "4" };
@@ -333,6 +333,18 @@ const SETSHEET_BOX_KEYWORDS = [
   "DECK",
 ];
 const SETSHEET_PACK_KEYWORDS = ["PLAY PACK", "PACK", "BAG", "VR BAG", "RIPPIEZ", "CGC", "PSA"];
+const SETSHEET_TEMPLATE_CONFIGS = {
+  cardKingVaulted: {
+    path: "/templates/CARDKING-VAULTED-TEMPLATE.xlsx",
+    label: "CardKing / Vaulted template",
+    usesWarehouse: true,
+  },
+  pokeSpinsPokieMart: {
+    path: "/templates/POKESPINS-POKIEMART-TEMPLATE.xlsx",
+    label: "PokeSpins / PokieMart template",
+    usesWarehouse: false,
+  },
+};
 
 const normalizeSurpriseSetBrandValue = (brandValue) => {
   const raw = String(brandValue || "").trim().toLowerCase();
@@ -340,8 +352,14 @@ const normalizeSurpriseSetBrandValue = (brandValue) => {
   if (raw === "vr" || raw.includes("vaulted")) return "Vaulted Rarities";
   if (raw === "ps" || raw.includes("pokespins") || raw.includes("poke spins")) return "PokeSpins";
   if (raw === "ck" || raw === "ck47" || raw.includes("cardking47") || raw.includes("card king 47")) return "CardKing47";
-  if (raw === "pm" || raw.includes("pokiemart") || raw.includes("pokie mart")) return "Pokiemart";
+  if (raw === "pm" || raw.includes("pokiemart") || raw.includes("pokie mart")) return "PokieMart";
   return BRANDS.includes(brandValue) ? brandValue : "";
+};
+
+const getSetSheetTemplateConfig = (brandValue) => {
+  const brand = normalizeSurpriseSetBrandValue(brandValue);
+  if (brand === "PokeSpins" || brand === "PokieMart") return SETSHEET_TEMPLATE_CONFIGS.pokeSpinsPokieMart;
+  return SETSHEET_TEMPLATE_CONFIGS.cardKingVaulted;
 };
 
 const getSurpriseSetFlags = (status) => {
@@ -529,12 +547,15 @@ const getSetSheetSummary = (rows) => {
 const escapeSpreadsheetCell = (value) =>
   String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const buildSetSheetSpreadsheet = (rows) => {
+const buildSetSheetSpreadsheet = (rows, options = {}) => {
   const safeRows = Array.isArray(rows) ? rows : [];
+  const templateConfig = getSetSheetTemplateConfig(options.brand);
+  const warehouse = templateConfig.usesWarehouse ? String(options.warehouse || SETSHEET_WAREHOUSES[0] || "") : "";
   const rowXml = safeRows.map(row => `
     <Row>
       <Cell><Data ss:Type="String">${escapeSpreadsheetCell(row.productName)}</Data></Cell>
       <Cell><Data ss:Type="Number">${Number(row.quantity || 0)}</Data></Cell>
+      ${templateConfig.usesWarehouse ? `<Cell><Data ss:Type="String">${escapeSpreadsheetCell(warehouse)}</Data></Cell>` : ""}
       <Cell><Data ss:Type="${row.weight === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.weight)}</Data></Cell>
       <Cell><Data ss:Type="${row.height === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.height)}</Data></Cell>
       <Cell><Data ss:Type="${row.width === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.width)}</Data></Cell>
@@ -551,6 +572,7 @@ const buildSetSheetSpreadsheet = (rows) => {
       <Row>
         <Cell><Data ss:Type="String">Product Name</Data></Cell>
         <Cell><Data ss:Type="String">Quantity</Data></Cell>
+        ${templateConfig.usesWarehouse ? `<Cell><Data ss:Type="String">Warehouse</Data></Cell>` : ""}
         <Cell><Data ss:Type="String">Weight</Data></Cell>
         <Cell><Data ss:Type="String">Height</Data></Cell>
         <Cell><Data ss:Type="String">Width</Data></Cell>
@@ -561,8 +583,8 @@ const buildSetSheetSpreadsheet = (rows) => {
 </Workbook>`;
 };
 
-const downloadSetSheetRows = (rows, fileName) => {
-  const workbook = buildSetSheetSpreadsheet(rows);
+const downloadSetSheetRows = (rows, fileName, options = {}) => {
+  const workbook = buildSetSheetSpreadsheet(rows, options);
   const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -582,6 +604,39 @@ const loadSetSheetConverterEntries = () => {
   } catch {
     return [];
   }
+};
+
+const SURPRISE_SET_ACCOUNT_OPTIONS = ["Vaulted Rarities", "PokeSpins", "CardKing47", "PokieMart"];
+const TIKTOK_UPLOAD_CHECKLIST = [
+  "Create surprise set",
+  "Paste surprise set name",
+  "Enter starting bid",
+  "Import Excel or CSV",
+  "Upload converted file",
+  "Confirm product count",
+  "Submit",
+];
+
+const formatSetDateForFileName = (isoDate) => {
+  const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "";
+  return `${match[2]}${match[3]}`;
+};
+
+const normalizeSetSheetFilePart = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const buildSurpriseSetFileName = ({ streamer, streamDate, setNumber }) => {
+  const parts = [
+    normalizeSetSheetFilePart(streamer || "stream"),
+    formatSetDateForFileName(streamDate) || formatSetDateForFileName(todayDate()),
+    normalizeSetSheetFilePart(setNumber || "1"),
+  ].filter(Boolean);
+  return sanitizeSetSheetFileName(parts.join("_"));
 };
 
 const DEMO_SETS = [
@@ -4046,6 +4101,11 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     warehouse: "US Warehouse",
     day: "Monday",
     shift: "am",
+    streamer: "",
+    streamDate: todayDate(),
+    setNumber: "1",
+    surpriseSetName: "",
+    startingBid: "",
     fileName: "",
     input: "",
   };
@@ -4054,6 +4114,8 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const [converterError, setConverterError] = useState("");
   const [converterConverted, setConverterConverted] = useState(false);
   const [convertedEntries, setConvertedEntries] = useState(() => loadSetSheetConverterEntries());
+  const [setupCopyStatus, setSetupCopyStatus] = useState("");
+  const [uploadedBatchIds, setUploadedBatchIds] = useState({});
 
   useEffect(() => {
     setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev));
@@ -4070,17 +4132,33 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const liveReady = trackerBlocks.filter(s => s.status === "Live Ready" || s.readyForLive).length;
   const notDone = Math.max(0, totalBlocks - liveReady);
   const summary = getSetSheetSummary(converterRows);
+  const activeConvertedEntry = converterConverted
+    ? (Array.isArray(convertedEntries) ? convertedEntries : []).find(entry => entry.fileName === converterForm.fileName) || (Array.isArray(convertedEntries) ? convertedEntries[0] : null)
+    : null;
+  const activeUploaded = Boolean(activeConvertedEntry && (uploadedBatchIds[activeConvertedEntry.id] || activeConvertedEntry.uploadedAt));
+  const selectedTemplateConfig = getSetSheetTemplateConfig(converterForm.brand);
 
   const updateConverterField = (field, value) => {
     setConverterForm(prev => ({ ...prev, [field]: value }));
   };
 
+  const copySetupValue = async (value, successMessage) => {
+    try {
+      await navigator.clipboard.writeText(String(value || ""));
+      setSetupCopyStatus(successMessage);
+      setTimeout(() => setSetupCopyStatus(""), 2200);
+    } catch {
+      setSetupCopyStatus("Copy failed. Try again.");
+      setTimeout(() => setSetupCopyStatus(""), 2600);
+    }
+  };
+
   const getTrackerBlock = (day, streamKey, brand) =>
-    trackerBlocks.find(block => block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === brand);
+    trackerBlocks.find(block => block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === normalizeSurpriseSetBrandValue(brand));
 
   const patchTrackerBlock = (brand, day, streamKey, patch) => {
     setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev).map(block => {
-      const matches = block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === brand;
+      const matches = block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === normalizeSurpriseSetBrandValue(brand);
       if (!matches) return block;
       const next = { ...block, ...patch };
       const done = Boolean(next.readyForLive);
@@ -4090,6 +4168,17 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
 
   const toggleTrackerDone = (brand, day, streamKey, done) => {
     patchTrackerBlock(brand, day, streamKey, { readyForLive: done });
+  };
+
+  const handleMarkUploaded = (entry = activeConvertedEntry) => {
+    if (!entry) return;
+    setUploadedBatchIds(prev => ({ ...prev, [entry.id]: true }));
+    setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === entry.id ? { ...item, uploadedAt: nowISO() } : item));
+    patchTrackerBlock(entry.brand, entry.day, entry.shift, {
+      readyForLive: true,
+      setName: entry.surpriseSetName || entry.fileName,
+      quantity: entry.summary?.totalQuantity || 0,
+    });
   };
 
   const handleConvert = () => {
@@ -4102,12 +4191,14 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       return;
     }
     const nextSummary = getSetSheetSummary(rows);
-    const safeFileName = converterForm.fileName || `${BRAND_SHORT[converterForm.brand] || converterForm.brand}_${converterForm.day}_${converterForm.shift}_setsheet`;
+    const safeFileName = converterForm.fileName || buildSurpriseSetFileName(converterForm);
     const entry = {
       id: uid(),
       createdAt: nowISO(),
       ...converterForm,
       fileName: safeFileName,
+      templatePath: getSetSheetTemplateConfig(converterForm.brand).path,
+      usesWarehouse: getSetSheetTemplateConfig(converterForm.brand).usesWarehouse,
       rows,
       summary: nextSummary,
     };
@@ -4117,8 +4208,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setConvertedEntries(prev => [entry, ...(Array.isArray(prev) ? prev : [])].slice(0, 20));
     patchTrackerBlock(converterForm.brand, converterForm.day, converterForm.shift, {
       convertedSetSheet: true,
-      readyForLive: true,
-      setName: safeFileName,
+      setName: converterForm.surpriseSetName || safeFileName,
       quantity: nextSummary.totalQuantity,
     });
   };
@@ -4130,11 +4220,14 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       setConverterError("Convert a surprise set before downloading.");
       return;
     }
-    downloadSetSheetRows(rows, fileName);
+    downloadSetSheetRows(rows, fileName, {
+      brand: entry?.brand || converterForm.brand,
+      warehouse: entry?.warehouse || converterForm.warehouse,
+    });
     const brand = entry?.brand || converterForm.brand;
     const day = entry?.day || converterForm.day;
     const shift = entry?.shift || converterForm.shift;
-    patchTrackerBlock(brand, day, shift, { downloadedSetSheet: true, readyForLive: true });
+    patchTrackerBlock(brand, day, shift, { downloadedSetSheet: true });
     if (entry?.id) {
       setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === entry.id ? { ...item, downloadedAt: nowISO() } : item));
     }
@@ -4154,13 +4247,26 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setConverterRows([]);
     setConverterError("");
     setConverterConverted(false);
+    setSetupCopyStatus("");
   };
 
   const handleAddAnother = () => {
-    setConverterForm(prev => ({ ...prev, fileName: "", input: "" }));
+    setConverterForm(prev => {
+      const currentNumber = Number.parseInt(prev.setNumber, 10);
+      const nextNumber = Number.isFinite(currentNumber) ? currentNumber + 1 : (Array.isArray(convertedEntries) ? convertedEntries.length + 2 : 2);
+      return {
+        ...prev,
+        setNumber: String(nextNumber),
+        surpriseSetName: "",
+        startingBid: "",
+        fileName: "",
+        input: "",
+      };
+    });
     setConverterRows([]);
     setConverterError("");
     setConverterConverted(false);
+    setSetupCopyStatus("");
   };
 
   const clearWeek = () => {
@@ -4207,11 +4313,20 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <FL>Account / Brand</FL>
-              <Sel value={converterForm.brand} onChange={value => updateConverterField("brand", value)} options={BRANDS} placeholder="" />
+              <Sel value={converterForm.brand} onChange={value => updateConverterField("brand", value)} options={SURPRISE_SET_ACCOUNT_OPTIONS} placeholder="" />
             </label>
             <label className="space-y-1">
               <FL>Warehouse</FL>
-              <Sel value={converterForm.warehouse} onChange={value => updateConverterField("warehouse", value)} options={SETSHEET_WAREHOUSES} placeholder="" />
+              {selectedTemplateConfig.usesWarehouse ? (
+                <Sel value={converterForm.warehouse} onChange={value => updateConverterField("warehouse", value)} options={SETSHEET_WAREHOUSES} placeholder="" />
+              ) : (
+                <input
+                  disabled
+                  value="No warehouse column"
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-400"
+                  readOnly
+                />
+              )}
             </label>
             <label className="space-y-1">
               <FL>Day</FL>
@@ -4228,14 +4343,39 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
                 <option value="pm">PM</option>
               </select>
             </label>
+            <label className="space-y-1">
+              <FL>Streamer</FL>
+              <Inp value={converterForm.streamer} onChange={value => updateConverterField("streamer", value)} placeholder="Jimmy, Baxter, Zman" />
+            </label>
+            <label className="space-y-1">
+              <FL>Stream Date</FL>
+              <Inp type="date" value={converterForm.streamDate} onChange={value => updateConverterField("streamDate", value)} />
+            </label>
+            <label className="space-y-1">
+              <FL>Set Number</FL>
+              <Inp type="number" min="1" value={converterForm.setNumber} onChange={value => updateConverterField("setNumber", value)} placeholder="1" />
+            </label>
+            <label className="space-y-1">
+              <FL>Starting Bid</FL>
+              <Inp type="number" min="0" step="0.01" value={converterForm.startingBid} onChange={value => updateConverterField("startingBid", value)} placeholder="1" />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <FL>Surprise Set Name</FL>
+              <Inp value={converterForm.surpriseSetName} onChange={value => updateConverterField("surpriseSetName", value)} placeholder="Name to paste into TikTok" />
+            </label>
             <label className="space-y-1 sm:col-span-2">
               <FL>File name</FL>
-              <Inp value={converterForm.fileName} onChange={value => updateConverterField("fileName", value)} placeholder="name_date_channel" />
+              <Inp value={converterForm.fileName} onChange={value => updateConverterField("fileName", value)} placeholder={buildSurpriseSetFileName(converterForm)} />
             </label>
             <label className="space-y-1 sm:col-span-2">
               <FL>Insert surprise set</FL>
               <Txt value={converterForm.input} onChange={value => updateConverterField("input", value)} placeholder="Paste lines here..." rows={13} className="font-mono text-xs" />
             </label>
+          </div>
+          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
+            Template: {selectedTemplateConfig.label}
+            <span className="text-gray-300"> - </span>
+            {selectedTemplateConfig.usesWarehouse ? "Warehouse column enabled" : "No warehouse column"}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <BtnPrimary onClick={handleConvert}>Convert</BtnPrimary>
@@ -4260,13 +4400,81 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
             <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{converterError}</div>
           )}
           {converterConverted && (
-            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div><p className="text-lg font-bold text-gray-900">{summary.totalRows}</p><p className="text-[10px] text-gray-400">unique products</p></div>
-                <div><p className="text-lg font-bold text-gray-900">{summary.totalQuantity}</p><p className="text-[10px] text-gray-400">total items</p></div>
-                <div><p className="text-lg font-bold text-gray-900">{summary.unknownCount}</p><p className="text-[10px] text-gray-400">unknown items</p></div>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-gray-900">Completed Setup Summary</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">Use these details while creating the TikTok surprise set.</p>
+                  </div>
+                  {activeConvertedEntry && (
+                    <button
+                      onClick={() => handleMarkUploaded(activeConvertedEntry)}
+                      disabled={activeUploaded}
+                      className="inline-flex items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-default disabled:opacity-80"
+                    >
+                      {activeUploaded ? "Uploaded to TikTok" : "Mark Uploaded"}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs lg:grid-cols-4">
+                  {[
+                    ["Account / Brand", activeConvertedEntry?.brand || converterForm.brand],
+                    ["Streamer", activeConvertedEntry?.streamer || converterForm.streamer || "-"],
+                    ["Stream Date", activeConvertedEntry?.streamDate || converterForm.streamDate || "-"],
+                    ["Set Number", activeConvertedEntry?.setNumber || converterForm.setNumber || "-"],
+                    ["Surprise Set Name", activeConvertedEntry?.surpriseSetName || converterForm.surpriseSetName || "-"],
+                    ["Starting Bid", activeConvertedEntry?.startingBid || converterForm.startingBid || "-"],
+                    ["File Name", activeConvertedEntry?.fileName || converterForm.fileName],
+                    ["Uploaded Status", activeUploaded ? "Uploaded to TikTok" : "Not uploaded yet"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
+                      <p className="mt-1 truncate font-semibold text-gray-800">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div><p className="text-lg font-bold text-gray-900">{summary.totalRows}</p><p className="text-[10px] text-gray-400">unique products found</p></div>
+                  <div><p className="text-lg font-bold text-gray-900">{summary.totalQuantity}</p><p className="text-[10px] text-gray-400">total items counted</p></div>
+                  <div><p className="text-lg font-bold text-gray-900">{summary.unknownCount}</p><p className="text-[10px] text-gray-400">unknown items</p></div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => copySetupValue(activeConvertedEntry?.surpriseSetName || converterForm.surpriseSetName, "Copied name.")}
+                    className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    Copy Name
+                  </button>
+                  <button
+                    onClick={() => copySetupValue(activeConvertedEntry?.startingBid || converterForm.startingBid, "Copied bid.")}
+                    className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    Copy Bid
+                  </button>
+                  <button
+                    onClick={() => copySetupValue(activeConvertedEntry?.fileName || converterForm.fileName, "Copied file name.")}
+                    className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    Copy File Name
+                  </button>
+                  {setupCopyStatus && <span className="text-[11px] font-medium text-gray-500">{setupCopyStatus}</span>}
+                </div>
               </div>
-              <div className="mt-3 max-h-44 overflow-auto rounded border border-gray-200 bg-white">
+              <div className="rounded-lg border border-gray-200 bg-white p-3">
+                <p className="text-xs font-bold text-gray-900">TikTok Upload Checklist</p>
+                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {TIKTOK_UPLOAD_CHECKLIST.map(item => (
+                    <div key={item} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-[11px] font-medium text-gray-600">
+                      <span className="h-3 w-3 rounded border border-gray-300 bg-white" />
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs font-bold text-gray-900">Converted Product Preview</p>
+                <div className="mt-2 max-h-44 overflow-auto rounded border border-gray-200 bg-white">
                 <table className="w-full text-left text-[11px]">
                   <thead className="sticky top-0 bg-gray-50 text-gray-400">
                     <tr>
@@ -4285,6 +4493,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
