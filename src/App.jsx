@@ -3585,6 +3585,90 @@ const CSTemplateView = ({ setTickets }) => {
 // ─── REPLACEMENT LOG ──────────────────────────────────────────────────────────
 const REPLACEMENT_STATUS_OPTIONS = ["Open", "Reshipped", "Refunded", "Resolved", "Pending"];
 const REPLACEMENT_FILTERS = ["All", "CardKing47", "Vaulted Rarities", "PokeSpins", "Pokiemart", "Follow-Up Needed"];
+const DANTE_DEPT_FAULT_OPTIONS = ["James", "JB", "Jojo", "Gio", "Gurt", "Bernardo", "Sarah", "Streamer"];
+
+const getReplacementValue = (row, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+  }
+  return fallback;
+};
+
+const formatDanteDate = (value) => {
+  if (!value) return "";
+  const dateOnly = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnly) return `${Number(dateOnly[2])}/${Number(dateOnly[3])}/${dateOnly[1]}`;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+};
+
+const normalizeDanteReason = (value) => {
+  const raw = String(value || "").trim();
+  const lower = raw.toLowerCase();
+  if (!raw) return "";
+  if (lower.includes("wrong")) return "Wrong Item Sent";
+  if (lower.includes("damaged") || lower.includes("damage")) return "Damaged in Shipping";
+  if (lower.includes("missing")) return "Missing Item";
+  return raw;
+};
+
+const getDanteDeptFault = (row) => {
+  const raw = String(getReplacementValue(row, ["dept_fault", "department_fault"], "")).trim();
+  return DANTE_DEPT_FAULT_OPTIONS.includes(raw) ? raw : raw;
+};
+
+const getDanteBrand = (row) => {
+  const raw = String(row?.brand || row?.brand_code || row?.brandCode || "").trim();
+  const lower = raw.toLowerCase();
+  if (!raw) return "";
+  if (lower.includes("vaulted") || lower === "vr") return "Vaulted Rarities";
+  if (lower.includes("cardking") || lower === "ck" || lower === "ck47") return "CardKing47";
+  if (lower.includes("pokespins") || lower === "ps") return "PokeSpins";
+  if (lower.includes("pokiemart") || lower === "pm") return "Pokiemart";
+  return normalizeBrandForApp(raw);
+};
+
+const getDanteChannelPlatform = (row) => {
+  const brand = getDanteBrand(row);
+  const channel = String(getReplacementValue(row, ["channel", "platform", "source"], "")).toLowerCase();
+  const isTikTok = channel.includes("tiktok") || channel.includes("tik tok") || channel.includes("shop");
+  const isWhatnot = channel.includes("whatnot");
+  if (brand === "Vaulted Rarities" && isWhatnot) return "VR Whatnot";
+  if (brand === "Vaulted Rarities" && isTikTok) return "VR TikTok";
+  if (brand === "CardKing47" && isWhatnot) return "CK Whatnot";
+  if (brand === "CardKing47" && isTikTok) return "CK TikTok";
+  if (brand === "PokeSpins" && isTikTok) return "PS TikTok";
+  if (brand === "Pokiemart" && isTikTok) return "PM TikTok";
+  return "";
+};
+
+const getDanteReplacementFields = (row) => {
+  const item = String(getReplacementValue(row, ["items", "item", "product", "replacement_item", "replacementItems", "replacement_items"], "")).trim();
+  const reason = normalizeDanteReason(getReplacementValue(row, ["reason", "issue_type"], ""));
+  const existingNotes = String(getReplacementValue(row, ["notes", "description"], "")).trim();
+  const notes = existingNotes || ([reason, item].filter(Boolean).length === 2 ? `Customer reported ${reason} for ${item}.` : "");
+  const value = Number(getReplacementValue(row, ["market_value", "marketValue", "value", "estimated_loss"], 0)) || 0;
+  return {
+    date: formatDanteDate(getReplacementValue(row, ["date", "created_at"], "")),
+    order: String(getReplacementValue(row, ["order_number", "orderNum", "orderNo", "order", "order_id"], "")).trim(),
+    item,
+    reason,
+    deptFault: getDanteDeptFault(row),
+    marketValue: `$${value.toFixed(2)}`,
+    channelPlatform: getDanteChannelPlatform(row),
+    notes,
+    evidence: String(getReplacementValue(row, ["evidence", "evidence_url"], "")).trim(),
+  };
+};
+
+const buildDanteReplacementRow = (row) => {
+  const d = getDanteReplacementFields(row);
+  return [d.date, d.order, d.item, d.reason, d.deptFault, d.marketValue, d.channelPlatform, d.notes, d.evidence]
+    .map(value => String(value ?? "").replace(/\r?\n/g, " ").trim())
+    .join("\t");
+};
 
 const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading, replacementsError, onRefresh }) => {
   const emptyF = {
@@ -3598,6 +3682,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   const [editRow, setEditRow]   = useState(null);   // row being edited
   const [editForm, setEditForm] = useState({});
   const [savingId, setSavingId] = useState(null);
+  const [copyStatus, setCopyStatus] = useState("");
   const f  = k => v => setForm(p => ({ ...p, [k]: v }));
   const ef = k => v => setEditForm(p => ({ ...p, [k]: v }));
   const safeReplacements = Array.isArray(replacements) ? replacements : [];
@@ -3671,6 +3756,22 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   const fu   = safeReplacements.filter(r => r.followUp === "Yes").length;
   const rc   = ROOT_CAUSES.map(c => ({ c, n: safeReplacements.filter(r => r.rootCause === c).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
 
+  const handleCopyDanteRows = async () => {
+    setCopyStatus("");
+    if (displayRows.length === 0) {
+      setCopyStatus("No visible replacement rows to copy.");
+      setTimeout(() => setCopyStatus(""), 3000);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(displayRows.map(buildDanteReplacementRow).join("\n"));
+      setCopyStatus("Copied Dante rows.");
+    } catch {
+      setCopyStatus("Copy failed. Try again.");
+    }
+    setTimeout(() => setCopyStatus(""), 3000);
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -3680,6 +3781,12 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
           <p className="text-xs text-gray-400 mt-0.5">Track every replacement case and estimated loss</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyDanteRows}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+          >
+            Copy Dante Rows
+          </button>
           <button
             onClick={onRefresh}
             disabled={replacementsLoading}
@@ -3694,6 +3801,12 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
           <BtnPrimary onClick={() => setShow(s => !s)} size="md">{show ? "Close" : "+ Log Replacement"}</BtnPrimary>
         </div>
       </div>
+
+      {copyStatus && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700">
+          {copyStatus}
+        </div>
+      )}
 
       {/* Error banner */}
       {replacementsError && (
@@ -3774,7 +3887,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-y border-gray-100">
-                {["Date","Brand","Customer","Order #","Reason","Items","Notes","Value","Prev.","Follow-Up","Status","Actions"].map(h => (
+                {["Date","Order #","Item","Reason for Error","Dept Fault","Market Value ($)","Channel/Platform","Notes","Evidence","Status","Actions"].map(h => (
                   <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -3782,29 +3895,21 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
             <tbody>
               {displayRows.map(r => {
                 const isEditing = editRow === r.id;
+                const dante = getDanteReplacementFields(r);
                 return (
                   <tr key={r.id} className={`border-b border-gray-50 ${isEditing ? "bg-slate-50" : "hover:bg-gray-50"}`}>
                     {isEditing ? (
                       /* ── Inline edit row ── */
                       <>
-                        <td className="px-3 py-2">{r.date}</td>
-                        <td className="px-3 py-2"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{replacementBrandLabel(r.brand)}</span></div></td>
-                        <td className="px-3 py-2"><Inp value={editForm.customerName || ""} onChange={ef("customerName")} placeholder="Customer" className="w-28" /></td>
-                        <td className="px-3 py-2"><Inp value={editForm.orderNum || ""} onChange={ef("orderNum")} placeholder="Order #" className="w-24" /></td>
-                        <td className="px-3 py-2"><Inp value={editForm.reason || ""} onChange={ef("reason")} placeholder="Reason" className="w-32" /></td>
-                        <td className="px-3 py-2"><Inp value={editForm.replacementItems || ""} onChange={ef("replacementItems")} placeholder="Items" className="w-36" /></td>
-                        <td className="px-3 py-2"><Inp value={editForm.notes || ""} onChange={ef("notes")} placeholder="Notes" className="w-36" /></td>
-                        <td className="px-3 py-2"><Inp type="number" value={editForm.marketValue ?? ""} onChange={ef("marketValue")} placeholder="0.00" className="w-16" /></td>
-                        <td className="px-3 py-2">
-                          <select value={editForm.preventable || "No"} onChange={e => ef("preventable")(e.target.value)} className="bg-white border border-gray-300 rounded text-xs px-1.5 py-1 w-14">
-                            <option>Yes</option><option>No</option>
-                          </select>
-                        </td>
-                        <td className="px-3 py-2">
-                          <select value={editForm.followUp || "No"} onChange={e => ef("followUp")(e.target.value)} className="bg-white border border-gray-300 rounded text-xs px-1.5 py-1 w-14">
-                            <option>Yes</option><option>No</option>
-                          </select>
-                        </td>
+                        <td className="px-3 py-2"><Inp type="date" value={editForm.date || ""} onChange={ef("date")} className="w-32" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.orderNum || editForm.order_number || ""} onChange={ef("orderNum")} placeholder="Order #" className="w-24" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.replacementItems || editForm.replacement_items || editForm.item || ""} onChange={ef("replacementItems")} placeholder="Item" className="w-40" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.reason || ""} onChange={ef("reason")} placeholder="Reason" className="w-40" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.dept_fault || editForm.department_fault || ""} onChange={ef("dept_fault")} placeholder="Dept" className="w-28" /></td>
+                        <td className="px-3 py-2"><Inp type="number" value={editForm.marketValue ?? editForm.market_value ?? ""} onChange={ef("marketValue")} placeholder="0.00" className="w-20" /></td>
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{getDanteChannelPlatform(editForm) || dante.channelPlatform || "-"}</td>
+                        <td className="px-3 py-2"><Inp value={editForm.notes || ""} onChange={ef("notes")} placeholder="Notes" className="w-44" /></td>
+                        <td className="px-3 py-2"><Inp value={editForm.evidence || editForm.evidence_url || ""} onChange={ef("evidence")} placeholder="Evidence" className="w-36" /></td>
                         <td className="px-3 py-2">
                           <select value={editForm.status || "Open"} onChange={e => ef("status")(e.target.value)} className="bg-white border border-gray-300 rounded text-xs px-1.5 py-1 w-24">
                             {REPLACEMENT_STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
@@ -3826,16 +3931,20 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                     ) : (
                       /* ── Read row ── */
                       <>
-                        <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.date}</td>
-                        <td className="px-3 py-2.5"><div className="flex items-center gap-1.5"><BrandPip brand={r.brand} /><span className="text-gray-700">{replacementBrandLabel(r.brand)}</span></div></td>
-                        <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{r.customerName || r.customer_name || "-"}</td>
-                        <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{r.orderNum || r.order_number || "-"}</td>
-                        <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">{r.reason || "-"}</td>
-                        <td className="px-3 py-2.5 text-gray-500 max-w-[120px] truncate">{r.replacementItems || r.replacement_items || "-"}</td>
-                        <td className="px-3 py-2.5 text-gray-400 max-w-[120px] truncate">{r.notes || "-"}</td>
-                        <td className="px-3 py-2.5 text-gray-900 font-bold whitespace-nowrap">${parseFloat(r.marketValue || r.market_value || 0).toFixed(2)}</td>
-                        <td className="px-3 py-2.5"><Badge label={r.preventable} className={r.preventable === "Yes" ? "bg-black text-white border-black" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
-                        <td className="px-3 py-2.5"><Badge label={r.followUp || r.follow_up} className={(r.followUp === "Yes" || r.follow_up === "Yes") ? "bg-slate-50 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-500 border-gray-200"} /></td>
+                        <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{dante.date || "-"}</td>
+                        <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{dante.order || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-600 max-w-[160px] truncate">{dante.item || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-600 max-w-[150px] truncate">{dante.reason || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{dante.deptFault || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-900 font-bold whitespace-nowrap">{dante.marketValue}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <BrandPip brand={r.brand} />
+                            <span className="text-gray-700">{dante.channelPlatform || replacementBrandLabel(r.brand) || "-"}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-500 max-w-[180px] truncate">{dante.notes || "-"}</td>
+                        <td className="px-3 py-2.5 text-gray-400 max-w-[120px] truncate">{dante.evidence || "-"}</td>
                         <td className="px-3 py-2.5">
                           {r.status
                             ? <Badge label={r.status} className={r.status === "Reshipped" || r.status === "Resolved" ? "bg-gray-100 text-gray-600 border-gray-200" : r.status === "Open" ? "bg-slate-50 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
@@ -3864,7 +3973,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                 );
               })}
               {displayRows.length === 0 && (
-                <tr><td colSpan={12} className="text-center py-8 text-gray-300">
+                <tr><td colSpan={11} className="text-center py-8 text-gray-300">
                   {activeFilter === "All" ? "No replacement cases logged" : `No cases match "${activeFilter}"`}
                 </td></tr>
               )}
