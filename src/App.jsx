@@ -1501,17 +1501,19 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [collapsedDrafts, setCollapsedDrafts] = useState({});
   const [expandedMessages, setExpandedMessages] = useState({});
   const emptyManualMessageForm = {
-    platform: "TikTok DM",
-    brand: "",
+    brand: "Vaulted Rarities",
+    channel: "Manual",
+    messageType: "Customer Support",
     customerName: "",
     sender: "",
     subject: "",
     body: "",
     priority: "Medium",
-    notes: "",
   };
   const [manualMessageOpen, setManualMessageOpen] = useState(false);
   const [manualMessageSaving, setManualMessageSaving] = useState(false);
+  const [manualMessageError, setManualMessageError] = useState("");
+  const [manualMessageSuccess, setManualMessageSuccess] = useState("");
   const [manualMessageForm, setManualMessageForm] = useState(emptyManualMessageForm);
 
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
@@ -1562,51 +1564,54 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
   const updateManualMessageForm = (field, value) => {
     setManualMessageForm(prev => ({ ...prev, [field]: value }));
+    setManualMessageError("");
+    setManualMessageSuccess("");
   };
 
   const resetManualMessageForm = () => {
     setManualMessageForm(emptyManualMessageForm);
+    setManualMessageError("");
   };
 
   // ── handlers ──────────────────────────────────────────────────────────────────
   const handleManualMessageSubmit = async () => {
-    const platform = manualMessageForm.platform.trim();
     const brand = manualMessageForm.brand.trim();
+    const channel = manualMessageForm.channel.trim();
+    const messageType = manualMessageForm.messageType.trim();
     const subject = manualMessageForm.subject.trim();
     const body = manualMessageForm.body.trim();
     const priority = manualMessageForm.priority.trim();
-    const notes = manualMessageForm.notes.trim();
 
-    if (!platform || !brand || !subject || !body || !priority) {
-      alert("Platform, brand, subject, message body, and priority are required.");
+    setManualMessageError("");
+    setManualMessageSuccess("");
+
+    if (!brand || !channel || !subject || !body) {
+      setManualMessageError("Brand, channel, subject, and message body are required.");
       return;
     }
     if (!supabase) {
-      alert("Manual message could not be saved because Supabase is unavailable.");
+      setManualMessageError("Manual message could not be saved because Supabase is unavailable.");
       return;
     }
 
     const timestamp = nowISO();
     const payload = {
-      external_id: `manual-${Date.now()}-${uid()}`,
-      source: "manual",
-      channel: platform,
-      label: "Manual",
-      status: "Needs Reply",
-      triage_status: "Untriaged",
-      priority,
+      external_id: `manual:${Date.now()}`,
       brand,
-      subject,
-      message_body: notes ? `${body}\n\nInternal notes:\n${notes}` : body,
+      source: "Manual",
+      channel,
+      label: "Manual Entry",
       sender_name: manualMessageForm.customerName.trim() || null,
       sender_email: manualMessageForm.sender.trim() || null,
-      received_at: timestamp,
-      created_at: timestamp,
-      updated_at: timestamp,
+      subject,
+      message_body: body,
+      priority,
+      status: "Needs Reply",
+      email_received_at: timestamp,
+      message_type: messageType,
     };
 
     setManualMessageSaving(true);
-    let data = null;
     try {
       const result = await supabase
         .from("inbound_messages")
@@ -1614,25 +1619,20 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         .select("*")
         .single();
       if (result.error) {
-        alert(`Manual message save failed: ${result.error.message}`);
+        setManualMessageError(`Manual message save failed: ${result.error.message}`);
         setManualMessageSaving(false);
         return;
       }
-      data = result.data;
+      resetManualMessageForm();
+      setManualMessageOpen(false);
+      setManualMessageSuccess("Manual message added.");
+      await onRefresh();
     } catch (err) {
-      alert(`Manual message save failed: ${err?.message || "Unknown error"}`);
+      setManualMessageError(`Manual message save failed: ${err?.message || "Unknown error"}`);
       setManualMessageSaving(false);
       return;
     }
     setManualMessageSaving(false);
-    if (!data) {
-      alert("Manual message save failed: no row was returned.");
-      return;
-    }
-
-    setInboundMessages(prev => [data, ...prev]);
-    resetManualMessageForm();
-    setManualMessageOpen(false);
   };
 
   const handleArchive = async (id) => {
@@ -2004,7 +2004,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {/* Manual Message */}
           <button
-            onClick={() => setManualMessageOpen(true)}
+            onClick={() => { setManualMessageError(""); setManualMessageOpen(true); }}
             disabled={queueRunning || inboundLoading}
             className="inline-flex flex-1 items-center justify-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap sm:flex-none"
           >
@@ -2051,16 +2051,22 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         </div>
       </div>
 
+      {manualMessageSuccess && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700">
+          {manualMessageSuccess}
+        </div>
+      )}
+
       {manualMessageOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-6">
           <div className="w-full max-w-2xl rounded-lg border border-gray-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <div>
                 <p className="text-sm font-bold text-gray-900">Manual Message</p>
-                <p className="text-[11px] text-gray-400">Log a TikTok DM, Instagram DM, or other manual inquiry.</p>
+                <p className="text-[11px] text-gray-400">Create an inbound message card manually.</p>
               </div>
               <button
-                onClick={() => setManualMessageOpen(false)}
+                onClick={() => { setManualMessageOpen(false); setManualMessageError(""); }}
                 disabled={manualMessageSaving}
                 className="text-sm font-semibold text-gray-400 transition-colors hover:text-gray-700 disabled:opacity-50"
               >
@@ -2070,43 +2076,47 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             <div className="max-h-[75vh] overflow-y-auto p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="space-y-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Platform</span>
-                  <Sel value={manualMessageForm.platform} onChange={value => updateManualMessageForm("platform", value)} options={["TikTok DM", "Instagram DM", "Other"]} placeholder="" />
-                </label>
-                <label className="space-y-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Brand</span>
-                  <Sel value={manualMessageForm.brand} onChange={value => updateManualMessageForm("brand", value)} options={BRANDS} placeholder="Select brand" />
+                  <Sel value={manualMessageForm.brand} onChange={value => updateManualMessageForm("brand", value)} options={["Vaulted Rarities", "CardKing47", "PokeSpins", "PokieMart", "Unassigned"]} placeholder="" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Customer name</span>
-                  <Inp value={manualMessageForm.customerName} onChange={value => updateManualMessageForm("customerName", value)} placeholder="Customer name" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Channel</span>
+                  <Sel value={manualMessageForm.channel} onChange={value => updateManualMessageForm("channel", value)} options={["Manual", "TikTok Shop Chat", "Refund / Return", "Outlook", "Loox / Reviews", "Replacement Issue", "Shipping Issue"]} placeholder="" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Customer handle or email</span>
-                  <Inp value={manualMessageForm.sender} onChange={value => updateManualMessageForm("sender", value)} placeholder="@handle or email" />
-                </label>
-                <label className="space-y-1 sm:col-span-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Subject / short title</span>
-                  <Inp value={manualMessageForm.subject} onChange={value => updateManualMessageForm("subject", value)} placeholder="Short title" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Message Type</span>
+                  <Sel value={manualMessageForm.messageType} onChange={value => updateManualMessageForm("messageType", value)} options={["Customer Support", "TikTok Shop Chat", "TikTok Refund", "Replacement", "Shipping Issue", "Review Reply", "Other"]} placeholder="" />
                 </label>
                 <label className="space-y-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Priority</span>
                   <Sel value={manualMessageForm.priority} onChange={value => updateManualMessageForm("priority", value)} options={["Low", "Medium", "High"]} placeholder="" />
                 </label>
-                <div className="hidden sm:block" />
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Customer Name</span>
+                  <Inp value={manualMessageForm.customerName} onChange={value => updateManualMessageForm("customerName", value)} placeholder="Customer name" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Customer Email or Handle</span>
+                  <Inp value={manualMessageForm.sender} onChange={value => updateManualMessageForm("sender", value)} placeholder="@handle or email" />
+                </label>
                 <label className="space-y-1 sm:col-span-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Message body</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Subject</span>
+                  <Inp value={manualMessageForm.subject} onChange={value => updateManualMessageForm("subject", value)} placeholder="Short title" />
+                </label>
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Message Body</span>
                   <Txt value={manualMessageForm.body} onChange={value => updateManualMessageForm("body", value)} placeholder="Paste or type the customer message..." rows={5} />
                 </label>
-                <label className="space-y-1 sm:col-span-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Optional notes</span>
-                  <Txt value={manualMessageForm.notes} onChange={value => updateManualMessageForm("notes", value)} placeholder="Internal notes, context, or follow-up details..." rows={3} />
-                </label>
               </div>
+              {manualMessageError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                  {manualMessageError}
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 px-4 py-3">
               <button
-                onClick={() => setManualMessageOpen(false)}
+                onClick={() => { setManualMessageOpen(false); setManualMessageError(""); }}
                 disabled={manualMessageSaving}
                 className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
               >
