@@ -1683,6 +1683,30 @@ const buildLocalAssistantAnalysis = (message) => {
   };
 };
 
+const validateAssistantChoice = (value, allowed, fallback) =>
+  allowed.includes(value) ? value : fallback;
+
+const normalizeAssistantStringArray = (value, fallback = []) => {
+  if (!Array.isArray(value)) return fallback;
+  const cleaned = value.map(item => String(item || "").trim()).filter(Boolean);
+  return cleaned.length ? cleaned : fallback;
+};
+
+const sanitizeAssistantAnalysis = (message, data) => {
+  const fallback = buildLocalAssistantAnalysis(message);
+  const source = data && typeof data === "object" ? data : {};
+  return {
+    situation: String(source.situation || fallback.situation),
+    recommendedNextStep: String(source.recommendedNextStep || fallback.recommendedNextStep),
+    missingInfo: normalizeAssistantStringArray(source.missingInfo, fallback.missingInfo),
+    draftReply: String(source.draftReply || fallback.draftReply),
+    suggestedPriority: validateAssistantChoice(source.suggestedPriority, ["Low", "Medium", "High"], fallback.suggestedPriority),
+    suggestedStatus: String(source.suggestedStatus || fallback.suggestedStatus),
+    confidence: validateAssistantChoice(source.confidence, ["Low", "Medium", "High"], fallback.confidence),
+    reasoningTags: normalizeAssistantStringArray(source.reasoningTags, fallback.reasoningTags),
+  };
+};
+
 const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -1705,6 +1729,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [manualMessageSuccess, setManualMessageSuccess] = useState("");
   const [manualMessageForm, setManualMessageForm] = useState(emptyManualMessageForm);
   const [assistantMessageId, setAssistantMessageId] = useState(null);
+  const [assistantResults, setAssistantResults] = useState({});
+  const [assistantLoadingId, setAssistantLoadingId] = useState(null);
   const [copiedAssistantDraftId, setCopiedAssistantDraftId] = useState(null);
 
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
@@ -1754,9 +1780,60 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     setExpandedMessages(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleAskAssistant = (id) => {
-    setAssistantMessageId(prev => prev === id ? null : id);
+  const handleAskAssistant = async (msg) => {
+    if (assistantLoadingId === msg.id) return;
+    if (assistantMessageId === msg.id && assistantResults[msg.id]) {
+      setAssistantMessageId(null);
+      setCopiedAssistantDraftId(null);
+      return;
+    }
+
+    setAssistantMessageId(msg.id);
     setCopiedAssistantDraftId(null);
+    setAssistantLoadingId(msg.id);
+    setAssistantResults(prev => ({ ...prev, [msg.id]: null }));
+
+    const fallback = sanitizeAssistantAnalysis(msg, buildLocalAssistantAnalysis(msg));
+
+    if (!supabase?.functions?.invoke) {
+      setAssistantResults(prev => ({
+        ...prev,
+        [msg.id]: {
+          analysis: fallback,
+          source: "fallback",
+          error: "AI assistant unavailable. Showing local fallback.",
+        },
+      }));
+      setAssistantLoadingId(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-message-assistant", {
+        body: { message: msg },
+      });
+      if (error) throw error;
+      setAssistantResults(prev => ({
+        ...prev,
+        [msg.id]: {
+          analysis: sanitizeAssistantAnalysis(msg, data),
+          source: "ai",
+          error: "",
+        },
+      }));
+    } catch (err) {
+      console.warn("AI assistant unavailable. Showing local fallback.", err?.message || err);
+      setAssistantResults(prev => ({
+        ...prev,
+        [msg.id]: {
+          analysis: fallback,
+          source: "fallback",
+          error: "AI assistant unavailable. Showing local fallback.",
+        },
+      }));
+    } finally {
+      setAssistantLoadingId(null);
+    }
   };
 
   const handleCopyAssistantDraft = async (msg, draftReply) => {
@@ -2474,7 +2551,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const showSubjectLine = msg.subject && msg.subject !== cardTitle;
         const hasReplyText = Boolean(msg.approved_reply || msg.ai_draft);
         const isAssistantOpen = assistantMessageId === msg.id;
-        const assistantAnalysis = isAssistantOpen ? buildLocalAssistantAnalysis(msg) : null;
+        const assistantState = isAssistantOpen ? assistantResults[msg.id] : null;
+        const assistantAnalysis = assistantState?.analysis || null;
+        const isAssistantLoading = assistantLoadingId === msg.id;
 
         return (
           <Card key={msg.id} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
@@ -2591,72 +2670,94 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             )}
 
             {/* ── AI Draft box ── */}
-            {isAssistantOpen && assistantAnalysis && (
+            {isAssistantOpen && (
               <div className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-xs font-bold text-gray-900">AI Assistant Helper</p>
-                    <p className="mt-0.5 text-[10px] font-medium text-gray-400">Rule-based preview</p>
+                    <p className="mt-0.5 text-[10px] font-medium text-gray-400">
+                      {isAssistantLoading ? "Assistant is reviewing..." : assistantState?.source === "ai" ? "AI generated" : "Rule-based preview"}
+                    </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge label={assistantAnalysis.suggestedPriority} className={INBOX_PRIORITY_STYLE[assistantAnalysis.suggestedPriority] || INBOX_PRIORITY_STYLE.Medium} />
-                    <Badge label={assistantAnalysis.confidence} className={assistantAnalysis.confidence === "High" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-600 border-gray-200"} />
-                  </div>
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Situation</p>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-700">{assistantAnalysis.situation}</p>
-                  </div>
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Recommended Next Step</p>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-700">{assistantAnalysis.recommendedNextStep}</p>
-                  </div>
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Missing Info</p>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {assistantAnalysis.missingInfo.map(item => (
-                        <span key={item} className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">{item}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Suggested Priority</p>
-                    <div className="mt-1">
+                  {assistantAnalysis && (
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <Badge label={assistantAnalysis.suggestedPriority} className={INBOX_PRIORITY_STYLE[assistantAnalysis.suggestedPriority] || INBOX_PRIORITY_STYLE.Medium} />
+                      <Badge label={assistantAnalysis.confidence} className={assistantAnalysis.confidence === "High" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-600 border-gray-200"} />
                     </div>
+                  )}
+                </div>
+                {isAssistantLoading && !assistantAnalysis ? (
+                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-3 text-xs font-medium text-gray-500">
+                    Assistant is reviewing...
                   </div>
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Suggested Status</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <Badge label={assistantAnalysis.suggestedStatus} className="bg-gray-100 text-gray-700 border-gray-200" />
-                      <span className="text-[10px] text-gray-400">Read-only suggestion</span>
+                ) : assistantAnalysis && (
+                  <>
+                    {assistantState?.error && (
+                      <div className="mb-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500">
+                        {assistantState.error}
+                      </div>
+                    )}
+                    {assistantState?.source === "fallback" && (
+                      <div className="mb-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-medium text-gray-400">
+                        Using local fallback.
+                      </div>
+                    )}
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Situation</p>
+                        <p className="mt-1 text-xs leading-relaxed text-gray-700">{assistantAnalysis.situation}</p>
+                      </div>
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Recommended Next Step</p>
+                        <p className="mt-1 text-xs leading-relaxed text-gray-700">{assistantAnalysis.recommendedNextStep}</p>
+                      </div>
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Missing Info</p>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {assistantAnalysis.missingInfo.map(item => (
+                            <span key={item} className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">{item}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Suggested Priority</p>
+                        <div className="mt-1">
+                          <Badge label={assistantAnalysis.suggestedPriority} className={INBOX_PRIORITY_STYLE[assistantAnalysis.suggestedPriority] || INBOX_PRIORITY_STYLE.Medium} />
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Suggested Status</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <Badge label={assistantAnalysis.suggestedStatus} className="bg-gray-100 text-gray-700 border-gray-200" />
+                          <span className="text-[10px] text-gray-400">Read-only suggestion</span>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Confidence</p>
+                        <p className="mt-1 text-xs font-semibold text-gray-700">{assistantAnalysis.confidence}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Confidence</p>
-                    <p className="mt-1 text-xs font-semibold text-gray-700">{assistantAnalysis.confidence}</p>
-                  </div>
-                </div>
-                <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Draft Reply</p>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyAssistantDraft(msg, assistantAnalysis.draftReply)}
-                      className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
-                    >
-                      {copiedAssistantDraftId === msg.id ? "Copied draft." : copiedAssistantDraftId === `failed-${msg.id}` ? "Copy failed. Try again." : "Copy Draft"}
-                    </button>
-                  </div>
-                  <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-800">{assistantAnalysis.draftReply}</p>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-2">
-                  {assistantAnalysis.reasoningTags.map(tag => (
-                    <span key={tag} className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-400">{tag.replace(/_/g, " ")}</span>
-                  ))}
-                  <span className="ml-auto text-[10px] text-gray-400">Backend AI connection can be added next.</span>
-                </div>
+                    <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Draft Reply</p>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyAssistantDraft(msg, assistantAnalysis.draftReply)}
+                          className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          {copiedAssistantDraftId === msg.id ? "Copied draft." : copiedAssistantDraftId === `failed-${msg.id}` ? "Copy failed. Try again." : "Copy Draft"}
+                        </button>
+                      </div>
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-800">{assistantAnalysis.draftReply}</p>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-2">
+                      {assistantAnalysis.reasoningTags.map(tag => (
+                        <span key={tag} className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-400">{tag.replace(/_/g, " ")}</span>
+                      ))}
+                      <span className="ml-auto text-[10px] text-gray-400">Backend AI connection can be added next.</span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -2731,9 +2832,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isDraftBusy ? "Drafting..." : "Generate Draft"}
               </button>
-              <button disabled={isBusy} onClick={() => handleAskAssistant(msg.id)}
+              <button disabled={isBusy || isAssistantLoading} onClick={() => handleAskAssistant(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isAssistantOpen ? "Hide Assistant" : "Ask Assistant"}
+                {isAssistantLoading ? "Reviewing..." : isAssistantOpen ? "Hide Assistant" : "Ask Assistant"}
               </button>
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
