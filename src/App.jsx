@@ -2931,6 +2931,70 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
 };
 
 // ─── DASHBOARD VIEW ───────────────────────────────────────────────────────────
+const CLOSED_INBOUND_STATUSES = ["Closed", "Archived", "Resolved"];
+const OPEN_INBOUND_STATUSES = ["Needs Reply", "In Progress", "Draft Ready", "Ticket Created", "Manual Review", ""];
+const getMessageSortTimestamp = (message) => new Date(message?.email_received_at || message?.created_at || 0).getTime() || 0;
+const getOpenMessages = (messages) => {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  return safeMessages.filter(message => {
+    if (message?.archived_at) return false;
+    const status = String(message?.status || "").trim();
+    if (CLOSED_INBOUND_STATUSES.includes(status)) return false;
+    return OPEN_INBOUND_STATUSES.includes(status) || !status;
+  });
+};
+const getNeedsReplyMessages = (messages) => getOpenMessages(messages).filter(message => {
+  const status = String(message?.status || "").trim();
+  return status === "Needs Reply" || !status;
+});
+const getRefundMessages = (messages) => getOpenMessages(messages).filter(message =>
+  isTikTokRefund(message) ||
+  String(message?.message_type || "").toLowerCase().includes("refund") ||
+  String(message?.channel || "").toLowerCase().includes("refund") ||
+  String(message?.channel || "").toLowerCase().includes("return")
+);
+const getHighPriorityMessages = (messages) => getOpenMessages(messages).filter(message =>
+  message?.priority === "High" || message?.risk_level === "High" || message?.triage_status === "High Priority"
+);
+const getOverdueMessages = (messages) => {
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  return getOpenMessages(messages).filter(message => {
+    const ts = getMessageSortTimestamp(message);
+    return ts > 0 && ts < dayAgo;
+  });
+};
+const getBrandCounts = (messages) => {
+  const brands = ["Vaulted Rarities", "CardKing47", "PokeSpins", "PokieMart"];
+  const openMessages = getOpenMessages(messages);
+  const refundMessages = getRefundMessages(messages);
+  return brands.map(brand => ({
+    brand,
+    open: openMessages.filter(message => getDisplayBrand(message) === brand).length,
+    refunds: refundMessages.filter(message => getDisplayBrand(message) === brand).length,
+  }));
+};
+const getTopBrand = (messages) => getBrandCounts(messages)
+  .reduce((top, row) => row.open > top.open ? row : top, { brand: "Unassigned", open: 0, refunds: 0 });
+const buildOpsAgentBrief = (messages) => {
+  const openMessages = getOpenMessages(messages);
+  const refundMessages = getRefundMessages(messages);
+  const highPriorityMessages = getHighPriorityMessages(messages);
+  const overdueMessages = getOverdueMessages(messages);
+  const topBrand = getTopBrand(messages);
+  if (refundMessages.length > 0) return `Refunds need attention first. I found ${refundMessages.length} refund or return message${refundMessages.length !== 1 ? "s" : ""} waiting${topBrand.open > 0 ? `, with ${topBrand.brand} carrying most of the open queue` : ""}.`;
+  if (highPriorityMessages.length > 0) return `Start with high priority messages. There ${highPriorityMessages.length === 1 ? "is" : "are"} ${highPriorityMessages.length} urgent item${highPriorityMessages.length !== 1 ? "s" : ""} that should be reviewed before normal support.`;
+  if (overdueMessages.length > 0) return `You have older messages starting to sit too long. I found ${overdueMessages.length} open message${overdueMessages.length !== 1 ? "s" : ""} older than 24 hours.`;
+  if (openMessages.length > 0) return `The queue is active but manageable. I found ${openMessages.length} open message${openMessages.length !== 1 ? "s" : ""} waiting for a clean pass.`;
+  return "The inbox looks clear right now. No major support issues need immediate action.";
+};
+const buildRecommendedNextAction = (messages) => {
+  if (getHighPriorityMessages(messages).length > 0) return { action: "Review high priority messages first.", reason: "High priority items are the most likely to need a fast human decision." };
+  if (getRefundMessages(messages).length > 0) return { action: "Review refund and return cases first.", reason: "Refunds usually need faster decisions and should not mix with normal chat." };
+  if (getOverdueMessages(messages).length > 0) return { action: "Clear overdue messages before they get buried.", reason: "Older open messages are easier to miss once newer intake starts moving." };
+  if (getNeedsReplyMessages(messages).length > 0) return { action: "Work the newest Needs Reply messages.", reason: "The queue is open, but there are no urgent refund or high priority signals right now." };
+  return { action: "No urgent action. Keep monitoring.", reason: "The open queue is clear enough to stay in watch mode." };
+};
+
 const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSets, raiseScores, inboundMessages, opsActions, setActiveView }) => {
   const [showForm, setShowForm] = useState(false);
   const emptyF = { brand: "", channel: "", issueType: "", priority: "Medium", slaRisk: "No", status: "New", notes: "", nextAction: "" };
@@ -2957,10 +3021,10 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const safeInbound = safeInboundMessages;
 
   // Primary counts driven by Command Inbox data
-  const openInboxMessages   = safeInbound.filter(m => !m.archived_at && m.status !== "Closed" && m.status !== "Done");
+  const openInboxMessages   = getOpenMessages(safeInbound);
   const replacementFollowUps = safeReplacements.filter(r => !r.archived_at && (r.followUp === "Yes" || r.follow_up === "Yes"));
-  const msgsNeedingReply    = safeInbound.filter(m => (m.status === "Needs Reply" || !m.status) && !m.archived_at).length;
-  const refundItems         = safeInbound.filter(m => isTikTokRefund(m) && !m.archived_at).length;
+  const msgsNeedingReply    = getNeedsReplyMessages(safeInbound).length;
+  const refundItems         = getRefundMessages(safeInbound).length;
   const replacementFU       = replacementFollowUps.length;
   const actionRequiredCount = openInboxMessages.length + replacementFollowUps.length;
   const actionRequired      = actionRequiredCount; // alias used by metric card
@@ -2968,23 +3032,28 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const totalLoss   = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || r.market_value || 0), 0);
   const studioReady = safeStudios.filter(s => s.streamReady).length;
   const studioScore = safeStudios.length ? Math.round((studioReady / safeStudios.length) * 100) : 0;
-
-  // Morning Brief - deterministic, no AI
-  const morningBrief = (() => {
-    const firstName = "Jonny";
-    const allClear  = msgsNeedingReply === 0 && refundItems === 0 && replacementFU === 0;
-    if (allClear) {
-      return `Good morning ${firstName}! The inbox is clear right now. Check surprise sets, inventory readiness, and any manual DMs before the day starts.`;
-    }
-    const parts = [];
-    if (msgsNeedingReply > 0) parts.push(`${msgsNeedingReply} message${msgsNeedingReply > 1 ? "s" : ""} needing reply`);
-    if (refundItems > 0)      parts.push(`${refundItems} refund or return item${refundItems > 1 ? "s" : ""}`);
-    if (replacementFU > 0)   parts.push(`${replacementFU} replacement${replacementFU > 1 ? "s" : ""} needing follow-up`);
-    const list = parts.length === 1 ? parts[0]
-      : parts.length === 2 ? `${parts[0]} and ${parts[1]}`
-      : `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
-    return `Good morning ${firstName}! You have ${list}. Start with refunds or returns first, then clear the oldest inbox items.`;
-  })();
+  const highPriorityMessages = getHighPriorityMessages(safeInbound);
+  const overdueMessages = getOverdueMessages(safeInbound);
+  const brandCounts = getBrandCounts(safeInbound);
+  const topBrand = getTopBrand(safeInbound);
+  const recommendedNextAction = buildRecommendedNextAction(safeInbound);
+  const opsAgentBrief = buildOpsAgentBrief(safeInbound);
+  const manualEntries = openInboxMessages.filter(m => String(m.source || "").toLowerCase() === "manual").length;
+  const inboundTimes = safeInbound.map(m => getMessageSortTimestamp(m)).filter(Boolean);
+  const newestInboundTime = inboundTimes.length ? Math.max(...inboundTimes) : 0;
+  const lastLoadedLabel = newestInboundTime ? fmtPacific(new Date(newestInboundTime).toISOString()) : "No inbox data loaded";
+  const noticedRows = [
+    topBrand.open > 0 ? `${topBrand.brand} has the most open messages.` : "No brand is carrying an open support spike right now.",
+    refundItems > 0 ? "Refunds are active and should stay separate from normal chat." : "No refund or return messages are currently waiting.",
+    overdueMessages.length > 0 ? `${overdueMessages.length} message${overdueMessages.length !== 1 ? "s are" : " is"} older than 24 hours.` : "No open messages are older than 24 hours.",
+  ];
+  const agentWatchlist = [
+    refundItems > 0 ? { label: "Refund / Return queue", detail: `${refundItems} open` } : null,
+    overdueMessages.length > 0 ? { label: "Oldest open messages", detail: `${overdueMessages.length} over 24 hours` } : null,
+    topBrand.open > 0 ? { label: "Highest volume brand", detail: `${topBrand.brand}: ${topBrand.open} open` } : null,
+    highPriorityMessages.length > 0 ? { label: "High priority messages", detail: `${highPriorityMessages.length} waiting` } : null,
+    manualEntries > 0 ? { label: "Manual entries", detail: `${manualEntries} open` } : null,
+  ].filter(Boolean).slice(0, 3);
 
   const SET_STEPS = ["warehouseListReceived", "convertedSetSheet", "importedDesktop", "quantitiesVerified", "readyForLive"];
   const SET_LABELS = { warehouseListReceived: "Warehouse List", convertedSetSheet: "SetSheet", importedDesktop: "Imported", quantitiesVerified: "Verified", readyForLive: "Ready" };
@@ -3016,11 +3085,81 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         </div>
       </div>
 
-      {/* Morning Brief */}
-      <Card className="p-4 border-l-4 border-l-slate-400">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Morning Brief</p>
-        <p className="text-sm text-gray-800 leading-relaxed">{morningBrief}</p>
+      {/* Ops Agent Assistant */}
+      <Card className="p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-lg font-bold text-gray-900">Ops Agent Assistant</p>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Active now</span>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-gray-900">Hello Jonny. I checked the queue.</p>
+            <p className="mt-1 text-sm leading-relaxed text-gray-700">{opsAgentBrief}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setActiveView("inbox")} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">View Refunds</button>
+            <button onClick={() => setActiveView("inbox")} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">View High Priority</button>
+            <button onClick={() => setActiveView("inbox")} className="rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">Open Command Inbox</button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_0.9fr]">
+          <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">What I noticed</p>
+            <div className="mt-2 space-y-2">
+              {noticedRows.map(row => (
+                <p key={row} className="text-xs leading-relaxed text-gray-700">{row}</p>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-100 bg-white p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Recommended Next Action</p>
+            <p className="mt-2 text-sm font-bold text-gray-900">{recommendedNextAction.action}</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500">Reason: {recommendedNextAction.reason}</p>
+          </div>
+          <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Agent Watchlist</p>
+            <div className="mt-2 space-y-2">
+              {(agentWatchlist.length ? agentWatchlist : [{ label: "Inbox watch mode", detail: "No urgent queue pressure" }]).map(item => (
+                <div key={item.label} className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold text-gray-700">{item.label}</span>
+                  <span className="text-[11px] text-gray-400">{item.detail}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.7fr]">
+        <Card className="p-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <p className="text-sm font-bold text-gray-900">Brand Snapshot</p>
+            <span className="text-[10px] font-semibold text-gray-400">Open support load</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-3 md:grid-cols-4">
+            {brandCounts.map(row => (
+              <div key={row.brand} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <BrandPip brand={row.brand} />
+                  <p className="truncate text-xs font-semibold text-gray-800">{row.brand}</p>
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{row.open}</p>
+                <p className="text-[10px] text-gray-400">{row.refunds} refund or return</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm font-bold text-gray-900">System Status</p>
+          <div className="mt-3 space-y-2 text-xs text-gray-600">
+            <p>Inbox data connected</p>
+            <p>Manual intake available</p>
+            <p>Scheduled intake managed in Make</p>
+            <p className="text-gray-400">Last loaded: {lastLoadedLabel}</p>
+          </div>
+        </Card>
+      </div>
 
       {/* Today's Ops Brief */}
       <DailyOpsBrief
@@ -3034,12 +3173,12 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-4 border-l-4 border-l-slate-400">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Action Required</p>
-          <p className={`text-4xl font-bold mt-1 ${actionRequired > 0 ? "text-red-600" : "text-gray-900"}`}>{actionRequired}</p>
+          <p className="text-4xl font-bold mt-1 text-gray-900">{actionRequired}</p>
           <p className="text-[10px] text-gray-400 mt-0.5">inbox + replacements</p>
         </Card>
         <Card className="p-4">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Refunds / Returns</p>
-          <p className={`text-4xl font-bold mt-1 ${refundItems > 0 ? "text-orange-500" : "text-gray-900"}`}>{refundItems}</p>
+          <p className={`text-4xl font-bold mt-1 ${refundItems > 0 ? "text-black" : "text-gray-900"}`}>{refundItems}</p>
         </Card>
         <Card className="p-4">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Est. Loss Tracked</p>
@@ -3048,11 +3187,11 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         <Card className="p-4">
           <div className="flex items-center gap-1.5 mb-1">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Studio Readiness</p>
-            <span className={`w-2 h-2 rounded-full ${studioScore >= 75 ? "bg-green-500" : "bg-amber-400"}`} />
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
           </div>
-          <p className={`text-4xl font-bold ${studioScore >= 75 ? "text-gray-900" : "text-amber-600"}`}>{studioScore}%</p>
+          <p className="text-4xl font-bold text-gray-900">{studioScore}%</p>
           <p className="text-xs text-gray-400 mt-0.5">Stream-Ready</p>
-          <div className="mt-2"><ProgressBar pct={studioScore} color={studioScore >= 75 ? "bg-green-500" : "bg-amber-400"} /></div>
+          <div className="mt-2"><ProgressBar pct={studioScore} color="bg-slate-500" /></div>
         </Card>
       </div>
 
