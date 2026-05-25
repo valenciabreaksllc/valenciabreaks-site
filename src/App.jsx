@@ -993,6 +993,9 @@ const getAutopilotDatesForRange = (range) => {
   return [today];
 };
 
+const AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP = 250;
+const AUTOPILOT_HARD_PRODUCT_ROW_CAP = 500;
+
 const getAutopilotSelectedBrands = (options = {}) => {
   const selected = Array.isArray(options.selectedChannels) ? options.selectedChannels : [];
   const brands = selected
@@ -1007,15 +1010,24 @@ const getAutopilotSelectedBrands = (options = {}) => {
 const getAutopilotSetupHeader = (line) => {
   const clean = normalizeSetSheetProductName(line);
   if (!clean) return null;
-  const dateFirst = clean.match(/^\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*(?:\(([A-Za-z][A-Za-z\s.'-]{1,24})\)|([A-Za-z][A-Za-z\s.'-]{1,24}))?(?:\s*\+.*)?$/);
+  const dateFirst = clean.match(/^\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*(?:\(([A-Za-z][A-Za-z\s.'-]{1,24})\)|([A-Za-z][A-Za-z\s.'-]{1,24}))?(?:\s+(?:BUILT|DONE|NOT\s*DONE))?(?:\s*\+.*)?$/i);
   if (dateFirst && (dateFirst[4] || dateFirst[5])) {
     const isoDate = parseWarehouseSheetDate(dateFirst[1], dateFirst[2], dateFirst[3]);
     if (isoDate) return { streamDate: isoDate, streamer: titleCaseSurpriseSetName(dateFirst[4] || dateFirst[5]) };
   }
-  const streamerFirst = clean.match(/^\s*([A-Za-z][A-Za-z\s.'-]{1,24})\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?:\s*\+.*)?$/);
+  const streamerFirst = clean.match(/^\s*([A-Za-z][A-Za-z\s.'-]{1,24})\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?:\s+(?:BUILT|DONE|NOT\s*DONE))?(?:\s*\+.*)?$/i);
   if (streamerFirst) {
     const isoDate = parseWarehouseSheetDate(streamerFirst[2], streamerFirst[3], streamerFirst[4]);
     if (isoDate) return { streamDate: isoDate, streamer: titleCaseSurpriseSetName(streamerFirst[1]) };
+  }
+  return null;
+};
+
+const detectAutopilotDateStreamerFromText = (text) => {
+  const lines = String(text || "").split(/\r?\n/).map(line => normalizeSetSheetProductName(line)).filter(Boolean);
+  for (const line of lines) {
+    const header = getAutopilotSetupHeader(line);
+    if (header) return header;
   }
   return null;
 };
@@ -1067,15 +1079,84 @@ const isAutopilotIgnoredProductLine = (line) => {
   if (/^\$?\d+(?:\.\d{1,2})?$/.test(clean)) return true;
   if (/^\d+(?:\t\d+)*$/.test(clean)) return true;
   if (/^(target|stretch|hard floor|total|subtotal|grand total)$/i.test(clean)) return true;
+  if (/\b(built|not\s*done|done)\b/i.test(clean) && clean.length < 36) return true;
+  if (/^(note|notes|setup|status|streamer|host|tab|sheet|channel|channel label|spreadsheet|group set)\b/i.test(clean)) return true;
   return false;
 };
 
-const extractProductLinesFromSheetBlock = (blockText) =>
-  String(blockText || "")
-    .split(/\r?\n/)
-    .filter(line => !isAutopilotIgnoredProductLine(line))
-    .map(line => pickWarehouseProductNameFromRow(line))
-    .filter(Boolean);
+const isAutopilotStopScanLine = (line) => {
+  const clean = normalizeSetSheetProductName(line);
+  if (!clean) return false;
+  if (getAutopilotSetupHeader(clean)) return true;
+  if (isWarehouseTotalLine(clean) || isWarehouseImageLogoLine(clean)) return true;
+  if (/\b(grand\s*total|subtotal|summary|recap|logo|image|notes?|built|not\s*done|done)\b/i.test(clean)) return true;
+  if (/^(channel|channel label|tab|spreadsheet|group set)\s*:/i.test(clean)) return true;
+  return false;
+};
+
+const hasAutopilotQuantityCell = (line) => {
+  const cells = String(line || "").split("\t").map(cell => normalizeSetSheetProductName(cell)).filter(Boolean);
+  return cells.length > 1 && cells.some(cell => /^\d{1,4}$/.test(cell)) && cells.some(cell => /[A-Za-z]/.test(cell));
+};
+
+const collectAutopilotProductRowsAboveSetup = (lines, setupLineIndex) => {
+  const products = [];
+  let blankRun = 0;
+  let sawProduct = false;
+  let quantityRows = 0;
+  let capped = false;
+
+  for (let index = setupLineIndex - 1; index >= 0; index -= 1) {
+    const line = lines[index] || "";
+    const clean = normalizeSetSheetProductName(line);
+    if (!clean) {
+      blankRun += 1;
+      if (sawProduct && blankRun > 3) break;
+      continue;
+    }
+    blankRun = 0;
+    if (isAutopilotStopScanLine(clean)) {
+      if (sawProduct) break;
+      continue;
+    }
+    if (isAutopilotIgnoredProductLine(clean)) continue;
+    const productName = pickWarehouseProductNameFromRow(clean);
+    if (!productName) continue;
+    products.push(productName);
+    sawProduct = true;
+    if (hasAutopilotQuantityCell(clean)) quantityRows += 1;
+    const cap = quantityRows >= 12 ? AUTOPILOT_HARD_PRODUCT_ROW_CAP : AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP;
+    if (products.length >= cap) {
+      capped = true;
+      break;
+    }
+  }
+
+  return { productLines: products.reverse(), capped };
+};
+
+const collectAutopilotProductRowsFromWholeBlock = (lines) => {
+  let capped = false;
+  const productLines = [];
+  for (const line of lines) {
+    if (isAutopilotIgnoredProductLine(line)) continue;
+    const productName = pickWarehouseProductNameFromRow(line);
+    if (!productName) continue;
+    productLines.push(productName);
+    if (productLines.length >= AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP) {
+      capped = true;
+      break;
+    }
+  }
+  return { productLines, capped };
+};
+
+const extractProductLinesFromSheetBlock = (blockText) => {
+  const lines = String(blockText || "").split(/\r?\n/);
+  const setupLineIndex = lines.findIndex(line => getAutopilotSetupHeader(line));
+  if (setupLineIndex > 0) return collectAutopilotProductRowsAboveSetup(lines, setupLineIndex);
+  return collectAutopilotProductRowsFromWholeBlock(lines);
+};
 
 const normalizeAutopilotSheetCell = (value) => String(value ?? "").trim();
 
@@ -1090,13 +1171,14 @@ const valuesToTabSeparatedText = (values = [], startCol = 0, endCol = Infinity) 
     .filter(line => normalizeSetSheetProductName(line))
     .join("\n");
 
-const addAutopilotChannelMetadataToBlock = (blockText, channel) => {
+const addAutopilotChannelMetadataToBlock = (blockText, channel, tabName = "") => {
   const lines = String(blockText || "").split(/\r?\n/);
   const headerIndex = lines.findIndex(line => getAutopilotSetupHeader(line));
-  if (headerIndex < 0) return blockText;
+  const fallbackHeader = detectAutopilotDateStreamerFromText(tabName);
   const cleanChannel = normalizeSetSheetProductName(channel).toUpperCase();
-  if (!["CK", "PS", "PM"].includes(cleanChannel)) return blockText;
-  return lines.map((line, index) => index === headerIndex ? `${line} + CHANNEL: ${cleanChannel}` : line).join("\n");
+  const channelSuffix = ["CK", "PS", "PM"].includes(cleanChannel) ? ` + CHANNEL: ${cleanChannel}` : "";
+  if (headerIndex < 0) return blockText;
+  return lines.map((line, index) => index === headerIndex ? `${line}${channelSuffix}${fallbackHeader ? ` + TAB: ${tabName}` : ""}` : line).join("\n");
 };
 
 const findAutopilotSetupColumns = (values = []) => {
@@ -1109,18 +1191,49 @@ const findAutopilotSetupColumns = (values = []) => {
   return Array.from(columns).sort((a, b) => a - b);
 };
 
-const buildAutopilotBlocksFromSheetTab = ({ channel, tabName, values }) => {
+const getAutopilotColumnGroupsForTab = (channel, values = []) => {
   const safeValues = Array.isArray(values) ? values : [];
   const setupColumns = findAutopilotSetupColumns(safeValues);
-  const columnGroups = setupColumns.length > 1
-    ? setupColumns.map((startCol, index) => ({ startCol, endCol: setupColumns[index + 1] ?? Infinity }))
-    : [{ startCol: 0, endCol: Infinity }];
+  if (setupColumns.length > 1) return setupColumns.map((startCol, index) => ({ startCol, endCol: setupColumns[index + 1] ?? Infinity }));
+  if (String(channel || "").toUpperCase() === "CK") return [{ startCol: 0, endCol: 4 }, { startCol: 4, endCol: 8 }];
+  return [{ startCol: 0, endCol: Infinity }];
+};
+
+const blockHasAutopilotSignal = (blockText, tabName = "") => {
+  const text = String(blockText || "");
+  if (detectSurpriseSetBlocks(text).length) return true;
+  return Boolean(detectAutopilotDateStreamerFromText(tabName) && /(target|hard\s*floor|stretch)/i.test(text));
+};
+
+const ensureAutopilotSetupLine = (blockText, tabName, channel) => {
+  if (detectSurpriseSetBlocks(blockText).length) return blockText;
+  const fallback = detectAutopilotDateStreamerFromText(tabName);
+  if (!fallback) return blockText;
+  const cleanChannel = normalizeSetSheetProductName(channel).toUpperCase();
+  const channelSuffix = ["CK", "PS", "PM"].includes(cleanChannel) ? ` + CHANNEL: ${cleanChannel}` : "";
+  const datePart = `${Number(fallback.streamDate.slice(5, 7))}/${Number(fallback.streamDate.slice(8, 10))}`;
+  return `${blockText}\n${datePart} (${fallback.streamer})${channelSuffix}`;
+};
+
+const buildAutopilotBlocksFromSheetTab = ({ channel, channelLabel, spreadsheetName, tabName, values }) => {
+  const safeValues = Array.isArray(values) ? values : [];
+  const columnGroups = getAutopilotColumnGroupsForTab(channel, safeValues);
 
   return columnGroups
     .map(({ startCol, endCol }, index) => {
       const blockText = valuesToTabSeparatedText(safeValues, startCol, endCol);
       if (!blockText) return "";
-      return addAutopilotChannelMetadataToBlock(blockText, channel);
+      if (!blockHasAutopilotSignal(blockText, tabName)) return "";
+      const withSetup = ensureAutopilotSetupLine(blockText, tabName, channel);
+      const withChannel = addAutopilotChannelMetadataToBlock(withSetup, channel, tabName);
+      const meta = [
+        `CHANNEL: ${channel}`,
+        channelLabel ? `CHANNEL LABEL: ${channelLabel}` : "",
+        tabName ? `TAB: ${tabName}` : "",
+        spreadsheetName ? `SPREADSHEET: ${spreadsheetName}` : "",
+        String(channel || "").toUpperCase() === "CK" ? `GROUP SET: ${index + 1}` : "",
+      ].filter(Boolean).join("\n");
+      return `${meta}\n${withChannel}`;
     })
     .filter(Boolean);
 };
@@ -1131,6 +1244,8 @@ const buildAutopilotBlocksFromSheetsImport = (payload = {}) => {
     (Array.isArray(channelData?.tabs) ? channelData.tabs : []).flatMap(tab =>
       buildAutopilotBlocksFromSheetTab({
         channel,
+        channelLabel: channelData?.label || "",
+        spreadsheetName: channelData?.spreadsheetName || "",
         tabName: tab?.tabName || channelData?.spreadsheetName || channel,
         values: tab?.values || [],
       })
@@ -1170,6 +1285,12 @@ const normalizeImportedSet = (block, fallbackOptions = {}) => {
       break;
     }
   }
+  if (!surpriseSetName) {
+    const tabLine = rawLines.find(line => /^TAB\s*:/i.test(line));
+    if (tabLine) {
+      surpriseSetName = normalizeSetSheetProductName(tabLine.replace(/^TAB\s*:\s*/i, "").replace(/\b(BUILT|NOT\s*DONE|DONE)\b/ig, ""));
+    }
+  }
 
   if (!detectedBrand) warnings.push("Channel not detected. Used selected channel.");
   if (!detectedShift && !fallbackShift) warnings.push("Shift not detected.");
@@ -1178,8 +1299,11 @@ const normalizeImportedSet = (block, fallbackOptions = {}) => {
   if (!streamer || !block?.header?.streamDate) warnings.push("Could not detect setup block.");
   if (!surpriseSetName) warnings.push("Surprise set name needs review.");
 
-  const productLines = extractProductLinesFromSheetBlock(block?.text).filter(line => line !== surpriseSetName);
+  const extractedProducts = extractProductLinesFromSheetBlock(block?.text);
+  const productLines = extractedProducts.productLines.filter(line => line !== surpriseSetName);
+  if (extractedProducts.capped) warnings.push("Product rows were capped. Review this set.");
   if (!productLines.length) warnings.push("No product rows found.");
+  if (productLines.length > AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP) warnings.push("High product count. Review before upload.");
 
   return {
     brand,
@@ -1205,6 +1329,7 @@ const buildImportedSetCard = (importedSet) => {
   const converted = rows.length > 0;
   const warnings = [...(importedSet.warnings || [])];
   if (!converted && !warnings.includes("No product rows found.")) warnings.push("No product rows found.");
+  if (summary.totalRows > AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP && !warnings.includes("High product count. Review before upload.")) warnings.push("High product count. Review before upload.");
   const normalized = normalizeSurpriseSetBoardEntry({
     ...importedSet,
     fileName: buildSurpriseSetFileName(importedSet),
@@ -1219,6 +1344,15 @@ const buildImportedSetCard = (importedSet) => {
     ...normalized,
     fileName: normalized.fileName || buildSurpriseSetFileName(normalized),
   };
+};
+
+const getAutopilotWarningChipLabel = (warning) => {
+  const text = String(warning || "");
+  if (/shift/i.test(text)) return "Shift review";
+  if (/target/i.test(text)) return "Missing target";
+  if (/cap|capped/i.test(text)) return "Product cap";
+  if (/product|count/i.test(text)) return "Review products";
+  return text;
 };
 
 const getAutopilotBoardMatchKey = (entry) => [
@@ -5981,16 +6115,18 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     const uniqueWarnings = Array.from(new Set(allWarnings));
     const shiftReviewCount = importedCards.filter(card => (card.warnings || []).some(warning => warning.includes("Shift not detected"))).length;
     const missingTargetCount = importedCards.filter(card => (card.warnings || []).some(warning => warning.includes("Target price missing"))).length;
+    const cappedCount = importedCards.filter(card => (card.warnings || []).some(warning => /cap|capped/i.test(warning))).length;
     const readyFiles = convertedFileEntries.map(entry => `${entry.brandCode || getSurpriseSetBrandCode(entry.brand)} ${entry.shift.toUpperCase()}`).filter(Boolean);
     const nextActivity = [
-      importMeta.tabCount ? `Imported ${importMeta.tabCount} tab${importMeta.tabCount === 1 ? "" : "s"}.` : "",
+      importMeta.tabCount ? `Imported ${importMeta.tabCount} sheet tab${importMeta.tabCount === 1 ? "" : "s"}.` : "",
       importMeta.sourceLabel ? `Source: ${importMeta.sourceLabel}.` : "",
       `Imported ${importedCards.length} surprise set${importedCards.length === 1 ? "" : "s"}.`,
-      `Created/updated ${importedCards.length} set card${importedCards.length === 1 ? "" : "s"}.`,
+      `Created or updated ${importedCards.length} set card${importedCards.length === 1 ? "" : "s"}.`,
       `Converted ${convertedFileEntries.length} file${convertedFileEntries.length === 1 ? "" : "s"}.`,
       updatedCount ? `Updated ${updatedCount} existing set${updatedCount === 1 ? "" : "s"}.` : "",
       shiftReviewCount ? `${shiftReviewCount} set${shiftReviewCount === 1 ? "" : "s"} need shift review.` : "",
       missingTargetCount ? `Missing target price for ${missingTargetCount} set${missingTargetCount === 1 ? "" : "s"}.` : "",
+      cappedCount ? `${cappedCount} set${cappedCount === 1 ? "" : "s"} capped due to high product count.` : "",
       readyFiles[0] ? `${readyFiles[0]} is ready to download.` : "",
       uniqueWarnings.length ? `${uniqueWarnings.length} warning${uniqueWarnings.length === 1 ? "" : "s"}.` : "",
     ].filter(Boolean);
@@ -6001,6 +6137,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       warnings: uniqueWarnings.length,
       warningList: uniqueWarnings,
       tabs: importMeta.tabCount || 0,
+      capped: cappedCount,
     };
     setAutopilotSummary(nextSummary);
     return nextSummary;
@@ -6072,7 +6209,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {(entry.warnings || []).slice(0, 2).map(warning => (
-            <span key={warning} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">{warning}</span>
+            <span key={warning} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">{getAutopilotWarningChipLabel(warning)}</span>
           ))}
           <button onClick={() => openBuilder(entry)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Edit</button>
           <button onClick={() => copySetupValue(entry.surpriseSetName, "Copied name.")} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Copy Name</button>
@@ -6345,7 +6482,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           {builderForm.warnings?.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {builderForm.warnings.map(warning => (
-                <span key={warning} className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">{warning}</span>
+                <span key={warning} title={warning} className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">{getAutopilotWarningChipLabel(warning)}</span>
               ))}
             </div>
           )}
