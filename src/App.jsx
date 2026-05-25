@@ -302,11 +302,14 @@ const addDaysISO = (iso, days) => {
 
 const SURPRISE_SET_STORAGE_KEY = "ops_surprise_sets_weekly_v1";
 const SETSHEET_CONVERTER_STORAGE_KEY = "ops_setsheet_converter_v1";
+const SURPRISE_SET_BOARD_STORAGE_KEY = "ops_surprise_set_board_v1";
 const SURPRISE_SET_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const SURPRISE_SET_STREAMS = [
   { key: "am", label: "AM Shift", time: "7:00 AM - 3:00 PM" },
   { key: "pm", label: "PM Shift", time: "3:30 PM - 11:30 PM" },
 ];
+const SURPRISE_SET_BOARD_STATUS_OPTIONS = ["Draft", "Parsed", "Converted", "Downloaded", "Uploaded", "Live Ready"];
+const SURPRISE_SET_BOARD_FOCUS_OPTIONS = ["All", "VR", "PS", "CK", "PM"];
 const SURPRISE_SET_STATUS_OPTIONS = ["Not Started", "Built", "Checked", "Live Ready"];
 const SURPRISE_SET_TRACKER_BRANDS = [
   { brand: "Vaulted Rarities", code: "VR" },
@@ -346,6 +349,13 @@ const SETSHEET_TEMPLATE_CONFIGS = {
   },
 };
 
+const SURPRISE_SET_BOARD_BRAND_COLORS = {
+  VR: "#FACC15",
+  PS: "#DC2626",
+  CK: "#2563EB",
+  PM: "#16A34A",
+};
+
 const normalizeSurpriseSetBrandValue = (brandValue) => {
   const raw = String(brandValue || "").trim().toLowerCase();
   if (!raw) return "";
@@ -360,6 +370,130 @@ const getSetSheetTemplateConfig = (brandValue) => {
   const brand = normalizeSurpriseSetBrandValue(brandValue);
   if (brand === "PokeSpins" || brand === "PokieMart") return SETSHEET_TEMPLATE_CONFIGS.pokeSpinsPokieMart;
   return SETSHEET_TEMPLATE_CONFIGS.cardKingVaulted;
+};
+
+const getSurpriseSetBrandCode = (brandValue) => {
+  const brand = normalizeSurpriseSetBrandValue(brandValue);
+  const found = SURPRISE_SET_TRACKER_BRANDS.find(item => item.brand === brand);
+  return found?.code || "";
+};
+
+const getSurpriseSetBrandFromCode = (code) => {
+  const found = SURPRISE_SET_TRACKER_BRANDS.find(item => item.code === code);
+  return found?.brand || "";
+};
+
+const getSurpriseSetDateForDay = (day, weekStart = getWeekStartISO()) => {
+  const dayIndex = SURPRISE_SET_DAYS.indexOf(day);
+  return dayIndex >= 0 ? addDaysISO(weekStart, dayIndex + 1) : todayDate();
+};
+
+const getDefaultSurpriseSetBoardDay = () => {
+  const todayName = getDayNameFromDate(todayDate());
+  return SURPRISE_SET_DAYS.includes(todayName) ? todayName : "Monday";
+};
+
+const normalizeSurpriseSetBoardStatus = (value) =>
+  SURPRISE_SET_BOARD_STATUS_OPTIONS.includes(value) ? value : "Draft";
+
+const normalizeSurpriseSetBoardEntry = (entry = {}) => {
+  const brand = normalizeSurpriseSetBrandValue(entry.brand) || getSurpriseSetBrandFromCode(entry.brandCode) || "Vaulted Rarities";
+  const brandCode = getSurpriseSetBrandCode(brand);
+  const day = SURPRISE_SET_DAYS.includes(entry.day) ? entry.day : getDefaultSurpriseSetBoardDay();
+  const shift = entry.shift === "pm" ? "pm" : "am";
+  return {
+    id: entry.id || uid(),
+    brand,
+    brandCode,
+    day,
+    shift,
+    streamer: entry.streamer || "",
+    streamDate: entry.streamDate || getSurpriseSetDateForDay(day),
+    setNumber: String(entry.setNumber || "1"),
+    surpriseSetName: entry.surpriseSetName || "",
+    startingBid: entry.startingBid || "",
+    hardFloor: entry.hardFloor || "",
+    stretch: entry.stretch || "",
+    fileName: entry.fileName || "",
+    input: entry.input || "",
+    rows: Array.isArray(entry.rows) ? entry.rows : [],
+    summary: entry.summary || getSetSheetSummary(entry.rows || []),
+    status: normalizeSurpriseSetBoardStatus(entry.status),
+    convertedAt: entry.convertedAt || "",
+    downloadedAt: entry.downloadedAt || "",
+    uploadedAt: entry.uploadedAt || "",
+    notes: entry.notes || "",
+  };
+};
+
+const loadSurpriseSetBoardEntries = () => {
+  try {
+    const saved = localStorage.getItem(SURPRISE_SET_BOARD_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeSurpriseSetBoardEntry) : [];
+  } catch {
+    return [];
+  }
+};
+
+const getNextSurpriseSetNumber = (entries, brand, day, shift) => {
+  const current = (Array.isArray(entries) ? entries : [])
+    .filter(item => normalizeSurpriseSetBrandValue(item.brand) === normalizeSurpriseSetBrandValue(brand) && item.day === day && item.shift === shift)
+    .map(item => Number.parseInt(item.setNumber, 10))
+    .filter(Number.isFinite);
+  return String((current.length ? Math.max(...current) : 0) + 1);
+};
+
+const createSurpriseSetBoardDraft = ({ brand, day, shift, entries }) => {
+  const normalizedBrand = normalizeSurpriseSetBrandValue(brand) || "Vaulted Rarities";
+  const safeDay = SURPRISE_SET_DAYS.includes(day) ? day : getDefaultSurpriseSetBoardDay();
+  const safeShift = shift === "pm" ? "pm" : "am";
+  return normalizeSurpriseSetBoardEntry({
+    id: uid(),
+    brand: normalizedBrand,
+    brandCode: getSurpriseSetBrandCode(normalizedBrand),
+    day: safeDay,
+    shift: safeShift,
+    streamDate: getSurpriseSetDateForDay(safeDay),
+    setNumber: getNextSurpriseSetNumber(entries, normalizedBrand, safeDay, safeShift),
+    status: "Draft",
+  });
+};
+
+const getSurpriseSetBoardMetrics = (entries, day) => {
+  const dayEntries = (Array.isArray(entries) ? entries : []).filter(item => item.day === day);
+  const hasSlot = (brand, shift) => dayEntries.some(item => normalizeSurpriseSetBrandValue(item.brand) === brand && item.shift === shift);
+  const missingSlots = SURPRISE_SET_TRACKER_BRANDS.reduce((sum, { brand }) =>
+    sum + SURPRISE_SET_STREAMS.filter(stream => !hasSlot(brand, stream.key)).length, 0);
+  return {
+    planned: dayEntries.length,
+    converted: dayEntries.filter(item => ["Converted", "Downloaded", "Uploaded", "Live Ready"].includes(item.status)).length,
+    downloaded: dayEntries.filter(item => ["Downloaded", "Uploaded", "Live Ready"].includes(item.status)).length,
+    uploaded: dayEntries.filter(item => ["Uploaded", "Live Ready"].includes(item.status)).length,
+    missingSlots,
+  };
+};
+
+const getSurpriseSetBrainNotes = (entries, day) => {
+  const dayEntries = (Array.isArray(entries) ? entries : []).filter(item => item.day === day);
+  const notes = [];
+  SURPRISE_SET_TRACKER_BRANDS.forEach(({ brand, code }) => {
+    SURPRISE_SET_STREAMS.forEach(stream => {
+      const slotEntries = dayEntries.filter(item => normalizeSurpriseSetBrandValue(item.brand) === brand && item.shift === stream.key);
+      if (!slotEntries.length) {
+        notes.push(`${code} ${stream.label.replace(" Shift", "")} has no sets planned for ${day}.`);
+        return;
+      }
+      const convertedNotDownloaded = slotEntries.filter(item => item.status === "Converted").length;
+      const downloadedNotUploaded = slotEntries.filter(item => item.status === "Downloaded").length;
+      const uploaded = slotEntries.filter(item => ["Uploaded", "Live Ready"].includes(item.status)).length;
+      if (convertedNotDownloaded) notes.push(`${code} ${stream.label.replace(" Shift", "")} has ${convertedNotDownloaded} set${convertedNotDownloaded === 1 ? "" : "s"} converted but not downloaded.`);
+      if (downloadedNotUploaded) notes.push(`${code} ${stream.label.replace(" Shift", "")} has ${downloadedNotUploaded} set${downloadedNotUploaded === 1 ? "" : "s"} downloaded but not uploaded.`);
+      if (uploaded === slotEntries.length) notes.push(`All ${code} sets for ${day} ${stream.label.replace(" Shift", "")} are uploaded.`);
+    });
+  });
+  const next = notes.find(note => note.includes("not uploaded")) || notes.find(note => note.includes("not downloaded")) || notes.find(note => note.includes("no sets planned")) || `All planned sets for ${day} are ready.`;
+  return { notes: notes.slice(0, 8), next };
 };
 
 const getSurpriseSetFlags = (status) => {
@@ -637,6 +771,201 @@ const buildSurpriseSetFileName = ({ streamer, streamDate, setNumber }) => {
     normalizeSetSheetFilePart(setNumber || "1"),
   ].filter(Boolean);
   return sanitizeSetSheetFileName(parts.join("_"));
+};
+
+const titleCaseSurpriseSetName = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\b[a-z]/g, char => char.toUpperCase());
+
+const getDayNameFromDate = (isoDate) => {
+  const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return date.toLocaleDateString("en-US", { weekday: "long" });
+};
+
+const parseWarehouseSheetDate = (month, day, year) => {
+  const safeYear = year ? Number(year) : new Date().getFullYear();
+  const safeMonth = Number(month);
+  const safeDay = Number(day);
+  if (!safeYear || safeMonth < 1 || safeMonth > 12 || safeDay < 1 || safeDay > 31) return "";
+  const date = new Date(safeYear, safeMonth - 1, safeDay);
+  if (date.getFullYear() !== safeYear || date.getMonth() !== safeMonth - 1 || date.getDate() !== safeDay) return "";
+  return [
+    String(date.getFullYear()),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+};
+
+const detectWarehouseSheetDateStreamer = (lines) => {
+  const cleanLines = Array.isArray(lines) ? lines : [];
+  const dateFirstPattern = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b\s*(?:\(([A-Za-z][A-Za-z\s.'-]{1,24})\)|([A-Za-z][A-Za-z\s.'-]{1,24}))?/;
+  const streamerFirstPattern = /^\s*([A-Za-z][A-Za-z\s.'-]{1,24})\s+\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
+  for (let index = 0; index < cleanLines.length; index += 1) {
+    const line = cleanLines[index];
+    const streamerFirst = line.match(streamerFirstPattern);
+    if (streamerFirst) {
+      const isoDate = parseWarehouseSheetDate(streamerFirst[2], streamerFirst[3], streamerFirst[4]);
+      if (isoDate) return { lineIndex: index, streamDate: isoDate, streamer: titleCaseSurpriseSetName(streamerFirst[1]) };
+    }
+    const dateFirst = line.match(dateFirstPattern);
+    if (dateFirst) {
+      const isoDate = parseWarehouseSheetDate(dateFirst[1], dateFirst[2], dateFirst[3]);
+      if (isoDate) return { lineIndex: index, streamDate: isoDate, streamer: titleCaseSurpriseSetName(dateFirst[4] || dateFirst[5] || "") };
+    }
+  }
+  return null;
+};
+
+const detectWarehouseSheetMoneyValue = (lines, label) => {
+  const pattern = new RegExp(`^\\s*${label}\\s*:?\\s*\\$?\\s*([0-9]+(?:\\.[0-9]{1,2})?)\\b`, "i");
+  const line = (Array.isArray(lines) ? lines : []).find(item => pattern.test(item));
+  const match = line ? line.match(pattern) : null;
+  return match ? match[1] : "";
+};
+
+const detectWarehouseSheetBrand = (rawText) => {
+  const text = String(rawText || "");
+  const normalized = text.toLowerCase();
+  if (/\bpoke\s*spins\b|\bpokespins\b/i.test(text) || /\bbrand\s*[:\-]?\s*ps\b/i.test(text)) return "PokeSpins";
+  if (/\bpokie\s*mart\b|\bpokiemart\b/i.test(text) || /\bbrand\s*[:\-]?\s*pm\b/i.test(text)) return "PokieMart";
+  if (/\bcard\s*king\s*47\b|\bcardking47\b|\bcardking\b/i.test(text) || /\bbrand\s*[:\-]?\s*ck47?\b/i.test(text)) return "CardKing47";
+  if (/\bvaulted\s*rarities\b|\bvaulted\b/i.test(text) || /\bbrand\s*[:\-]?\s*vr\b/i.test(text)) return "Vaulted Rarities";
+
+  const standaloneLines = text.split(/\r?\n/).map(line => line.trim().toUpperCase()).filter(Boolean);
+  if (standaloneLines.some(line => line === "PS")) return "PokeSpins";
+  if (standaloneLines.some(line => line === "POKIE MART")) return "PokieMart";
+  if (standaloneLines.some(line => line === "CK" || line === "CK47")) return "CardKing47";
+  if (standaloneLines.some(line => line === "VR" || line === "VAULTED RARITIES")) return "Vaulted Rarities";
+  if (/\bvr\s+bag\b/i.test(normalized)) return "";
+  return "";
+};
+
+const detectWarehouseSheetShift = (rawText) => {
+  const text = String(rawText || "");
+  if (/\b(day\s*shift|morning|am)\b/i.test(text)) return "am";
+  if (/\b(night|evening|pm)\b/i.test(text)) return "pm";
+  return "";
+};
+
+const isWarehouseSetupLine = (line) => /^\s*(hard\s*floor|target|stretch)\s*:/i.test(line);
+const isWarehouseTotalLine = (line) => /\b(sub\s*total|subtotal|grand\s*total|total|sum)\b/i.test(line);
+const isWarehouseDateOnlyLine = (line) => /^\s*\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s*$/i.test(line);
+const isWarehouseFormulaLine = (line) => /^\s*=/.test(line) || /\t\s*=/.test(line);
+
+const isMeaningfulWarehouseProductCell = (value) => {
+  const cell = normalizeSetSheetProductName(value);
+  if (!cell) return false;
+  if (cell.length < 3) return false;
+  if (/^\$?\d+(?:\.\d{1,2})?$/.test(cell)) return false;
+  if (/^\d+\s*x?$/i.test(cell)) return false;
+  if (/^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?$/.test(cell)) return false;
+  if (/^(qty|quantity|price|cost|total|target|stretch|hard floor|image|logo|sku|asin|product|product name|item|item name|name|description)$/i.test(cell)) return false;
+  if (/^(am|pm|yes|no)$/i.test(cell)) return false;
+  if (!/[A-Za-z]/.test(cell)) return false;
+  return true;
+};
+
+const scoreWarehouseProductCell = (value) => {
+  const cell = normalizeSetSheetProductName(value);
+  if (!isMeaningfulWarehouseProductCell(cell)) return -1;
+  let score = Math.min(cell.length, 80);
+  if (/[A-Za-z].*[A-Za-z]/.test(cell)) score += 8;
+  if (/\b(pack|box|bag|deck|bundle|booster|etb|tin|case|set|collection|rip|rippiez|psa|cgc|vault)\b/i.test(cell)) score += 14;
+  if (/\$/.test(cell)) score -= 10;
+  if (/^\d+\s+[A-Za-z]/.test(cell)) score -= 4;
+  return score;
+};
+
+const pickWarehouseProductNameFromRow = (line) => {
+  const cells = String(line || "").split("\t").map(cell => normalizeSetSheetProductName(cell)).filter(Boolean);
+  const candidates = cells.length ? cells : [normalizeSetSheetProductName(line)];
+  const scored = candidates
+    .map(cell => ({ cell, score: scoreWarehouseProductCell(cell) }))
+    .filter(item => item.score >= 0)
+    .sort((a, b) => b.score - a.score);
+  return scored[0]?.cell || "";
+};
+
+const isStrongWarehouseSetNameLine = (line) => {
+  const clean = normalizeSetSheetProductName(line);
+  if (!clean || isWarehouseSetupLine(clean) || isWarehouseTotalLine(clean) || isWarehouseDateOnlyLine(clean)) return false;
+  if (/^\$?\d+(?:\.\d{1,2})?$/.test(clean)) return false;
+  if (/^\d+$/.test(clean)) return false;
+  if (!/[A-Za-z]/.test(clean)) return false;
+  return clean.length >= 5;
+};
+
+const parseWarehouseSheetPaste = (rawText, currentForm = {}) => {
+  const raw = String(rawText || "");
+  const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const warnings = [];
+  const confidenceNotes = [];
+  const detectedDateStreamer = detectWarehouseSheetDateStreamer(lines);
+  const streamDate = detectedDateStreamer?.streamDate || "";
+  const streamer = detectedDateStreamer?.streamer || "";
+  const day = streamDate ? getDayNameFromDate(streamDate) : "";
+  const hardFloor = detectWarehouseSheetMoneyValue(lines, "HARD\\s*FLOOR");
+  const target = detectWarehouseSheetMoneyValue(lines, "TARGET");
+  const stretch = detectWarehouseSheetMoneyValue(lines, "STRETCH");
+  const startingBid = target || hardFloor || "";
+  const detectedBrand = detectWarehouseSheetBrand(raw);
+  const shift = detectWarehouseSheetShift(raw);
+
+  if (!detectedBrand) warnings.push("Brand not detected. Kept current selection.");
+  if (!shift) warnings.push("Shift not detected. Kept current selection.");
+  if (streamer && streamDate) confidenceNotes.push(`Detected ${streamer} on ${streamDate}.`);
+  if (target) confidenceNotes.push(`Detected target $${target}.`);
+  if (hardFloor) confidenceNotes.push(`Detected hard floor $${hardFloor}.`);
+  if (stretch) confidenceNotes.push(`Detected stretch $${stretch}.`);
+
+  let surpriseSetName = "";
+  const setupLineIndexes = new Set();
+  if (typeof detectedDateStreamer?.lineIndex === "number") setupLineIndexes.add(detectedDateStreamer.lineIndex);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isWarehouseSetupLine(line)) setupLineIndexes.add(index);
+    if (!surpriseSetName && detectedDateStreamer && index > detectedDateStreamer.lineIndex && isStrongWarehouseSetNameLine(line)) {
+      surpriseSetName = normalizeSetSheetProductName(line);
+      setupLineIndexes.add(index);
+    }
+  }
+  if (surpriseSetName) confidenceNotes.push(`Detected surprise set name ${surpriseSetName}.`);
+
+  const productLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => {
+      if (setupLineIndexes.has(index)) return false;
+      if (isWarehouseSetupLine(line) || isWarehouseTotalLine(line) || isWarehouseDateOnlyLine(line) || isWarehouseFormulaLine(line)) return false;
+      if (/^\d+(?:\t\d+)*$/.test(line)) return false;
+      return true;
+    })
+    .map(({ line }) => pickWarehouseProductNameFromRow(line))
+    .filter(Boolean);
+
+  if (!productLines.length) warnings.push("No product rows detected.");
+  if (!streamDate) confidenceNotes.push("Stream date not detected.");
+  if (!streamer) confidenceNotes.push("Streamer not detected.");
+
+  return {
+    detectedBrand,
+    streamer,
+    streamDate,
+    day,
+    shift,
+    setNumber: currentForm?.setNumber || "",
+    surpriseSetName,
+    startingBid,
+    hardFloor,
+    target,
+    stretch,
+    productLines,
+    confidenceNotes,
+    warnings,
+  };
 };
 
 const DEMO_SETS = [
@@ -4416,7 +4745,7 @@ const StudioReadinessView = ({ studios, setStudios }) => {
 };
 
 // ─── SURPRISE SET TRACKER ─────────────────────────────────────────────────────
-const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
+const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const defaultConverterForm = {
     brand: "Vaulted Rarities",
     warehouse: "US Warehouse",
@@ -4437,6 +4766,8 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const [convertedEntries, setConvertedEntries] = useState(() => loadSetSheetConverterEntries());
   const [setupCopyStatus, setSetupCopyStatus] = useState("");
   const [uploadedBatchIds, setUploadedBatchIds] = useState({});
+  const [smartPasteText, setSmartPasteText] = useState("");
+  const [smartPasteResult, setSmartPasteResult] = useState(null);
 
   useEffect(() => {
     setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev));
@@ -4472,6 +4803,28 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       setSetupCopyStatus("Copy failed. Try again.");
       setTimeout(() => setSetupCopyStatus(""), 2600);
     }
+  };
+
+  const handleAnalyzeSmartPaste = () => {
+    const result = parseWarehouseSheetPaste(smartPasteText, converterForm);
+    setSmartPasteResult(result);
+    setConverterError("");
+    setConverterConverted(false);
+    setConverterForm(prev => {
+      const next = { ...prev };
+      if (result.detectedBrand) next.brand = result.detectedBrand;
+      if (result.streamer) next.streamer = result.streamer;
+      if (result.streamDate) next.streamDate = result.streamDate;
+      if (result.day) next.day = result.day;
+      if (result.shift) next.shift = result.shift;
+      if (result.setNumber) next.setNumber = result.setNumber;
+      if (result.surpriseSetName) next.surpriseSetName = result.surpriseSetName;
+      if (result.startingBid) next.startingBid = result.startingBid;
+      if (Array.isArray(result.productLines) && result.productLines.length) next.input = result.productLines.join("\n");
+      if (!next.fileName) next.fileName = buildSurpriseSetFileName(next);
+      return next;
+    });
+    setConverterRows([]);
   };
 
   const getTrackerBlock = (day, streamKey, brand) =>
@@ -4569,6 +4922,8 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setConverterError("");
     setConverterConverted(false);
     setSetupCopyStatus("");
+    setSmartPasteText("");
+    setSmartPasteResult(null);
   };
 
   const handleAddAnother = () => {
@@ -4588,6 +4943,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setConverterError("");
     setConverterConverted(false);
     setSetupCopyStatus("");
+    setSmartPasteResult(null);
   };
 
   const clearWeek = () => {
@@ -4688,6 +5044,51 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
               <FL>File name</FL>
               <Inp value={converterForm.fileName} onChange={value => updateConverterField("fileName", value)} placeholder={buildSurpriseSetFileName(converterForm)} />
             </label>
+            <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:col-span-2">
+              <div>
+                <p className="text-xs font-bold text-gray-900">Smart Paste from Warehouse Sheet</p>
+                <p className="mt-0.5 text-[11px] text-gray-400">Paste the copied Google Sheet block once, then analyze it to fill the builder.</p>
+              </div>
+              <Txt
+                value={smartPasteText}
+                onChange={setSmartPasteText}
+                placeholder="Paste warehouse sheet block here..."
+                rows={5}
+                className="font-mono text-xs"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleAnalyzeSmartPaste}
+                  disabled={!smartPasteText.trim()}
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Analyze Sheet Paste
+                </button>
+                {smartPasteResult && (
+                  <span className="text-[11px] font-medium text-gray-500">
+                    Detected {[
+                      smartPasteResult.streamer,
+                      smartPasteResult.streamDate ? smartPasteResult.streamDate.slice(5).replace("-", "/") : "",
+                      smartPasteResult.surpriseSetName,
+                      smartPasteResult.target ? `target $${smartPasteResult.target}` : smartPasteResult.hardFloor ? `hard floor $${smartPasteResult.hardFloor}` : "",
+                      `${smartPasteResult.productLines.length} product lines`,
+                    ].filter(Boolean).join(", ")}.
+                  </span>
+                )}
+              </div>
+              {smartPasteResult?.warnings?.length > 0 && (
+                <div className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800">
+                  {smartPasteResult.warnings.map(warning => <p key={warning}>{warning}</p>)}
+                </div>
+              )}
+              {smartPasteResult?.confidenceNotes?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {smartPasteResult.confidenceNotes.map(note => (
+                    <span key={note} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-500">{note}</span>
+                  ))}
+                </div>
+              )}
+            </div>
             <label className="space-y-1 sm:col-span-2">
               <FL>Insert surprise set</FL>
               <Txt value={converterForm.input} onChange={value => updateConverterField("input", value)} placeholder="Paste lines here..." rows={13} className="font-mono text-xs" />
@@ -4927,6 +5328,531 @@ const OpsImpactMetricCard = ({ label, value, accent = false, sub }) => (
     {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
   </div>
 );
+
+const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
+  const [selectedDay, setSelectedDay] = useState(getDefaultSurpriseSetBoardDay());
+  const [focusChannel, setFocusChannel] = useState("All");
+  const [boardEntries, setBoardEntries] = useState(() => loadSurpriseSetBoardEntries());
+  const [builderForm, setBuilderForm] = useState(null);
+  const [converterError, setConverterError] = useState("");
+  const [convertedEntries, setConvertedEntries] = useState(() => loadSetSheetConverterEntries());
+  const [setupCopyStatus, setSetupCopyStatus] = useState("");
+  const [smartPasteResult, setSmartPasteResult] = useState(null);
+
+  useEffect(() => {
+    setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev));
+  }, [setSurpriseSets]);
+
+  useEffect(() => {
+    try { localStorage.setItem(SETSHEET_CONVERTER_STORAGE_KEY, JSON.stringify(convertedEntries.slice(0, 20))); } catch {}
+  }, [convertedEntries]);
+
+  useEffect(() => {
+    try { localStorage.setItem(SURPRISE_SET_BOARD_STORAGE_KEY, JSON.stringify(boardEntries)); } catch {}
+  }, [boardEntries]);
+
+  const weeklyBlocks = normalizeWeeklySurpriseSets(surpriseSets);
+  const safeSurpriseSets = Array.isArray(weeklyBlocks) ? weeklyBlocks : [];
+  const trackerBlocks = safeSurpriseSets.filter(block => normalizeSurpriseSetBrandValue(block.brand));
+  const dayEntries = boardEntries.filter(entry => entry.day === selectedDay);
+  const visibleBrands = focusChannel === "All"
+    ? SURPRISE_SET_TRACKER_BRANDS
+    : SURPRISE_SET_TRACKER_BRANDS.filter(item => item.code === focusChannel);
+  const metrics = getSurpriseSetBoardMetrics(boardEntries, selectedDay);
+  const brain = getSurpriseSetBrainNotes(boardEntries, selectedDay);
+  const selectedTemplateConfig = getSetSheetTemplateConfig(builderForm?.brand || "Vaulted Rarities");
+  const builderSummary = getSetSheetSummary(builderForm?.rows || []);
+
+  const updateBuilderField = (field, value) => {
+    setBuilderForm(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, [field]: value };
+      if (field === "brand") next.brandCode = getSurpriseSetBrandCode(value);
+      if (field === "day" && SURPRISE_SET_DAYS.includes(value) && !next.streamDate) {
+        next.streamDate = getSurpriseSetDateForDay(value);
+      }
+      return next;
+    });
+  };
+
+  const copySetupValue = async (value, successMessage) => {
+    try {
+      await navigator.clipboard.writeText(String(value || ""));
+      setSetupCopyStatus(successMessage);
+      setTimeout(() => setSetupCopyStatus(""), 2200);
+    } catch {
+      setSetupCopyStatus("Copy failed. Try again.");
+      setTimeout(() => setSetupCopyStatus(""), 2600);
+    }
+  };
+
+  const getTrackerBlock = (day, streamKey, brand) =>
+    trackerBlocks.find(block => block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === normalizeSurpriseSetBrandValue(brand));
+
+  const patchTrackerBlock = (brand, day, streamKey, patch) => {
+    setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev).map(block => {
+      const matches = block.day === day && block.streamKey === streamKey && normalizeSurpriseSetBrandValue(block.brand) === normalizeSurpriseSetBrandValue(brand);
+      if (!matches) return block;
+      const next = { ...block, ...patch };
+      const done = Boolean(next.readyForLive);
+      return { ...next, status: done ? "Live Ready" : next.status || "Not Started" };
+    }));
+  };
+
+  const upsertBoardEntry = (entry) => {
+    const normalized = normalizeSurpriseSetBoardEntry(entry);
+    setBoardEntries(prev => {
+      const exists = prev.some(item => item.id === normalized.id);
+      return exists ? prev.map(item => item.id === normalized.id ? normalized : item) : [...prev, normalized];
+    });
+    return normalized;
+  };
+
+  const openBuilder = (entry) => {
+    setBuilderForm(normalizeSurpriseSetBoardEntry(entry));
+    setSmartPasteResult(null);
+    setConverterError("");
+  };
+
+  const handleAddSet = (brand, shift) => {
+    const draft = createSurpriseSetBoardDraft({ brand, day: selectedDay, shift, entries: boardEntries });
+    setBoardEntries(prev => [...prev, draft]);
+    openBuilder(draft);
+  };
+
+  const handleDeleteSet = (entryId) => {
+    setBoardEntries(prev => prev.filter(item => item.id !== entryId));
+    setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).filter(item => item.id !== entryId));
+    if (builderForm?.id === entryId) setBuilderForm(null);
+  };
+
+  const handleSaveBuilder = () => {
+    if (!builderForm) return;
+    const saved = upsertBoardEntry(builderForm);
+    setBuilderForm(saved);
+    setSetupCopyStatus("Saved.");
+    setTimeout(() => setSetupCopyStatus(""), 1800);
+  };
+
+  const handleResetBuilder = () => {
+    if (!builderForm) return;
+    const reset = normalizeSurpriseSetBoardEntry({
+      ...builderForm,
+      streamer: "",
+      surpriseSetName: "",
+      startingBid: "",
+      hardFloor: "",
+      stretch: "",
+      fileName: "",
+      input: "",
+      rows: [],
+      summary: getSetSheetSummary([]),
+      status: "Draft",
+      convertedAt: "",
+      downloadedAt: "",
+      uploadedAt: "",
+      notes: "",
+    });
+    upsertBoardEntry(reset);
+    setBuilderForm(reset);
+    setSmartPasteResult(null);
+    setConverterError("");
+  };
+
+  const handleAddAnother = () => {
+    const source = builderForm || {
+      brand: focusChannel === "All" ? "Vaulted Rarities" : getSurpriseSetBrandFromCode(focusChannel),
+      day: selectedDay,
+      shift: "am",
+    };
+    handleAddSet(source.brand, source.shift);
+  };
+
+  const handleAnalyzeSmartPaste = () => {
+    if (!builderForm) return;
+    const result = parseWarehouseSheetPaste(builderForm.input, builderForm);
+    setSmartPasteResult(result);
+    setConverterError("");
+    setBuilderForm(prev => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      if (result.detectedBrand) {
+        next.brand = result.detectedBrand;
+        next.brandCode = getSurpriseSetBrandCode(result.detectedBrand);
+      }
+      if (result.streamer) next.streamer = result.streamer;
+      if (result.streamDate) next.streamDate = result.streamDate;
+      if (result.day) next.day = result.day;
+      if (result.shift) next.shift = result.shift;
+      if (result.setNumber) next.setNumber = result.setNumber;
+      if (result.surpriseSetName) next.surpriseSetName = result.surpriseSetName;
+      if (result.startingBid) next.startingBid = result.startingBid;
+      if (result.hardFloor) next.hardFloor = result.hardFloor;
+      if (result.stretch) next.stretch = result.stretch;
+      if (Array.isArray(result.productLines) && result.productLines.length) next.input = result.productLines.join("\n");
+      if (!next.fileName) next.fileName = buildSurpriseSetFileName(next);
+      next.status = "Parsed";
+      return next;
+    });
+  };
+
+  const handleConvertSet = () => {
+    if (!builderForm) return;
+    setConverterError("");
+    const rows = parseSetSheetInput(builderForm.input);
+    if (!rows.length) {
+      setConverterError("Paste some surprise set lines first.");
+      return;
+    }
+    const summary = getSetSheetSummary(rows);
+    const safeFileName = builderForm.fileName || buildSurpriseSetFileName(builderForm);
+    const converted = normalizeSurpriseSetBoardEntry({
+      ...builderForm,
+      fileName: safeFileName,
+      rows,
+      summary,
+      status: "Converted",
+      convertedAt: nowISO(),
+    });
+    const templateConfig = getSetSheetTemplateConfig(converted.brand);
+    const entry = {
+      id: converted.id,
+      createdAt: converted.convertedAt,
+      brand: converted.brand,
+      warehouse: templateConfig.usesWarehouse ? SETSHEET_WAREHOUSES[0] : "",
+      day: converted.day,
+      shift: converted.shift,
+      streamer: converted.streamer,
+      streamDate: converted.streamDate,
+      setNumber: converted.setNumber,
+      surpriseSetName: converted.surpriseSetName,
+      startingBid: converted.startingBid,
+      fileName: converted.fileName,
+      input: converted.input,
+      templatePath: templateConfig.path,
+      usesWarehouse: templateConfig.usesWarehouse,
+      rows,
+      summary,
+    };
+    upsertBoardEntry(converted);
+    setBuilderForm(converted);
+    setConvertedEntries(prev => [entry, ...(Array.isArray(prev) ? prev.filter(item => item.id !== entry.id) : [])].slice(0, 20));
+    patchTrackerBlock(converted.brand, converted.day, converted.shift, {
+      convertedSetSheet: true,
+      setName: converted.surpriseSetName || safeFileName,
+      quantity: summary.totalQuantity,
+    });
+  };
+
+  const handleDownloadSet = (entry = builderForm) => {
+    if (!entry) return;
+    const rows = Array.isArray(entry.rows) && entry.rows.length ? entry.rows : parseSetSheetInput(entry.input);
+    const fileName = entry.fileName || buildSurpriseSetFileName(entry);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      setConverterError("Convert a surprise set before downloading.");
+      return;
+    }
+    downloadSetSheetRows(rows, fileName, {
+      brand: entry.brand,
+      warehouse: entry.warehouse || SETSHEET_WAREHOUSES[0],
+    });
+    const downloaded = normalizeSurpriseSetBoardEntry({
+      ...entry,
+      rows,
+      fileName,
+      summary: getSetSheetSummary(rows),
+      status: ["Uploaded", "Live Ready"].includes(entry.status) ? entry.status : "Downloaded",
+      downloadedAt: entry.downloadedAt || nowISO(),
+    });
+    upsertBoardEntry(downloaded);
+    if (builderForm?.id === downloaded.id) setBuilderForm(downloaded);
+    setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === downloaded.id ? { ...item, downloadedAt: downloaded.downloadedAt } : item));
+    patchTrackerBlock(downloaded.brand, downloaded.day, downloaded.shift, { downloadedSetSheet: true });
+  };
+
+  const handleMarkUploaded = (entry = builderForm) => {
+    if (!entry) return;
+    const uploaded = normalizeSurpriseSetBoardEntry({
+      ...entry,
+      status: "Live Ready",
+      uploadedAt: entry.uploadedAt || nowISO(),
+    });
+    upsertBoardEntry(uploaded);
+    if (builderForm?.id === uploaded.id) setBuilderForm(uploaded);
+    setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === uploaded.id ? { ...item, uploadedAt: uploaded.uploadedAt, status: uploaded.status } : item));
+    patchTrackerBlock(uploaded.brand, uploaded.day, uploaded.shift, {
+      readyForLive: true,
+      setName: uploaded.surpriseSetName || uploaded.fileName,
+      quantity: uploaded.summary?.totalQuantity || 0,
+    });
+  };
+
+  const handleDownloadAll = () => {
+    const safeEntries = Array.isArray(convertedEntries) ? convertedEntries : [];
+    if (!safeEntries.length) {
+      setConverterError("Convert at least one surprise set first.");
+      return;
+    }
+    safeEntries.forEach(entry => handleDownloadSet(entry));
+  };
+
+  const clearWeek = () => {
+    if (!window.confirm("Clear this week's surprise set setup?")) return;
+    const fresh = createDefaultWeeklySurpriseSets();
+    try { localStorage.removeItem(SURPRISE_SET_STORAGE_KEY); } catch {}
+    setSurpriseSets(fresh);
+  };
+
+  const renderSetCard = (entry) => {
+    const productCount = entry.summary?.totalQuantity || entry.rows?.length || 0;
+    const canDownload = Array.isArray(entry.rows) && entry.rows.length > 0;
+    return (
+      <div key={entry.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-gray-900">{entry.surpriseSetName || "Untitled set"}</p>
+            <p className="mt-0.5 text-[11px] text-gray-400">{entry.streamer || "No streamer"} - Set {entry.setNumber || "1"}</p>
+          </div>
+          <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-bold uppercase text-gray-500">{entry.status}</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+          <div className="rounded border border-gray-100 bg-gray-50 px-2 py-1.5">
+            <p className="text-gray-400">Bid</p>
+            <p className="font-bold text-gray-800">{entry.startingBid ? `$${entry.startingBid}` : "-"}</p>
+          </div>
+          <div className="rounded border border-gray-100 bg-gray-50 px-2 py-1.5">
+            <p className="text-gray-400">Products</p>
+            <p className="font-bold text-gray-800">{productCount}</p>
+          </div>
+          <div className="rounded border border-gray-100 bg-gray-50 px-2 py-1.5">
+            <p className="text-gray-400">Date</p>
+            <p className="font-bold text-gray-800">{entry.streamDate ? entry.streamDate.slice(5) : "-"}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <button onClick={() => openBuilder(entry)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Edit</button>
+          <button onClick={() => copySetupValue(entry.surpriseSetName, "Copied name.")} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Copy Name</button>
+          <button onClick={() => copySetupValue(entry.startingBid, "Copied bid.")} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Copy Bid</button>
+          <button onClick={() => handleDownloadSet(entry)} disabled={!canDownload} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Download</button>
+          <button onClick={() => handleMarkUploaded(entry)} className="rounded border border-slate-800 bg-slate-700 px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-800">Mark Uploaded</button>
+          <button onClick={() => handleDeleteSet(entry.id)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-50">Delete</button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSlot = (brand, shift) => {
+    const slotEntries = dayEntries.filter(entry => normalizeSurpriseSetBrandValue(entry.brand) === brand && entry.shift === shift);
+    const code = getSurpriseSetBrandCode(brand);
+    return (
+      <div key={`${brand}-${shift}`} className="min-h-[168px] rounded-lg border border-gray-200 bg-gray-50 p-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SURPRISE_SET_BOARD_BRAND_COLORS[code] || "#CBD5E1" }} />
+            {code} {shift.toUpperCase()}
+          </div>
+          <button onClick={() => handleAddSet(brand, shift)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Add Set</button>
+        </div>
+        <div className="space-y-2">
+          {slotEntries.length ? slotEntries.map(renderSetCard) : (
+            <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white text-[11px] font-medium text-gray-400">
+              No sets planned
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Surprise Set Command Board</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{getWeekOfLabel()} - Plan, convert, download, and upload by channel.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={clearWeek} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50">
+            Clear Week
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {[
+          ["Planned Sets", metrics.planned],
+          ["Converted", metrics.converted],
+          ["Downloaded", metrics.downloaded],
+          ["Uploaded", metrics.uploaded],
+          ["Missing Slots", metrics.missingSlots],
+        ].map(([label, value]) => (
+          <Card key={label} className="border-l-4 border-l-slate-300 p-3">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="p-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <FL>Day</FL>
+              <Sel value={selectedDay} onChange={setSelectedDay} options={SURPRISE_SET_DAYS} placeholder="" />
+            </label>
+            <label className="space-y-1">
+              <FL>Focus Channel</FL>
+              <Sel value={focusChannel} onChange={setFocusChannel} options={SURPRISE_SET_BOARD_FOCUS_OPTIONS} placeholder="" />
+            </label>
+          </div>
+          {setupCopyStatus && <span className="text-[11px] font-medium text-gray-500">{setupCopyStatus}</span>}
+        </div>
+      </Card>
+
+      <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+            <div>
+              <p className="text-sm font-bold text-gray-900">{focusChannel === "All" ? "All Channels Board" : `${focusChannel} Focus Board`}</p>
+              <p className="mt-0.5 text-xs text-gray-400">{selectedDay} - AM and PM build lanes</p>
+            </div>
+            <span className="text-[10px] font-semibold text-gray-400">{dayEntries.length} set{dayEntries.length === 1 ? "" : "s"} planned</span>
+          </div>
+          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700">
+            Setup Brain: {brain.next}
+          </div>
+          <div className={focusChannel === "All" ? "mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4" : "mt-4 space-y-3"}>
+            {visibleBrands.map(({ brand, code }) => (
+              <div key={brand} className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SURPRISE_SET_BOARD_BRAND_COLORS[code] || "#CBD5E1" }} />
+                  <p className="text-sm font-bold text-gray-900">{code}</p>
+                  <p className="text-[11px] font-medium text-gray-400">{brand}</p>
+                </div>
+                <div className={focusChannel === "All" ? "space-y-3" : "grid grid-cols-1 gap-3 lg:grid-cols-2"}>
+                  {SURPRISE_SET_STREAMS.map(stream => renderSlot(brand, stream.key))}
+                </div>
+              </div>
+            ))}
+          </div>
+      </Card>
+
+      {builderForm ? (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Set Builder</p>
+              <p className="mt-0.5 text-xs text-gray-400">Paste, analyze, convert, download, and upload the selected set.</p>
+            </div>
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-500">{builderForm.status}</span>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="space-y-1">
+              <FL>Brand</FL>
+              <Sel value={builderForm.brand} onChange={value => updateBuilderField("brand", value)} options={SURPRISE_SET_ACCOUNT_OPTIONS} placeholder="" />
+            </label>
+            <label className="space-y-1">
+              <FL>Day</FL>
+              <Sel value={builderForm.day} onChange={value => updateBuilderField("day", value)} options={SURPRISE_SET_DAYS} placeholder="" />
+            </label>
+            <label className="space-y-1">
+              <FL>Shift</FL>
+              <select value={builderForm.shift} onChange={event => updateBuilderField("shift", event.target.value)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-slate-500 focus:outline-none">
+                <option value="am">AM</option>
+                <option value="pm">PM</option>
+              </select>
+            </label>
+            <label className="space-y-1">
+              <FL>Streamer</FL>
+              <Inp value={builderForm.streamer} onChange={value => updateBuilderField("streamer", value)} placeholder="Jimmy, Baxter, Zman" />
+            </label>
+            <label className="space-y-1">
+              <FL>Stream Date</FL>
+              <Inp type="date" value={builderForm.streamDate} onChange={value => updateBuilderField("streamDate", value)} />
+            </label>
+            <label className="space-y-1">
+              <FL>Set Number</FL>
+              <Inp type="number" min="1" value={builderForm.setNumber} onChange={value => updateBuilderField("setNumber", value)} placeholder="1" />
+            </label>
+            <label className="space-y-1">
+              <FL>Starting Bid</FL>
+              <Inp type="number" min="0" step="0.01" value={builderForm.startingBid} onChange={value => updateBuilderField("startingBid", value)} placeholder="1" />
+            </label>
+            <label className="space-y-1">
+              <FL>Hard Floor</FL>
+              <Inp type="number" min="0" step="0.01" value={builderForm.hardFloor} onChange={value => updateBuilderField("hardFloor", value)} placeholder="17" />
+            </label>
+            <label className="space-y-1">
+              <FL>Stretch</FL>
+              <Inp type="number" min="0" step="0.01" value={builderForm.stretch} onChange={value => updateBuilderField("stretch", value)} placeholder="21" />
+            </label>
+            <label className="space-y-1">
+              <FL>File Name</FL>
+              <Inp value={builderForm.fileName} onChange={value => updateBuilderField("fileName", value)} placeholder={buildSurpriseSetFileName(builderForm)} />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <FL>Surprise Set Name</FL>
+              <Inp value={builderForm.surpriseSetName} onChange={value => updateBuilderField("surpriseSetName", value)} placeholder="Name to paste into TikTok" />
+            </label>
+            <label className="space-y-1 sm:col-span-2 lg:col-span-4">
+              <FL>Insert Surprise Set</FL>
+              <Txt value={builderForm.input} onChange={value => updateBuilderField("input", value)} placeholder="Paste warehouse sheet block or clean product lines here..." rows={10} className="font-mono text-xs" />
+            </label>
+          </div>
+          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
+            Template: {selectedTemplateConfig.label}
+            <span className="text-gray-300"> - </span>
+            {selectedTemplateConfig.usesWarehouse ? "Warehouse column enabled" : "No warehouse column"}
+            <span className="text-gray-300"> - </span>
+            {builderSummary.totalRows} unique products, {builderSummary.totalQuantity} total items
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button onClick={handleAnalyzeSmartPaste} disabled={!builderForm.input.trim()} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Analyze Sheet Paste</button>
+            <BtnPrimary onClick={handleConvertSet}>Convert</BtnPrimary>
+            <button onClick={() => handleDownloadSet(builderForm)} disabled={!builderForm.rows?.length} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Download file</button>
+            <button onClick={() => copySetupValue(builderForm.surpriseSetName, "Copied name.")} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50">Copy Name</button>
+            <button onClick={() => copySetupValue(builderForm.startingBid, "Copied bid.")} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50">Copy Bid</button>
+            <button onClick={() => handleMarkUploaded(builderForm)} className="inline-flex items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">Mark Uploaded</button>
+            <BtnSecondary onClick={handleSaveBuilder}>Save</BtnSecondary>
+            <BtnSecondary onClick={handleResetBuilder}>Reset</BtnSecondary>
+            <BtnSecondary onClick={handleAddAnother}>Add another surprise set</BtnSecondary>
+            <button onClick={handleDownloadAll} disabled={!convertedEntries.length} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Download all converted files</button>
+            <BtnSecondary onClick={() => setBuilderForm(null)}>Cancel</BtnSecondary>
+          </div>
+          {converterError && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{converterError}</div>}
+          {smartPasteResult && (
+            <div className="mt-3 space-y-2">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-600">
+                Detected {[
+                  smartPasteResult.streamer,
+                  smartPasteResult.streamDate ? smartPasteResult.streamDate.slice(5).replace("-", "/") : "",
+                  smartPasteResult.surpriseSetName,
+                  smartPasteResult.target ? `target $${smartPasteResult.target}` : smartPasteResult.hardFloor ? `hard floor $${smartPasteResult.hardFloor}` : "",
+                  `${smartPasteResult.productLines.length} product lines`,
+                ].filter(Boolean).join(", ")}.
+              </div>
+              {smartPasteResult.warnings?.length > 0 && (
+                <div className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800">
+                  {smartPasteResult.warnings.map(warning => <p key={warning}>{warning}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card className="p-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center">
+            <p className="text-sm font-bold text-gray-900">Selected Set Builder</p>
+            <p className="text-xs text-gray-500">Select a set or add one to start building.</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button onClick={handleAddAnother} className="inline-flex items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">Add another surprise set</button>
+              <button onClick={handleDownloadAll} disabled={!convertedEntries.length} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Download all converted files</button>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
 
 const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseScores, setRaiseScores, inboundMessages }) => {
   // ── Safe arrays ─────────────────────────────────────────────────────────────
