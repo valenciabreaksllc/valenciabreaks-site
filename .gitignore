@@ -3,3 +3,7 @@ dist
 .vercel
 .env
 .DS_Store
+
+# Local reference files for Codex only
+reference/*.xlsx
+reference/**/*.xlsx
