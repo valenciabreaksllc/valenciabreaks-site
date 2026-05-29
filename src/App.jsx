@@ -303,7 +303,7 @@ const addDaysISO = (iso, days) => {
 const SURPRISE_SET_STORAGE_KEY = "ops_surprise_sets_weekly_v1";
 const SETSHEET_CONVERTER_STORAGE_KEY = "ops_setsheet_converter_v1";
 const SURPRISE_SET_BOARD_STORAGE_KEY = "ops_surprise_set_board_v1";
-const SURPRISE_SET_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const SURPRISE_SET_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SURPRISE_SET_STREAMS = [
   { key: "am", label: "AM Shift", time: "7:00 AM - 3:00 PM" },
   { key: "pm", label: "PM Shift", time: "3:30 PM - 11:30 PM" },
@@ -317,6 +317,7 @@ const SURPRISE_SET_TRACKER_BRANDS = [
   { brand: "CardKing47", code: "CK" },
   { brand: "PokieMart", code: "PM" },
 ];
+const SURPRISE_SET_REQUIRED_BOARD_BRANDS = SURPRISE_SET_TRACKER_BRANDS.filter(item => item.code !== "VR");
 const SETSHEET_WAREHOUSES = ["US Warehouse"];
 const SETSHEET_BOX_DEFAULTS = { weight: "0.88", height: "9", width: "7", length: "4" };
 const SETSHEET_PACK_DEFAULTS = { weight: "0.12", height: "11", width: "8", length: "1" };
@@ -465,15 +466,19 @@ const createSurpriseSetBoardDraft = ({ brand, day, shift, entries }) => {
 };
 
 const getSurpriseSetBoardMetrics = (entries, day) => {
-  const dayEntries = (Array.isArray(entries) ? entries : []).filter(item => item.day === day);
-  const hasSlot = (brand, shift) => dayEntries.some(item => normalizeSurpriseSetBrandValue(item.brand) === brand && item.shift === shift);
-  const missingSlots = SURPRISE_SET_TRACKER_BRANDS.reduce((sum, { brand }) =>
-    sum + SURPRISE_SET_STREAMS.filter(stream => !hasSlot(brand, stream.key)).length, 0);
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const dayEntries = safeEntries.filter(item => item.day === day);
+  const hasSlot = (targetDay, brand, shift) =>
+    safeEntries.some(item => item.day === targetDay && normalizeSurpriseSetBrandValue(item.brand) === brand && item.shift === shift);
+  const missingSlots = SURPRISE_SET_DAYS.reduce((daySum, targetDay) =>
+    daySum + SURPRISE_SET_REQUIRED_BOARD_BRANDS.reduce((brandSum, { brand }) =>
+      brandSum + SURPRISE_SET_STREAMS.filter(stream => !hasSlot(targetDay, brand, stream.key)).length, 0), 0);
   return {
-    planned: dayEntries.length,
-    converted: dayEntries.filter(item => ["Converted", "Downloaded", "Uploaded", "Live Ready"].includes(item.status)).length,
-    downloaded: dayEntries.filter(item => ["Downloaded", "Uploaded", "Live Ready"].includes(item.status)).length,
-    uploaded: dayEntries.filter(item => ["Uploaded", "Live Ready"].includes(item.status)).length,
+    planned: safeEntries.length,
+    converted: safeEntries.filter(item => ["Converted", "Downloaded", "Uploaded", "Live Ready"].includes(item.status)).length,
+    downloaded: safeEntries.filter(item => ["Downloaded", "Uploaded", "Live Ready"].includes(item.status)).length,
+    uploaded: safeEntries.filter(item => ["Uploaded", "Live Ready"].includes(item.status)).length,
+    dayPlanned: dayEntries.length,
     missingSlots,
   };
 };
@@ -481,7 +486,7 @@ const getSurpriseSetBoardMetrics = (entries, day) => {
 const getSurpriseSetBrainNotes = (entries, day) => {
   const dayEntries = (Array.isArray(entries) ? entries : []).filter(item => item.day === day);
   const notes = [];
-  SURPRISE_SET_TRACKER_BRANDS.forEach(({ brand, code }) => {
+  SURPRISE_SET_REQUIRED_BOARD_BRANDS.forEach(({ brand, code }) => {
     SURPRISE_SET_STREAMS.forEach(stream => {
       const slotEntries = dayEntries.filter(item => normalizeSurpriseSetBrandValue(item.brand) === brand && item.shift === stream.key);
       if (!slotEntries.length) {
@@ -496,6 +501,7 @@ const getSurpriseSetBrainNotes = (entries, day) => {
       if (uploaded === slotEntries.length) notes.push(`All ${code} sets for ${day} ${stream.label.replace(" Shift", "")} are uploaded.`);
     });
   });
+  notes.unshift("VR default recurring surprise set is active.");
   const next = notes.find(note => note.includes("not uploaded")) || notes.find(note => note.includes("not downloaded")) || notes.find(note => note.includes("no sets planned")) || `All planned sets for ${day} are ready.`;
   return { notes: notes.slice(0, 8), next };
 };
@@ -982,16 +988,19 @@ const parseWarehouseSheetPaste = (rawText, currentForm = {}) => {
   };
 };
 
-const getAutopilotDateForRange = (range) => {
+const getAutopilotDateForRange = (range, selectedDay = "") => {
   if (range === "Tomorrow") return addDaysISO(getLocalISODate(), 1);
   if (range === "Next 2 Days") return addDaysISO(getLocalISODate(), 1);
+  if (range === "Selected Day" || range === "Full Week") return getSurpriseSetDateForDay(selectedDay || getDefaultSurpriseSetBoardDay());
   return getLocalISODate();
 };
 
-const getAutopilotDatesForRange = (range) => {
+const getAutopilotDatesForRange = (range, selectedDay = "") => {
   const today = getLocalISODate();
   if (range === "Tomorrow") return [addDaysISO(today, 1)];
   if (range === "Next 2 Days") return [addDaysISO(today, 1), addDaysISO(today, 2)];
+  if (range === "Selected Day") return [getSurpriseSetDateForDay(selectedDay || getDefaultSurpriseSetBoardDay())];
+  if (range === "Full Week") return SURPRISE_SET_DAYS.map(day => getSurpriseSetDateForDay(day));
   return [today];
 };
 
@@ -1022,6 +1031,7 @@ const getAutopilotSelectedBrands = (options = {}) => {
 
 const getAutopilotBrandFromChannelCode = (code) => {
   const clean = String(code || "").trim().toUpperCase();
+  if (clean === "VR" || clean === "VAULTED") return "Vaulted Rarities";
   if (clean === "CK" || clean === "CK47") return "CardKing47";
   if (clean === "PS") return "PokeSpins";
   if (clean === "PM") return "PokieMart";
@@ -1554,7 +1564,7 @@ const countAutopilotSheetTabs = (payload = {}) => {
 const normalizeImportedSet = (block, fallbackOptions = {}) => {
   const rawLines = String(block?.text || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const warnings = [];
-  const streamDate = block?.header?.streamDate || getAutopilotDateForRange(fallbackOptions.dateRange);
+  const streamDate = block?.header?.streamDate || getAutopilotDateForRange(fallbackOptions.dateRange, fallbackOptions.selectedDay);
   const streamer = block?.header?.streamer || "";
   const day = getDayNameFromDate(streamDate) || fallbackOptions.selectedDay || getDefaultSurpriseSetBoardDay();
   const detectedBrand = detectAutopilotBrand(block?.text);
@@ -2433,6 +2443,7 @@ const TRIAGE_STATUS_STYLE = {
   "Untriaged":          "bg-gray-100 text-gray-500 border-gray-200",
   "Triaged":            "bg-slate-50 text-slate-700 border-slate-200",
   "Needs Human Review": "bg-black text-white border-black",
+  "Needs Investigation":"bg-amber-50 text-amber-700 border-amber-200",
   "Noise / Not CS":     "bg-gray-100 text-gray-400 border-gray-200",
   "High Priority":      "bg-black text-white border-black",
 };
@@ -2760,6 +2771,90 @@ const sanitizeAssistantAnalysis = (message, data) => {
   };
 };
 
+const getCommandInboxMessageText = (msg) => {
+  const { displayBody } = getDisplayInboundMessage(msg || {});
+  return [
+    msg?.subject,
+    msg?.message_body,
+    displayBody,
+    msg?.channel,
+    msg?.message_type,
+    msg?.issue_type,
+    msg?.customer_intent,
+    msg?.triage_summary,
+    msg?.next_action,
+    msg?.risk_level,
+    msg?.priority,
+  ].filter(Boolean).join(" ");
+};
+
+const getCommandInboxRiskFlag = (msg) => {
+  if (!msg) return null;
+  const sourceType = classifyInboundSource(msg);
+  const text = getCommandInboxMessageText(msg);
+  const lower = text.toLowerCase();
+  const needsHuman = msg.needs_human_review === true || msg.needs_human_review === "true";
+  const triageStatus = String(msg.triage_status || "");
+  const riskLevel = String(msg.risk_level || "").toLowerCase();
+  const priority = String(msg.priority || "").toLowerCase();
+  const orderNumber = String(msg.order_number || msg.orderNumber || "").trim();
+  const hasOrderNumber = Boolean(orderNumber || /\b(order\s*(number|#)?|order #|#)\s*(is|:|#|-)?\s*[a-z0-9-]{4,}/i.test(text));
+  const hasEvidence = Boolean(
+    msg.evidence ||
+    msg.evidence_url ||
+    msg.photo_url ||
+    msg.attachment_url ||
+    /\b(photo|picture|image|screenshot|video|evidence|attached|attachment)\b/i.test(text)
+  );
+
+  if (sourceType === "TikTok Refund" || /\b(refund|return|chargeback|cancel|cancellation|credit)\b/i.test(lower)) {
+    return { label: "Needs Human Review", reason: "money" };
+  }
+  if (/\b(delivered but (not|never) received|says delivered|marked delivered|not received|never got|package missing|lost package)\b/i.test(lower)) {
+    return { label: "Needs Human Review", reason: "delivered_not_received" };
+  }
+  if (/\b(replacement|reship|re-ship|send another|missing item|wrong item|wrong product|damaged|broken)\b/i.test(lower)) {
+    if (!hasEvidence) return { label: "Needs Investigation", reason: "missing_evidence" };
+    return { label: "Needs Human Review", reason: "replacement" };
+  }
+  if (/\b(angry|furious|scam|fraud|lawsuit|lawyer|attorney|bbb|chargeback|dispute|reporting you|terrible service)\b/i.test(lower)) {
+    return { label: "Needs Human Review", reason: "customer_escalation" };
+  }
+  if (/\$\s?(1[0-9]{2,}|[2-9][0-9]{2,}|[1-9][0-9]{3,})\b|\b(high value|expensive|big order)\b/i.test(lower)) {
+    return { label: "Needs Human Review", reason: "high_value" };
+  }
+  if (!hasOrderNumber && /\b(order|tracking|shipment|package|missing|wrong|damaged|refund|return|replacement|reship)\b/i.test(lower)) {
+    return { label: "Needs Investigation", reason: "missing_order" };
+  }
+  if (priority === "high" || riskLevel === "high" || triageStatus === "High Priority") {
+    return { label: "Needs Investigation", reason: "priority" };
+  }
+  if (String(msg.confidence_score || "") && Number(msg.confidence_score) < 60) {
+    return { label: "Needs Investigation", reason: "low_confidence" };
+  }
+  if (String(msg.issue_type || "").toLowerCase().includes("unclear") || /\b(not sure|confused|unclear|help\??|what happened)\b/i.test(lower)) {
+    return { label: "Needs Investigation", reason: "unclear" };
+  }
+  if ((needsHuman || triageStatus === "Needs Human Review") && riskLevel !== "normal") {
+    return { label: "Needs Human Review", reason: "triage" };
+  }
+  if (triageStatus === "Needs Investigation" && riskLevel !== "normal") {
+    return { label: "Needs Investigation", reason: "triage" };
+  }
+  return null;
+};
+
+const isCommandInboxAutoDraftEligible = (msg) => {
+  if (!msg || msg.archived_at) return false;
+  const status = String(msg.status || "").trim();
+  const openForReply = !status || ["Needs Reply", "New", "Open"].includes(status);
+  if (!openForReply) return false;
+  if (msg.ai_draft || msg.approved_reply) return false;
+  if (String(msg.draft_status || "").trim()) return false;
+  if (classifyInboundSource(msg) === "Noise" || msg.issue_type === "Noise / Not CS") return false;
+  return !getCommandInboxRiskFlag(msg);
+};
+
 const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -2785,6 +2880,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [assistantResults, setAssistantResults] = useState({});
   const [assistantLoadingId, setAssistantLoadingId] = useState(null);
   const [copiedAssistantDraftId, setCopiedAssistantDraftId] = useState(null);
+  const autoDraftedIdsRef = useRef(new Set());
+  const [autoDraftBusyIds, setAutoDraftBusyIds] = useState({});
+  const [autoDraftActivity, setAutoDraftActivity] = useState(null);
 
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
   const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
@@ -2807,7 +2905,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (activeFilter === "Noise / Not CS")      return classifyInboundSource(m) === "Noise" ||
       m.triage_status === "Noise / Not CS" || m.issue_type === "Noise / Not CS";
     if (activeFilter === "Untriaged")           return isUntriaged(m);
-    if (activeFilter === "Needs Human Review")  return m.needs_human_review === true || m.needs_human_review === "true" || m.triage_status === "Needs Human Review";
+    if (activeFilter === "Needs Human Review")  return getCommandInboxRiskFlag(m)?.label === "Needs Human Review";
     if (activeFilter === "High Priority")       return m.risk_level === "High" || m.priority === "High" || m.triage_status === "High Priority";
     if (activeFilter === "Closed")              return m.status === "Closed" || m.status === "Archived" || m.archived_at;
     if (activeFilter === "Archived")            return false;
@@ -2828,6 +2926,59 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
     return newestFirst(a, b);
   });
+
+  useEffect(() => {
+    if (inboundLoading || !supabase?.functions?.invoke) return undefined;
+
+    const currentMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+    const openMessages = currentMessages.filter(m => !m.archived_at && !["Closed", "Archived", "Resolved"].includes(String(m.status || "").trim()));
+    const reviewCount = openMessages.filter(m => getCommandInboxRiskFlag(m)?.label === "Needs Human Review").length;
+    const investigationCount = openMessages.filter(m => getCommandInboxRiskFlag(m)?.label === "Needs Investigation").length;
+    const candidates = currentMessages
+      .filter(m => isCommandInboxAutoDraftEligible(m) && !autoDraftedIdsRef.current.has(m.id))
+      .sort((a, b) => getSortTime(b) - getSortTime(a))
+      .slice(0, 10);
+
+    if (candidates.length === 0) {
+      if (reviewCount || investigationCount) {
+        setAutoDraftActivity({ prepared: 0, review: reviewCount, investigation: investigationCount });
+      }
+      return undefined;
+    }
+
+    let cancelled = false;
+    const runAutoDrafts = async () => {
+      let prepared = 0;
+      for (const msg of candidates) {
+        if (cancelled) return;
+        autoDraftedIdsRef.current.add(msg.id);
+        setAutoDraftBusyIds(prev => ({ ...prev, [msg.id]: true }));
+        try {
+          const { data, error } = await supabase.functions.invoke("draft-inbound-reply", {
+            body: { message_id: msg.id, source: "auto" },
+          });
+          if (!error && data?.message) {
+            prepared++;
+            setInboundMessages(prev => prev.map(m => m.id === msg.id ? { ...m, ...data.message } : m));
+          }
+        } catch (err) {
+          console.warn("Auto draft failed:", err?.message || err);
+        } finally {
+          setAutoDraftBusyIds(prev => {
+            const next = { ...prev };
+            delete next[msg.id];
+            return next;
+          });
+        }
+      }
+      if (!cancelled) {
+        setAutoDraftActivity({ prepared, review: reviewCount, investigation: investigationCount });
+      }
+    };
+
+    runAutoDrafts();
+    return () => { cancelled = true; };
+  }, [inboundLoading, inboundMessages, setInboundMessages]);
 
   const toggleMessageExpanded = (id) => {
     setExpandedMessages(prev => ({ ...prev, [id]: !prev[id] }));
@@ -3268,10 +3419,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       }
 
       // ── Step 4: Draft ───────────────────────────────────────────────────────
-      // Rule-driven if rule exists; safe default = draft only if needs_human_review
-      const shouldDraft = rule
-        ? rule.auto_draft === true
-        : (triaged.needs_human_review === true || triaged.needs_human_review === "true");
+      // Rule-driven if rule exists; safe default = draft only low-risk reply work.
+      const shouldDraft = !getCommandInboxRiskFlag(triaged) && (
+        rule ? rule.auto_draft === true : isCommandInboxAutoDraftEligible(triaged)
+      );
 
       if (shouldDraft && !triaged.ai_draft) {
         try {
@@ -3505,6 +3656,15 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         </div>
       )}
 
+      {autoDraftActivity && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
+          <span className="font-semibold text-slate-800">Inbox activity</span>
+          <span>Prepared <strong>{autoDraftActivity.prepared}</strong> replies.</span>
+          <span><strong>{autoDraftActivity.review}</strong> need review.</span>
+          <span><strong>{autoDraftActivity.investigation}</strong> need investigation.</span>
+        </div>
+      )}
+
       {/* Error banner */}
       {inboundError && (
         <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-red-800 text-sm">{inboundError}</div>
@@ -3582,10 +3742,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       {/* Message cards */}
       {sortedFiltered.map(msg => {
         const isBusy      = busyId === msg.id;
-        const isDraftBusy = draftBusyId === msg.id;
+        const isDraftBusy = draftBusyId === msg.id || autoDraftBusyIds[msg.id] === true;
         const statusStyle    = INBOX_STATUS_STYLE[msg.status]        || "bg-gray-100 text-gray-500 border-gray-200";
         const priorityStyle  = INBOX_PRIORITY_STYLE[msg.priority]    || "bg-gray-100 text-gray-500 border-gray-200";
-        const triageStyle    = TRIAGE_STATUS_STYLE[msg.triage_status] || "bg-gray-100 text-gray-500 border-gray-200";
         const riskStyle      = RISK_LEVEL_STYLE[msg.risk_level]       || "bg-gray-100 text-gray-500 border-gray-200";
         const { displayName, displayBody, hasHistory } = getDisplayInboundMessage(msg);
         const showName       = displayName || msg.sender_name || msg.customer_name;
@@ -3607,6 +3766,11 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const assistantState = isAssistantOpen ? assistantResults[msg.id] : null;
         const assistantAnalysis = assistantState?.analysis || null;
         const isAssistantLoading = assistantLoadingId === msg.id;
+        const riskFlag = getCommandInboxRiskFlag(msg);
+        const displayTriageStatus = !riskFlag && ["Needs Human Review", "Needs Investigation"].includes(String(msg.triage_status || ""))
+          ? "Triaged"
+          : msg.triage_status;
+        const triageStyle = TRIAGE_STATUS_STYLE[displayTriageStatus] || "bg-gray-100 text-gray-500 border-gray-200";
 
         return (
           <Card key={msg.id} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
@@ -3623,13 +3787,22 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                 {msg.status   && <Badge label={msg.status}   className={statusStyle}   />}
                 {untriaged
                   ? <Badge label="Untriaged" className="bg-gray-100 text-gray-400 border-gray-200" />
-                  : <Badge label={msg.triage_status} className={triageStyle} />
+                  : <Badge label={displayTriageStatus} className={triageStyle} />
                 }
                 {msg.draft_status === "Approved" && (
                   <Badge label="Draft Approved" className="bg-slate-100 text-slate-700 border-slate-200" />
                 )}
-                {(msg.needs_human_review === true || msg.needs_human_review === "true") && (
-                  <Badge label="Human Review" className="bg-black text-white border-black" />
+                {msg.ai_draft && msg.draft_status !== "Approved" && (
+                  <Badge label="Draft Ready" className="bg-gray-50 text-gray-700 border-gray-200" />
+                )}
+                {riskFlag?.label === "Needs Human Review" && (
+                  <Badge label="Needs Human Review" className="bg-black text-white border-black" />
+                )}
+                {riskFlag?.label === "Needs Investigation" && (
+                  <Badge
+                    label={riskFlag.label}
+                    className="bg-amber-50 text-amber-700 border-amber-200"
+                  />
                 )}
               </div>
               {/* Timestamp - Pacific time, labeled Received or Imported */}
@@ -3846,7 +4019,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                       {msg.draft_status !== "Approved" && (
                         <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
                           className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                          Approve Draft
+                          Mark Reviewed
                         </button>
                       )}
                       {[["redraft","Redraft"], ["make_shorter","Shorter"], ["make_warmer","Warmer"], ["make_firmer","Firmer"]].map(([inst, lbl]) => (
@@ -3883,7 +4056,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </button>
               <button disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isDraftBusy ? "Drafting..." : "Generate Draft"}
+                {isDraftBusy ? "Drafting..." : msg.ai_draft ? "Regenerate Draft" : "Generate Draft"}
               </button>
               <button disabled={isBusy || isAssistantLoading} onClick={() => handleAskAssistant(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
@@ -6089,7 +6262,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const trackerBlocks = safeSurpriseSets.filter(block => normalizeSurpriseSetBrandValue(block.brand));
   const dayEntries = boardEntries.filter(entry => entry.day === selectedDay);
   const visibleBrands = focusChannel === "All"
-    ? SURPRISE_SET_TRACKER_BRANDS
+    ? SURPRISE_SET_REQUIRED_BOARD_BRANDS
     : SURPRISE_SET_TRACKER_BRANDS.filter(item => item.code === focusChannel);
   const metrics = getSurpriseSetBoardMetrics(boardEntries, selectedDay);
   const brain = getSurpriseSetBrainNotes(boardEntries, selectedDay);
@@ -6196,7 +6369,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
 
   const handleAddAnother = () => {
     const source = builderForm || {
-      brand: focusChannel === "All" ? "Vaulted Rarities" : getSurpriseSetBrandFromCode(focusChannel),
+      brand: focusChannel === "All" ? "PokeSpins" : getSurpriseSetBrandFromCode(focusChannel),
       day: selectedDay,
       shift: "am",
     };
@@ -6450,7 +6623,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
 
   const handleImportFromSheets = async () => {
     const channels = autopilotChannels.length ? autopilotChannels : ["CK", "PS", "PM"];
-    const dates = getAutopilotDatesForRange(autopilotRange);
+    const dates = getAutopilotDatesForRange(autopilotRange, selectedDay);
     setAutopilotLoading(true);
     setAutopilotError("");
     setConverterError("");
@@ -6580,6 +6753,14 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     if (!window.confirm("Clear this week's surprise set setup?")) return;
     const fresh = createDefaultWeeklySurpriseSets();
     try { localStorage.removeItem(SURPRISE_SET_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(SURPRISE_SET_BOARD_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(SETSHEET_CONVERTER_STORAGE_KEY); } catch {}
+    setBoardEntries([]);
+    setConvertedEntries([]);
+    setBuilderForm(null);
+    setAutopilotPreviewRows([]);
+    setAutopilotSummary(null);
+    setAgentActivity(["VR default recurring surprise set remains active."]);
     setSurpriseSets(fresh);
   };
 
@@ -6620,6 +6801,32 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           <button onClick={() => handleMarkUploaded(entry)} className="rounded border border-slate-800 bg-slate-700 px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-800">Mark Uploaded</button>
           <button onClick={() => handleDeleteSet(entry.id)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-50">Delete</button>
         </div>
+      </div>
+    );
+  };
+
+  const renderVrStatusCard = () => {
+    const vrEntries = dayEntries.filter(entry => normalizeSurpriseSetBrandValue(entry.brand) === "Vaulted Rarities");
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-3">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SURPRISE_SET_BOARD_BRAND_COLORS.VR }} />
+          <p className="text-sm font-bold text-gray-900">VR</p>
+          <p className="text-[11px] font-medium text-gray-400">Vaulted Rarities</p>
+        </div>
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2">
+          <p className="text-xs font-bold text-gray-900">VR default set active</p>
+          <p className="mt-0.5 text-[11px] text-gray-600">Vaulted Rarities uses the same recurring surprise set daily, so no AM or PM lane is required.</p>
+        </div>
+        {vrEntries.length > 0 && (
+          <div className="mt-3 space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Custom VR Exceptions</p>
+            {vrEntries.map(renderSetCard)}
+          </div>
+        )}
+        <button onClick={() => handleAddSet("Vaulted Rarities", "am")} className="mt-3 rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">
+          Add Custom VR Set
+        </button>
       </div>
     );
   };
@@ -6692,7 +6899,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="space-y-1">
               <FL>Date Range</FL>
-              <Sel value={autopilotRange} onChange={setAutopilotRange} options={["Today", "Tomorrow", "Next 2 Days"]} placeholder="" />
+              <Sel value={autopilotRange} onChange={setAutopilotRange} options={["Today", "Tomorrow", "Next 2 Days", "Selected Day", "Full Week"]} placeholder="" />
             </label>
             <div className="space-y-1">
               <FL>Channels</FL>
@@ -6809,11 +7016,21 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
 
       <Card className="p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
-              <FL>Day</FL>
-              <Sel value={selectedDay} onChange={setSelectedDay} options={SURPRISE_SET_DAYS} placeholder="" />
-            </label>
+          <div className="flex-1 space-y-2">
+            <FL>Live Week</FL>
+            <div className="flex flex-wrap gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+              {SURPRISE_SET_DAYS.map(day => (
+                <button
+                  key={day}
+                  onClick={() => setSelectedDay(day)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${selectedDay === day ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:bg-white hover:text-gray-800"}`}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-1">
             <label className="space-y-1">
               <FL>Focus Channel</FL>
               <Sel value={focusChannel} onChange={setFocusChannel} options={SURPRISE_SET_BOARD_FOCUS_OPTIONS} placeholder="" />
@@ -6835,7 +7052,8 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
             Setup Brain: {brain.next}
           </div>
           <div className={focusChannel === "All" ? "mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4" : "mt-4 space-y-3"}>
-            {visibleBrands.map(({ brand, code }) => (
+            {(focusChannel === "All" || focusChannel === "VR") && renderVrStatusCard()}
+            {visibleBrands.filter(({ code }) => code !== "VR").map(({ brand, code }) => (
               <div key={brand} className="rounded-lg border border-gray-200 bg-white p-3">
                 <div className="mb-3 flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SURPRISE_SET_BOARD_BRAND_COLORS[code] || "#CBD5E1" }} />
