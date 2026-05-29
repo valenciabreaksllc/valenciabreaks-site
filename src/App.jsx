@@ -1004,8 +1004,6 @@ const getAutopilotDatesForRange = (range, selectedDay = "") => {
   return [today];
 };
 
-const AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP = 250;
-const AUTOPILOT_HARD_PRODUCT_ROW_CAP = 500;
 const AUTOPILOT_IGNORED_SHEET_TAB_PATTERN = /\b(template|templates|schedule|employee|week-to-week|strixhaven|no more)\b|^sheet\d+$/i;
 const AUTOPILOT_CRITICAL_WARNING_PATTERNS = [
   /missing target/i,
@@ -1013,8 +1011,6 @@ const AUTOPILOT_CRITICAL_WARNING_PATTERNS = [
   /missing streamer/i,
   /no product rows/i,
   /could not detect setup block/i,
-  /product cap/i,
-  /high product count over 500/i,
   /ambiguous column group/i,
 ];
 
@@ -1168,8 +1164,6 @@ const collectAutopilotProductRowsAboveSetup = (lines, setupLineIndex) => {
   const products = [];
   let blankRun = 0;
   let sawProduct = false;
-  let quantityRows = 0;
-  let capped = false;
 
   for (let index = setupLineIndex - 1; index >= 0; index -= 1) {
     const line = lines[index] || "";
@@ -1190,19 +1184,12 @@ const collectAutopilotProductRowsAboveSetup = (lines, setupLineIndex) => {
     if (!productName) continue;
     products.push(productName);
     sawProduct = true;
-    if (hasAutopilotQuantityCell(clean)) quantityRows += 1;
-    const cap = quantityRows >= 12 ? AUTOPILOT_HARD_PRODUCT_ROW_CAP : AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP;
-    if (products.length >= cap) {
-      capped = true;
-      break;
-    }
   }
 
-  return { productLines: products.reverse(), capped };
+  return { productLines: products.reverse(), capped: false };
 };
 
 const collectAutopilotProductRowsFromWholeBlock = (lines) => {
-  let capped = false;
   const productLines = [];
   for (const line of lines) {
     if (isAutopilotIgnoredProductLine(line)) continue;
@@ -1210,12 +1197,8 @@ const collectAutopilotProductRowsFromWholeBlock = (lines) => {
     if (isSurpriseSetNonProductLabel(productName)) continue;
     if (!productName) continue;
     productLines.push(productName);
-    if (productLines.length >= AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP) {
-      capped = true;
-      break;
-    }
   }
-  return { productLines, capped };
+  return { productLines, capped: false };
 };
 
 const extractProductLinesFromSheetBlock = (blockText) => {
@@ -1302,10 +1285,25 @@ const getAutopilotRowCellsForGroup = (row = [], startCol = 0, endCol = Infinity)
 const isAutopilotBlankGroupRow = (row = []) => !row.some(Boolean);
 const getAutopilotGroupLine = (row = []) => row.filter(Boolean).join("\t");
 
+const isCardKingSetLabelCandidate = (value) => {
+  const clean = normalizeSetSheetProductName(value);
+  if (!clean) return false;
+  const compact = clean.replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  if (!/[A-Za-z0-9]/.test(compact)) return false;
+  if (getAutopilotSetupHeader(compact) || isWarehouseSetupLine(compact) || isWarehouseFormulaLine(compact)) return false;
+  if (/^(hard\s*floor|target|stretch|retail|cost|total|subtotal|built|not\s*done|done)\b/i.test(compact)) return false;
+  if (/^\$?\s*\d+(?:\.\d{1,2})?$/.test(compact)) return false;
+  if (/\b(black|white|red|blue|green)\s+vr\b/i.test(compact)) return false;
+  if (/\b(vr\s*(box|bag)|vault|pack|booster|bundle|commander|deck|collector\s*booster|play\s*booster)\b/i.test(compact)) return false;
+  if (/\b(surprise|rapid\s*fire|fabled|cache)\b|50\s*\/\s*50/i.test(compact)) return true;
+  return /\bmagic\b/i.test(compact) && compact.length <= 48 && (/\b(morning|night|day)\b/i.test(compact) || /\d+\s*$/.test(compact));
+};
+
 const isSurpriseSetNonProductLabel = (value) => {
   const clean = normalizeSetSheetProductName(value);
   if (!clean) return true;
   const compact = clean.replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  if (isCardKingSetLabelCandidate(compact)) return true;
   if (/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(compact)) return true;
   if (/\b(morning|night|evening|day)\s+magic\s*\d*\b/i.test(compact)) return true;
   if (/^magic\s*\d+$/i.test(compact)) return true;
@@ -1372,6 +1370,22 @@ const detectAutopilotPriceFromGroupRows = (groupRows = [], setupIndex = 0, label
 };
 
 const findAutopilotSetNameFromGroupRows = (groupRows = [], setupIndex = 0, channelCode = "", setNumber = "1") => {
+  if (String(channelCode || "").toUpperCase() === "CK") {
+    let blankRun = 0;
+    for (let index = setupIndex - 1; index >= Math.max(0, setupIndex - 25); index -= 1) {
+      const row = groupRows[index];
+      const firstCell = row?.cells?.[0] || "";
+      const line = getAutopilotGroupLine(row?.cells || []);
+      if (!line) {
+        blankRun += 1;
+        if (blankRun > 3) break;
+        continue;
+      }
+      blankRun = 0;
+      if (getAutopilotSetupHeader(line) || isWarehouseSetupLine(line)) continue;
+      if (isCardKingSetLabelCandidate(firstCell) || isCardKingSetLabelCandidate(line)) return firstCell || line;
+    }
+  }
   for (let index = setupIndex + 1; index < Math.min(groupRows.length, setupIndex + 5); index += 1) {
     const firstCell = groupRows[index]?.cells?.[0] || "";
     if (isStrongWarehouseSetNameLine(firstCell) && !isWarehouseSetupLine(firstCell)) return firstCell;
@@ -1382,7 +1396,6 @@ const findAutopilotSetNameFromGroupRows = (groupRows = [], setupIndex = 0, chann
 const collectAutopilotProductRowsForGroup = (groupRows = [], setupIndex = 0, groupMeta = {}) => {
   const productLines = [];
   let blankRun = 0;
-  let capped = false;
   let startRow = "";
   let endRow = "";
   for (let index = setupIndex - 1; index >= 0; index -= 1) {
@@ -1404,12 +1417,8 @@ const collectAutopilotProductRowsForGroup = (groupRows = [], setupIndex = 0, gro
     productLines.push(productName);
     startRow = row.rowNumber;
     if (!endRow) endRow = row.rowNumber;
-    if (productLines.length >= AUTOPILOT_HARD_PRODUCT_ROW_CAP) {
-      capped = true;
-      break;
-    }
   }
-  return { productLines: productLines.reverse(), capped, productStartRow: startRow || "", productEndRow: endRow || "" };
+  return { productLines: productLines.reverse(), capped: false, productStartRow: startRow || "", productEndRow: endRow || "" };
 };
 
 const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsheetName, tabName, values }, selectedDates = []) => {
@@ -1440,8 +1449,6 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
       if (!header.streamer) warnings.push("Missing streamer");
       if (!shift) warnings.push("Missing shift");
       if (!productResult.productLines.length) warnings.push("No product rows found.");
-      if (productResult.capped) warnings.push("Product cap");
-      if (productResult.productLines.length > AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP) warnings.push("High product count over 250");
       if (!surpriseSetName) {
         surpriseSetName = channelCode === "CK" ? `CardKing Magic Set ${setNumber}` : `${channelCode || "Set"} Surprise Set ${setNumber}`;
         warnings.push("Set name generated.");
@@ -1603,9 +1610,7 @@ const normalizeImportedSet = (block, fallbackOptions = {}) => {
 
   const extractedProducts = extractProductLinesFromSheetBlock(block?.text);
   const productLines = extractedProducts.productLines.filter(line => line !== surpriseSetName);
-  if (extractedProducts.capped) warnings.push("Product rows were capped. Review this set.");
   if (!productLines.length) warnings.push("No product rows found.");
-  if (productLines.length > AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP) warnings.push("High product count. Review before upload.");
 
   return {
     brand,
@@ -1631,7 +1636,6 @@ const buildImportedSetCard = (importedSet) => {
   const converted = rows.length > 0 && !importedSet.needsReview;
   const warnings = [...(importedSet.warnings || [])];
   if (!converted && !warnings.includes("No product rows found.")) warnings.push("No product rows found.");
-  if (summary.totalRows > AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP && !warnings.includes("High product count. Review before upload.")) warnings.push("High product count. Review before upload.");
   const normalized = normalizeSurpriseSetBoardEntry({
     ...importedSet,
     fileName: buildSurpriseSetFileName(importedSet),
@@ -1654,7 +1658,6 @@ const getAutopilotWarningChipLabel = (warning) => {
   const text = String(warning || "");
   if (/shift/i.test(text)) return "Shift review";
   if (/target/i.test(text)) return "Missing target";
-  if (/cap|capped/i.test(text)) return "Product cap";
   if (/product|count/i.test(text)) return "Review products";
   return text;
 };
@@ -6584,7 +6587,6 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     const uniqueWarnings = Array.from(new Set(allWarnings));
     const shiftReviewCount = importedCards.filter(card => (card.warnings || []).some(warning => warning.includes("Shift not detected"))).length;
     const missingTargetCount = importedCards.filter(card => (card.warnings || []).some(warning => warning.includes("Target price missing"))).length;
-    const cappedCount = importedCards.filter(card => (card.warnings || []).some(warning => /cap|capped/i.test(warning))).length;
     const readyFiles = convertedFileEntries.map(entry => `${entry.brandCode || getSurpriseSetBrandCode(entry.brand)} ${entry.shift.toUpperCase()}`).filter(Boolean);
     const nextActivity = [
       importMeta.tabCount ? `Imported ${importMeta.tabCount} sheet tab${importMeta.tabCount === 1 ? "" : "s"}.` : "",
@@ -6595,7 +6597,6 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       updatedCount ? `Updated ${updatedCount} existing set${updatedCount === 1 ? "" : "s"}.` : "",
       shiftReviewCount ? `${shiftReviewCount} set${shiftReviewCount === 1 ? "" : "s"} need shift review.` : "",
       missingTargetCount ? `Missing target price for ${missingTargetCount} set${missingTargetCount === 1 ? "" : "s"}.` : "",
-      cappedCount ? `${cappedCount} set${cappedCount === 1 ? "" : "s"} capped due to high product count.` : "",
       readyFiles[0] ? `${readyFiles[0]} is ready to download.` : "",
       uniqueWarnings.length ? `${uniqueWarnings.length} warning${uniqueWarnings.length === 1 ? "" : "s"}.` : "",
     ].filter(Boolean);
@@ -6606,7 +6607,6 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       warnings: uniqueWarnings.length,
       warningList: uniqueWarnings,
       tabs: importMeta.tabCount || 0,
-      capped: cappedCount,
     };
     setAutopilotSummary(nextSummary);
     return nextSummary;
@@ -6646,7 +6646,6 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
         warnings: warningCount,
         warningList: Array.from(new Set(result.previewRows.flatMap(row => row.warnings))).slice(0, 8),
         tabs: countAutopilotSheetTabs(data),
-        capped: result.previewRows.filter(row => row.warnings.some(warning => /cap/i.test(warning))).length,
       });
       setAgentActivity([
         `Found ${result.previewRows.length} possible set${result.previewRows.length === 1 ? "" : "s"}.`,
