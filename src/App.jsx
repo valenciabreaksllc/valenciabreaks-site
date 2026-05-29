@@ -1063,7 +1063,13 @@ const getAutopilotSetupHeader = (line) => {
 };
 
 const detectAutopilotDateStreamerFromTabName = (tabName) => {
-  const clean = normalizeSetSheetProductName(tabName).replace(/\b(BUILT|NOT\s*DONE|DONE)\b/ig, "").trim();
+  const raw = normalizeSetSheetProductName(tabName);
+  const clean = raw
+    .replace(/\((?:BUILT|NOT\s*DONE|DONE)\)/ig, "")
+    .replace(/\b(BUILT|NOT\s*DONE|DONE)\b/ig, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
   const slashHeader = getAutopilotSetupHeader(clean);
   if (slashHeader) return slashHeader;
   const compact = clean.match(/\b([A-Za-z][A-Za-z\s.'-]{1,24})\s+(\d{1,2})(\d{2})\b/i);
@@ -1106,7 +1112,16 @@ const buildAutopilotTabShiftMap = (channel = "", tabs = []) => {
   });
   const shiftMap = new Map();
   groups.forEach(group => {
-    group.forEach((info, orderIndex) => {
+    const uniqueOrder = [];
+    const seenStreamers = new Set();
+    group.forEach(info => {
+      const streamerKey = normalizeSetSheetProductName(info.streamer).toLowerCase();
+      if (seenStreamers.has(streamerKey)) return;
+      seenStreamers.add(streamerKey);
+      uniqueOrder.push(info);
+    });
+    const assignedByStreamer = new Map();
+    uniqueOrder.forEach((info, orderIndex) => {
       const warnings = [];
       let assignedShift = info.explicitShift;
       if (!assignedShift) {
@@ -1114,13 +1129,22 @@ const buildAutopilotTabShiftMap = (channel = "", tabs = []) => {
         else if (orderIndex === 1) assignedShift = "pm";
         else assignedShift = "Extra / Needs Review";
       }
-      if (!info.explicitShift && group.length === 1) {
+      if (!info.explicitShift && uniqueOrder.length === 1) {
         warnings.push("Only one streamer tab found for this date. Shift assumed AM.");
       }
-      if (!info.explicitShift && group.length > 2 && orderIndex >= 2) {
+      if (!info.explicitShift && uniqueOrder.length > 2 && orderIndex >= 2) {
         warnings.push("More than two streamer tabs found for this date. Review shift assignment.");
       }
-      shiftMap.set(info.tabOrder, { ...info, assignedShift, streamerTabCount: group.length, tabDateOrder: orderIndex + 1, warnings });
+      assignedByStreamer.set(normalizeSetSheetProductName(info.streamer).toLowerCase(), {
+        assignedShift,
+        streamerTabCount: uniqueOrder.length,
+        tabDateOrder: orderIndex + 1,
+        warnings,
+      });
+    });
+    group.forEach(info => {
+      const assigned = assignedByStreamer.get(normalizeSetSheetProductName(info.streamer).toLowerCase());
+      shiftMap.set(info.tabOrder, { ...info, ...(assigned || {}), warnings: assigned?.warnings || [] });
     });
   });
   tabInfos.forEach(info => {
@@ -1484,7 +1508,10 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
     if (!groupRows.some(row => !isAutopilotBlankGroupRow(row.cells))) return;
     const setupRows = findAutopilotSetupRowsInGroup(groupRows, tabFallback);
     setupRows.forEach((setup, verticalIndex) => {
-      const header = setup.header || tabFallback || {};
+      const header = setup.header || tabFallback || {
+        streamDate: tabShiftMeta?.streamDate || "",
+        streamer: tabShiftMeta?.streamer || "",
+      };
       const streamDate = header.streamDate || "";
       if (selectedDates.length && streamDate && !selectedDates.includes(streamDate)) return;
       const setNumber = String(groupIndex + verticalIndex + 1);
@@ -1544,10 +1571,11 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
 const buildAutopilotPreviewRowsFromSheetsImport = (payload = {}, selectedDates = []) => {
   const channelMap = payload?.data?.channels || payload?.channels || {};
   let ignoredTabs = 0;
-  const previewRows = Object.entries(channelMap).flatMap(([channel, channelData]) =>
-    (Array.isArray(channelData?.tabs) ? channelData.tabs : []).flatMap((tab, tabIndex, tabs) => {
+  const previewRows = Object.entries(channelMap).flatMap(([channel, channelData]) => {
+    const tabs = Array.isArray(channelData?.tabs) ? channelData.tabs : [];
+    const shiftMap = buildAutopilotTabShiftMap(channel, tabs);
+    return tabs.flatMap((tab, tabIndex) => {
       const tabOrder = tabIndex + 1;
-      const shiftMap = buildAutopilotTabShiftMap(channel, tabs);
       const result = buildAutopilotPreviewRowsFromSheetTab({
         channel,
         channelLabel: channelData?.label || "",
@@ -1559,9 +1587,17 @@ const buildAutopilotPreviewRowsFromSheetsImport = (payload = {}, selectedDates =
       }, selectedDates);
       ignoredTabs += result.ignored || 0;
       return result.previewRows;
-    })
-  );
+    });
+  });
   return { previewRows, ignoredTabs };
+};
+
+const formatAutopilotShiftLabel = (shift) => {
+  const clean = String(shift || "").trim();
+  if (clean === "am") return "AM";
+  if (clean === "pm") return "PM";
+  if (/^extra/i.test(clean)) return "Extra";
+  return clean || "Unknown";
 };
 
 const blockHasAutopilotSignal = (blockText, tabName = "") => {
@@ -7028,7 +7064,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
                       <td className="px-2 py-2 text-gray-600">{row.rowRangeUsed}</td>
                       <td className="px-2 py-2 text-gray-600">{row.streamDate || "-"}</td>
                       <td className="px-2 py-2 text-gray-600">{row.streamer || "-"}</td>
-                      <td className="px-2 py-2 text-gray-600">{row.shift}</td>
+                      <td className="px-2 py-2 text-gray-600">{formatAutopilotShiftLabel(row.shift)}</td>
                       <td className="px-2 py-2 text-gray-600">{row.setNumber}</td>
                       <td className="px-2 py-2 font-semibold text-gray-800">{row.surpriseSetName}</td>
                       <td className="px-2 py-2 text-gray-600">{row.startingBid || "-"}</td>
