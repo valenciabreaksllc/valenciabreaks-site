@@ -425,6 +425,8 @@ const normalizeSurpriseSetBoardEntry = (entry = {}) => {
     notes: entry.notes || "",
     warnings: Array.isArray(entry.warnings) ? entry.warnings.filter(Boolean) : [],
     importSource: entry.importSource || "",
+    sheetTab: entry.sheetTab || "",
+    columnGroup: entry.columnGroup || "",
   };
 };
 
@@ -862,7 +864,7 @@ const detectWarehouseSheetShift = (rawText) => {
   return "";
 };
 
-const isWarehouseSetupLine = (line) => /^\s*(hard\s*floor|target|stretch)\s*:/i.test(line);
+const isWarehouseSetupLine = (line) => /^\s*(?:=CONCATENATE\("?\s*)?(hard\s*floor|target|stretch)\b/i.test(line);
 const isWarehouseTotalLine = (line) => /\b(sub\s*total|subtotal|grand\s*total|total|sum)\b/i.test(line);
 const isWarehouseDateOnlyLine = (line) => /^\s*\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s*$/i.test(line);
 const isWarehouseFormulaLine = (line) => /^\s*=/.test(line) || /\t\s*=/.test(line);
@@ -995,6 +997,17 @@ const getAutopilotDatesForRange = (range) => {
 
 const AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP = 250;
 const AUTOPILOT_HARD_PRODUCT_ROW_CAP = 500;
+const AUTOPILOT_IGNORED_SHEET_TAB_PATTERN = /\b(template|templates|schedule|employee|week-to-week|strixhaven|no more)\b|^sheet\d+$/i;
+const AUTOPILOT_CRITICAL_WARNING_PATTERNS = [
+  /missing target/i,
+  /missing date/i,
+  /missing streamer/i,
+  /no product rows/i,
+  /could not detect setup block/i,
+  /product cap/i,
+  /high product count over 500/i,
+  /ambiguous column group/i,
+];
 
 const getAutopilotSelectedBrands = (options = {}) => {
   const selected = Array.isArray(options.selectedChannels) ? options.selectedChannels : [];
@@ -1007,9 +1020,28 @@ const getAutopilotSelectedBrands = (options = {}) => {
   return ["CardKing47"];
 };
 
+const getAutopilotBrandFromChannelCode = (code) => {
+  const clean = String(code || "").trim().toUpperCase();
+  if (clean === "CK" || clean === "CK47") return "CardKing47";
+  if (clean === "PS") return "PokeSpins";
+  if (clean === "PM") return "PokieMart";
+  return "";
+};
+
+const isAutopilotCriticalWarning = (warning) =>
+  AUTOPILOT_CRITICAL_WARNING_PATTERNS.some(pattern => pattern.test(String(warning || "")));
+
+const hasAutopilotCriticalWarnings = (warnings = []) =>
+  (Array.isArray(warnings) ? warnings : []).some(isAutopilotCriticalWarning);
+
 const getAutopilotSetupHeader = (line) => {
   const clean = normalizeSetSheetProductName(line);
   if (!clean) return null;
+  const parenStreamerDate = clean.match(/^\s*\(([A-Za-z][A-Za-z\s.'-]{1,24})\)\s*\((\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\)(?:\s*\+.*)?$/i);
+  if (parenStreamerDate) {
+    const isoDate = parseWarehouseSheetDate(parenStreamerDate[2], parenStreamerDate[3], parenStreamerDate[4]);
+    if (isoDate) return { streamDate: isoDate, streamer: titleCaseSurpriseSetName(parenStreamerDate[1]) };
+  }
   const dateFirst = clean.match(/^\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*(?:\(([A-Za-z][A-Za-z\s.'-]{1,24})\)|([A-Za-z][A-Za-z\s.'-]{1,24}))?(?:\s+(?:BUILT|DONE|NOT\s*DONE))?(?:\s*\+.*)?$/i);
   if (dateFirst && (dateFirst[4] || dateFirst[5])) {
     const isoDate = parseWarehouseSheetDate(dateFirst[1], dateFirst[2], dateFirst[3]);
@@ -1023,12 +1055,33 @@ const getAutopilotSetupHeader = (line) => {
   return null;
 };
 
+const detectAutopilotDateStreamerFromTabName = (tabName) => {
+  const clean = normalizeSetSheetProductName(tabName).replace(/\b(BUILT|NOT\s*DONE|DONE)\b/ig, "").trim();
+  const slashHeader = getAutopilotSetupHeader(clean);
+  if (slashHeader) return slashHeader;
+  const compact = clean.match(/\b([A-Za-z][A-Za-z\s.'-]{1,24})\s+(\d{1,2})(\d{2})\b/i);
+  if (compact) {
+    const isoDate = parseWarehouseSheetDate(compact[2], compact[3], "");
+    if (isoDate) return { streamDate: isoDate, streamer: titleCaseSurpriseSetName(compact[1]) };
+  }
+  return null;
+};
+
+const detectAutopilotShiftFromText = (text) => {
+  const clean = String(text || "");
+  if (/\b(morning|day\s*shift|day|am)\b/i.test(clean)) return "am";
+  if (/\b(night|evening|pm)\b/i.test(clean)) return "pm";
+  return "";
+};
+
 const detectAutopilotDateStreamerFromText = (text) => {
   const lines = String(text || "").split(/\r?\n/).map(line => normalizeSetSheetProductName(line)).filter(Boolean);
   for (const line of lines) {
     const header = getAutopilotSetupHeader(line);
     if (header) return header;
   }
+  const tabHeader = detectAutopilotDateStreamerFromTabName(text);
+  if (tabHeader) return tabHeader;
   return null;
 };
 
@@ -1065,15 +1118,17 @@ const detectAutopilotBrand = (rawText) => {
 };
 
 const detectAutopilotPrice = (lines, label) => {
-  const pattern = new RegExp(`^\\s*${label}\\s*:?\\s*\\$?\\s*([0-9]+(?:\\.[0-9]{1,2})?)\\b`, "i");
-  const line = (Array.isArray(lines) ? lines : []).find(item => pattern.test(item));
-  const match = line ? line.match(pattern) : null;
+  const pattern = new RegExp(`\\b${label}\\b\\s*:?\\s*\\$?\\s*([0-9]+(?:\\.[0-9]{1,2})?)\\b`, "i");
+  const adjacentPattern = new RegExp(`\\b${label}\\b\\t+\\$?\\s*([0-9]+(?:\\.[0-9]{1,2})?)\\b`, "i");
+  const line = (Array.isArray(lines) ? lines : []).find(item => pattern.test(item) || adjacentPattern.test(item));
+  const match = line ? (line.match(pattern) || line.match(adjacentPattern)) : null;
   return match ? match[1] : "";
 };
 
 const isAutopilotIgnoredProductLine = (line) => {
   const clean = normalizeSetSheetProductName(line);
   if (!clean) return true;
+  if (isSurpriseSetNonProductLabel(clean)) return true;
   if (getAutopilotSetupHeader(clean)) return true;
   if (isWarehouseSetupLine(clean) || isWarehouseTotalLine(clean) || isWarehouseDateOnlyLine(clean) || isWarehouseFormulaLine(clean) || isWarehouseImageLogoLine(clean)) return true;
   if (/^\$?\d+(?:\.\d{1,2})?$/.test(clean)) return true;
@@ -1121,6 +1176,7 @@ const collectAutopilotProductRowsAboveSetup = (lines, setupLineIndex) => {
     }
     if (isAutopilotIgnoredProductLine(clean)) continue;
     const productName = pickWarehouseProductNameFromRow(clean);
+    if (isSurpriseSetNonProductLabel(productName)) continue;
     if (!productName) continue;
     products.push(productName);
     sawProduct = true;
@@ -1141,6 +1197,7 @@ const collectAutopilotProductRowsFromWholeBlock = (lines) => {
   for (const line of lines) {
     if (isAutopilotIgnoredProductLine(line)) continue;
     const productName = pickWarehouseProductNameFromRow(line);
+    if (isSurpriseSetNonProductLabel(productName)) continue;
     if (!productName) continue;
     productLines.push(productName);
     if (productLines.length >= AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP) {
@@ -1171,6 +1228,12 @@ const valuesToTabSeparatedText = (values = [], startCol = 0, endCol = Infinity) 
     .filter(line => normalizeSetSheetProductName(line))
     .join("\n");
 
+const hasAutopilotSheetGroupData = (values = [], startCol = 0, endCol = Infinity) =>
+  (Array.isArray(values) ? values : []).some(row => {
+    const cells = (Array.isArray(row) ? row : []).slice(startCol, Number.isFinite(endCol) ? endCol : undefined);
+    return cells.some(cell => /[A-Za-z]/.test(normalizeAutopilotSheetCell(cell)));
+  });
+
 const addAutopilotChannelMetadataToBlock = (blockText, channel, tabName = "") => {
   const lines = String(blockText || "").split(/\r?\n/);
   const headerIndex = lines.findIndex(line => getAutopilotSetupHeader(line));
@@ -1191,12 +1254,239 @@ const findAutopilotSetupColumns = (values = []) => {
   return Array.from(columns).sort((a, b) => a - b);
 };
 
+const getAutopilotColumnLetter = (index) => {
+  let value = Number(index) + 1;
+  let label = "";
+  while (value > 0) {
+    const mod = (value - 1) % 26;
+    label = String.fromCharCode(65 + mod) + label;
+    value = Math.floor((value - mod) / 26);
+  }
+  return label;
+};
+
+const getAutopilotGroupLabel = (startCol, endCol) =>
+  `${getAutopilotColumnLetter(startCol)}-${getAutopilotColumnLetter(Math.max(startCol, endCol - 1))}`;
+
 const getAutopilotColumnGroupsForTab = (channel, values = []) => {
   const safeValues = Array.isArray(values) ? values : [];
   const setupColumns = findAutopilotSetupColumns(safeValues);
-  if (setupColumns.length > 1) return setupColumns.map((startCol, index) => ({ startCol, endCol: setupColumns[index + 1] ?? Infinity }));
-  if (String(channel || "").toUpperCase() === "CK") return [{ startCol: 0, endCol: 4 }, { startCol: 4, endCol: 8 }];
-  return [{ startCol: 0, endCol: Infinity }];
+  const channelCode = String(channel || "").toUpperCase();
+  if (setupColumns.length > 1) {
+    return setupColumns.map((startCol, index) => ({
+      startCol,
+      endCol: Math.min(setupColumns[index + 1] ?? startCol + (channelCode === "CK" ? 4 : 5), startCol + (channelCode === "CK" ? 4 : 5)),
+    }));
+  }
+  if (setupColumns.length === 1) {
+    const startCol = setupColumns[0];
+    return [{ startCol, endCol: startCol + (channelCode === "CK" ? 4 : 5) }];
+  }
+  if (channelCode === "CK") return [{ startCol: 0, endCol: 4 }, { startCol: 4, endCol: 8 }];
+  return [{ startCol: 0, endCol: 5 }, { startCol: 5, endCol: 10 }, { startCol: 10, endCol: 15 }];
+};
+
+const getAutopilotRowCellsForGroup = (row = [], startCol = 0, endCol = Infinity) =>
+  (Array.isArray(row) ? row : []).slice(startCol, Number.isFinite(endCol) ? endCol : undefined).map(normalizeSetSheetProductName);
+
+const isAutopilotBlankGroupRow = (row = []) => !row.some(Boolean);
+const getAutopilotGroupLine = (row = []) => row.filter(Boolean).join("\t");
+
+const isSurpriseSetNonProductLabel = (value) => {
+  const clean = normalizeSetSheetProductName(value);
+  if (!clean) return true;
+  const compact = clean.replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  if (/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(compact)) return true;
+  if (/\b(morning|night|evening|day)\s+magic\s*\d*\b/i.test(compact)) return true;
+  if (/^magic\s*\d+$/i.test(compact)) return true;
+  if (/^surprise\s*\d+$/i.test(compact)) return true;
+  if (/\bcollectors?\s+cache(?:\s+surprise)?\s*\d*\b/i.test(compact)) return true;
+  if (/\bcache\s+surprise\s*\d*\b/i.test(compact)) return true;
+  if (/^(hard\s*floor|target|stretch|retail|cost|total|subtotal|built|not\s*done|done)\b/i.test(compact)) return true;
+  return false;
+};
+
+const isAutopilotProductNameCell = (value) => {
+  const clean = normalizeSetSheetProductName(value);
+  if (!clean || !/[A-Za-z]/.test(clean)) return false;
+  if (isAutopilotIgnoredProductLine(clean) || isAutopilotStopScanLine(clean)) return false;
+  if (/^(retail|cost)$/i.test(clean)) return false;
+  return true;
+};
+
+const isValidSurpriseProductRow = (row = {}, groupMeta = {}) => {
+  const cells = Array.isArray(row.cells) ? row.cells : [];
+  const productName = cells[0] || "";
+  const line = getAutopilotGroupLine(cells);
+  if (!productName || !line) return false;
+  if (!isAutopilotProductNameCell(productName)) return false;
+  if (isSurpriseSetNonProductLabel(productName) || isSurpriseSetNonProductLabel(line)) return false;
+  if (getAutopilotSetupHeader(productName) || getAutopilotSetupHeader(line)) return false;
+  if (isWarehouseSetupLine(productName) || isWarehouseSetupLine(line)) return false;
+  if (isWarehouseFormulaLine(productName) || /^=/.test(productName)) return false;
+  if (/^\$?\s*\d+(?:\.\d{1,2})?$/.test(productName)) return false;
+  if (/^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?$/.test(productName)) return false;
+  if (/\b(retail|cost|total|subtotal|hard\s*floor|target|stretch)\b/i.test(line)) return false;
+  if (groupMeta.channelCode === "CK" && /\b(magic|collectors?\s+cache|cache\s+surprise)\b/i.test(productName) && /\d|\b(morning|night|thursday|friday|monday|tuesday|wednesday|saturday|sunday)\b/i.test(productName)) return false;
+  return true;
+};
+
+const findAutopilotSetupRowsInGroup = (groupRows = [], tabFallback = null) => {
+  const matches = [];
+  groupRows.forEach((row, index) => {
+    const headers = row.cells.map(getAutopilotSetupHeader).filter(Boolean);
+    if (headers[0]) matches.push({ index, rowNumber: row.rowNumber, header: headers[0], line: getAutopilotGroupLine(row.cells) });
+  });
+  if (!matches.length && tabFallback) {
+    groupRows.forEach((row, index) => {
+      const line = getAutopilotGroupLine(row.cells);
+      if (/\b(hard\s*floor|target|stretch)\b/i.test(line)) matches.push({ index, rowNumber: row.rowNumber, header: tabFallback, line });
+    });
+  }
+  return matches;
+};
+
+const detectAutopilotPriceFromGroupRows = (groupRows = [], setupIndex = 0, label = "TARGET") => {
+  const pattern = new RegExp(`\\b${label}\\b\\s*:?\\s*\\$?\\s*([0-9]+(?:\\.[0-9]{1,2})?)\\b`, "i");
+  for (let index = setupIndex; index < Math.min(groupRows.length, setupIndex + 8); index += 1) {
+    const cells = groupRows[index]?.cells || [];
+    const inline = getAutopilotGroupLine(cells).match(pattern);
+    if (inline) return inline[1];
+    const labelIndex = cells.findIndex(cell => new RegExp(`\\b${label}\\b`, "i").test(cell));
+    if (labelIndex >= 0) {
+      const nextNumeric = cells.slice(labelIndex + 1).find(cell => /^\$?\s*[0-9]+(?:\.[0-9]{1,2})?$/.test(cell));
+      if (nextNumeric) return nextNumeric.replace(/[^0-9.]/g, "");
+    }
+  }
+  return "";
+};
+
+const findAutopilotSetNameFromGroupRows = (groupRows = [], setupIndex = 0, channelCode = "", setNumber = "1") => {
+  for (let index = setupIndex + 1; index < Math.min(groupRows.length, setupIndex + 5); index += 1) {
+    const firstCell = groupRows[index]?.cells?.[0] || "";
+    if (isStrongWarehouseSetNameLine(firstCell) && !isWarehouseSetupLine(firstCell)) return firstCell;
+  }
+  return String(channelCode || "").toUpperCase() === "CK" ? `CardKing Magic Set ${setNumber}` : "";
+};
+
+const collectAutopilotProductRowsForGroup = (groupRows = [], setupIndex = 0, groupMeta = {}) => {
+  const productLines = [];
+  let blankRun = 0;
+  let capped = false;
+  let startRow = "";
+  let endRow = "";
+  for (let index = setupIndex - 1; index >= 0; index -= 1) {
+    const row = groupRows[index];
+    if (!row) continue;
+    if (isAutopilotBlankGroupRow(row.cells)) {
+      blankRun += 1;
+      if (productLines.length && blankRun > 3) break;
+      continue;
+    }
+    blankRun = 0;
+    const line = getAutopilotGroupLine(row.cells);
+    if (getAutopilotSetupHeader(line) || isAutopilotStopScanLine(line) || /\b(retail|cost)\b/i.test(line)) {
+      if (productLines.length) break;
+      continue;
+    }
+    const productName = row.cells[0] || "";
+    if (!isValidSurpriseProductRow(row, groupMeta)) continue;
+    productLines.push(productName);
+    startRow = row.rowNumber;
+    if (!endRow) endRow = row.rowNumber;
+    if (productLines.length >= AUTOPILOT_HARD_PRODUCT_ROW_CAP) {
+      capped = true;
+      break;
+    }
+  }
+  return { productLines: productLines.reverse(), capped, productStartRow: startRow || "", productEndRow: endRow || "" };
+};
+
+const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsheetName, tabName, values }, selectedDates = []) => {
+  if (AUTOPILOT_IGNORED_SHEET_TAB_PATTERN.test(normalizeSetSheetProductName(tabName))) return { previewRows: [], ignored: 1 };
+  const channelCode = String(channel || "").trim().toUpperCase();
+  const brand = getAutopilotBrandFromChannelCode(channelCode);
+  const tabFallback = detectAutopilotDateStreamerFromTabName(tabName);
+  const groups = getAutopilotColumnGroupsForTab(channelCode, values);
+  const previewRows = [];
+  groups.forEach((group, groupIndex) => {
+    const groupRows = (Array.isArray(values) ? values : []).map((row, rowIndex) => ({ rowNumber: rowIndex + 1, cells: getAutopilotRowCellsForGroup(row, group.startCol, group.endCol) }));
+    if (!groupRows.some(row => !isAutopilotBlankGroupRow(row.cells))) return;
+    const setupRows = findAutopilotSetupRowsInGroup(groupRows, tabFallback);
+    setupRows.forEach((setup, verticalIndex) => {
+      const header = setup.header || tabFallback || {};
+      const streamDate = header.streamDate || "";
+      if (selectedDates.length && streamDate && !selectedDates.includes(streamDate)) return;
+      const setNumber = String(groupIndex + verticalIndex + 1);
+      const productResult = collectAutopilotProductRowsForGroup(groupRows, setup.index, { channelCode, columnGroup: getAutopilotGroupLabel(group.startCol, group.endCol) });
+      const hardFloor = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "HARD\\s*FLOOR");
+      const target = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "TARGET");
+      const stretch = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "STRETCH");
+      const shift = detectAutopilotShiftFromText(`${tabName}\n${setup.line}`);
+      let surpriseSetName = findAutopilotSetNameFromGroupRows(groupRows, setup.index, channelCode, setNumber);
+      const warnings = [];
+      if (!target) warnings.push("Missing target");
+      if (!streamDate) warnings.push("Missing date");
+      if (!header.streamer) warnings.push("Missing streamer");
+      if (!shift) warnings.push("Missing shift");
+      if (!productResult.productLines.length) warnings.push("No product rows found.");
+      if (productResult.capped) warnings.push("Product cap");
+      if (productResult.productLines.length > AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP) warnings.push("High product count over 250");
+      if (!surpriseSetName) {
+        surpriseSetName = channelCode === "CK" ? `CardKing Magic Set ${setNumber}` : `${channelCode || "Set"} Surprise Set ${setNumber}`;
+        warnings.push("Set name generated.");
+      } else if (channelCode === "CK" && /^CardKing Magic Set/i.test(surpriseSetName)) {
+        warnings.push("Set name generated.");
+      }
+      if (!brand) warnings.push("Ambiguous column group");
+      previewRows.push({
+        id: `${channelCode}-${tabName}-${getAutopilotGroupLabel(group.startCol, group.endCol)}-${setup.rowNumber}-${setNumber}`.replace(/[^A-Za-z0-9_-]+/g, "_"),
+        include: !hasAutopilotCriticalWarnings(warnings),
+        channel: channelCode,
+        brand: brand || "CardKing47",
+        channelLabel,
+        spreadsheetName,
+        sheetTab: tabName,
+        columnGroup: getAutopilotGroupLabel(group.startCol, group.endCol),
+        setupRowNumber: setup.rowNumber,
+        productStartRow: productResult.productStartRow,
+        productEndRow: productResult.productEndRow,
+        rowRangeUsed: productResult.productStartRow && productResult.productEndRow ? `${productResult.productStartRow}-${productResult.productEndRow}` : "-",
+        streamDate,
+        day: streamDate ? getDayNameFromDate(streamDate) : getDefaultSurpriseSetBoardDay(),
+        streamer: header.streamer || "",
+        shift: shift || "Unknown",
+        setNumber,
+        surpriseSetName,
+        startingBid: target,
+        hardFloor,
+        stretch,
+        productLines: productResult.productLines,
+        productCount: productResult.productLines.length,
+        warnings,
+      });
+    });
+  });
+  return { previewRows, ignored: 0 };
+};
+
+const buildAutopilotPreviewRowsFromSheetsImport = (payload = {}, selectedDates = []) => {
+  const channelMap = payload?.data?.channels || payload?.channels || {};
+  let ignoredTabs = 0;
+  const previewRows = Object.entries(channelMap).flatMap(([channel, channelData]) =>
+    (Array.isArray(channelData?.tabs) ? channelData.tabs : []).flatMap(tab => {
+      const result = buildAutopilotPreviewRowsFromSheetTab({
+        channel,
+        channelLabel: channelData?.label || "",
+        spreadsheetName: channelData?.spreadsheetName || "",
+        tabName: tab?.tabName || channelData?.spreadsheetName || channel,
+        values: tab?.values || [],
+      }, selectedDates);
+      ignoredTabs += result.ignored || 0;
+      return result.previewRows;
+    })
+  );
+  return { previewRows, ignoredTabs };
 };
 
 const blockHasAutopilotSignal = (blockText, tabName = "") => {
@@ -1216,11 +1506,13 @@ const ensureAutopilotSetupLine = (blockText, tabName, channel) => {
 };
 
 const buildAutopilotBlocksFromSheetTab = ({ channel, channelLabel, spreadsheetName, tabName, values }) => {
+  if (AUTOPILOT_IGNORED_SHEET_TAB_PATTERN.test(normalizeSetSheetProductName(tabName))) return [];
   const safeValues = Array.isArray(values) ? values : [];
   const columnGroups = getAutopilotColumnGroupsForTab(channel, safeValues);
 
   return columnGroups
     .map(({ startCol, endCol }, index) => {
+      if (!hasAutopilotSheetGroupData(safeValues, startCol, endCol)) return "";
       const blockText = valuesToTabSeparatedText(safeValues, startCol, endCol);
       if (!blockText) return "";
       if (!blockHasAutopilotSignal(blockText, tabName)) return "";
@@ -1326,7 +1618,7 @@ const normalizeImportedSet = (block, fallbackOptions = {}) => {
 const buildImportedSetCard = (importedSet) => {
   const rows = parseSetSheetInput(importedSet.input);
   const summary = getSetSheetSummary(rows);
-  const converted = rows.length > 0;
+  const converted = rows.length > 0 && !importedSet.needsReview;
   const warnings = [...(importedSet.warnings || [])];
   if (!converted && !warnings.includes("No product rows found.")) warnings.push("No product rows found.");
   if (summary.totalRows > AUTOPILOT_DEFAULT_PRODUCT_ROW_CAP && !warnings.includes("High product count. Review before upload.")) warnings.push("High product count. Review before upload.");
@@ -1339,6 +1631,8 @@ const buildImportedSetCard = (importedSet) => {
     convertedAt: converted ? nowISO() : "",
     warnings,
     importSource: "Sheet Autopilot",
+    sheetTab: importedSet.sheetTab || "",
+    columnGroup: importedSet.columnGroup || "",
   });
   return {
     ...normalized,
@@ -1357,11 +1651,12 @@ const getAutopilotWarningChipLabel = (warning) => {
 
 const getAutopilotBoardMatchKey = (entry) => [
   entry.brandCode || getSurpriseSetBrandCode(entry.brand),
-  entry.day,
+  entry.streamDate || entry.day,
   entry.shift,
   String(entry.streamer || "").trim().toLowerCase(),
-  entry.streamDate,
   String(entry.setNumber || "1"),
+  String(entry.sheetTab || "").trim().toLowerCase(),
+  String(entry.columnGroup || "").trim().toLowerCase(),
 ].join("|");
 
 const mergeImportedSetIntoBoard = (boardEntries, importedSet) => {
@@ -5775,6 +6070,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const [agentActivity, setAgentActivity] = useState(["Sheet Autopilot is ready for a warehouse paste."]);
   const [autopilotLoading, setAutopilotLoading] = useState(false);
   const [autopilotError, setAutopilotError] = useState("");
+  const [autopilotPreviewRows, setAutopilotPreviewRows] = useState([]);
 
   useEffect(() => {
     setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev));
@@ -6148,30 +6444,136 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setAutopilotOpen(false);
   };
 
+  const handleToggleAutopilotPreviewRow = (rowId) => {
+    setAutopilotPreviewRows(prev => (Array.isArray(prev) ? prev : []).map(row => row.id === rowId ? { ...row, include: !row.include } : row));
+  };
+
   const handleImportFromSheets = async () => {
     const channels = autopilotChannels.length ? autopilotChannels : ["CK", "PS", "PM"];
     const dates = getAutopilotDatesForRange(autopilotRange);
     setAutopilotLoading(true);
     setAutopilotError("");
     setConverterError("");
+    setAutopilotPreviewRows([]);
     try {
       if (!supabase?.functions?.invoke) throw new Error("Supabase functions unavailable.");
       const { data, error } = await supabase.functions.invoke("import-surprise-sets", {
         body: { channels, dates },
       });
       if (error || !data?.ok) throw error || new Error("Import failed.");
-      const blocks = buildAutopilotBlocksFromSheetsImport(data);
-      if (!blocks.length) throw new Error("No sheet tabs returned.");
-      runAutopilotImport(blocks.join("\n\n"), {
-        sourceLabel: data.source || "sheets",
-        tabCount: countAutopilotSheetTabs(data),
+      const result = buildAutopilotPreviewRowsFromSheetsImport(data, dates);
+      if (!result.previewRows.length) throw new Error("No matching sets returned.");
+      setAutopilotPreviewRows(result.previewRows);
+      const readyCount = result.previewRows.filter(row => !hasAutopilotCriticalWarnings(row.warnings)).length;
+      const reviewCount = result.previewRows.length - readyCount;
+      const warningCount = result.previewRows.reduce((sum, row) => sum + row.warnings.length, 0);
+      setAutopilotSummary({
+        imported: 0,
+        converted: 0,
+        warnings: warningCount,
+        warningList: Array.from(new Set(result.previewRows.flatMap(row => row.warnings))).slice(0, 8),
+        tabs: countAutopilotSheetTabs(data),
+        capped: result.previewRows.filter(row => row.warnings.some(warning => /cap/i.test(warning))).length,
       });
+      setAgentActivity([
+        `Found ${result.previewRows.length} possible set${result.previewRows.length === 1 ? "" : "s"}.`,
+        `${readyCount} ready to import.`,
+        `${reviewCount} need review.`,
+        `${result.ignoredTabs} ignored tab${result.ignoredTabs === 1 ? "" : "s"}.`,
+        `${warningCount} warning${warningCount === 1 ? "" : "s"}.`,
+      ]);
     } catch {
       setAutopilotError("Import From Sheets failed. Use Import From Paste as fallback.");
       setAgentActivity(["Import From Sheets failed. Use Import From Paste as fallback."]);
     } finally {
       setAutopilotLoading(false);
     }
+  };
+
+  const handleConfirmAutopilotImport = () => {
+    const selectedRows = (Array.isArray(autopilotPreviewRows) ? autopilotPreviewRows : []).filter(row => row.include);
+    if (!selectedRows.length) {
+      setAutopilotError("Select at least one preview row before confirming import.");
+      return;
+    }
+    const convertedFileEntries = [];
+    const importedCards = [];
+    let nextBoardEntries = boardEntries;
+    let skipped = 0;
+    selectedRows.forEach(row => {
+      const critical = hasAutopilotCriticalWarnings(row.warnings);
+      const importedSet = {
+        brand: row.brand,
+        brandCode: getSurpriseSetBrandCode(row.brand),
+        day: row.day,
+        shift: row.shift === "pm" ? "pm" : "am",
+        streamer: row.streamer,
+        streamDate: row.streamDate,
+        setNumber: row.setNumber,
+        surpriseSetName: row.surpriseSetName,
+        startingBid: row.startingBid,
+        hardFloor: row.hardFloor,
+        stretch: row.stretch,
+        input: row.productLines.join("\n"),
+        productLines: row.productLines,
+        warnings: row.warnings,
+        needsReview: critical,
+        sheetTab: row.sheetTab,
+        columnGroup: row.columnGroup,
+      };
+      const merge = mergeImportedSetIntoBoard(nextBoardEntries, importedSet);
+      nextBoardEntries = merge.boardEntries;
+      importedCards.push(merge.card);
+      if (merge.card.status === "Converted" && merge.card.rows.length) {
+        const templateConfig = getSetSheetTemplateConfig(merge.card.brand);
+        convertedFileEntries.push({
+          id: merge.card.id,
+          createdAt: merge.card.convertedAt,
+          brand: merge.card.brand,
+          warehouse: templateConfig.usesWarehouse ? SETSHEET_WAREHOUSES[0] : "",
+          day: merge.card.day,
+          shift: merge.card.shift,
+          streamer: merge.card.streamer,
+          streamDate: merge.card.streamDate,
+          setNumber: merge.card.setNumber,
+          surpriseSetName: merge.card.surpriseSetName,
+          startingBid: merge.card.startingBid,
+          fileName: merge.card.fileName,
+          input: merge.card.input,
+          templatePath: templateConfig.path,
+          usesWarehouse: templateConfig.usesWarehouse,
+          rows: merge.card.rows,
+          summary: merge.card.summary,
+        });
+        patchTrackerBlock(merge.card.brand, merge.card.day, merge.card.shift, {
+          convertedSetSheet: true,
+          setName: merge.card.surpriseSetName || merge.card.fileName,
+          quantity: merge.card.summary?.totalQuantity || 0,
+        });
+      } else if (critical) {
+        skipped += 1;
+      }
+    });
+    setBoardEntries(nextBoardEntries);
+    if (importedCards[0]) {
+      setSelectedDay(importedCards[0].day);
+      setBuilderForm(importedCards[0]);
+    }
+    if (convertedFileEntries.length) {
+      setConvertedEntries(prev => {
+        const safePrev = Array.isArray(prev) ? prev : [];
+        const importedIds = new Set(convertedFileEntries.map(entry => entry.id));
+        return [...convertedFileEntries, ...safePrev.filter(entry => !importedIds.has(entry.id))].slice(0, 20);
+      });
+    }
+    setAutopilotPreviewRows([]);
+    setAutopilotError("");
+    setAgentActivity([
+      `Imported ${importedCards.length} set${importedCards.length === 1 ? "" : "s"}.`,
+      `Converted ${convertedFileEntries.length} file${convertedFileEntries.length === 1 ? "" : "s"}.`,
+      `${skipped} need review.`,
+      `${(Array.isArray(autopilotPreviewRows) ? autopilotPreviewRows : []).length - selectedRows.length} skipped.`,
+    ]);
   };
 
   const clearWeek = () => {
@@ -6327,6 +6729,58 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
                 ))}
               </div>
             )}
+          </div>
+        )}
+        {autopilotPreviewRows.length > 0 && (
+          <div className="mt-4 rounded-lg border border-gray-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-gray-900">Import Review Preview</p>
+                <p className="mt-0.5 text-[11px] text-gray-400">Review parser choices before creating or updating board cards.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <BtnPrimary onClick={handleConfirmAutopilotImport}>Confirm Import</BtnPrimary>
+                <BtnSecondary onClick={() => setAutopilotPreviewRows([])}>Cancel</BtnSecondary>
+                <button onClick={() => setAutopilotOpen(true)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">Import From Paste fallback</button>
+              </div>
+            </div>
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-[1320px] w-full text-left text-[11px]">
+                <thead className="border-b border-gray-200 bg-gray-50 text-gray-500">
+                  <tr>
+                    {["Include", "Channel", "Sheet tab", "Column group", "Row range used", "Date", "Streamer", "Shift", "Set", "Surprise set name", "Target bid", "Hard floor", "Stretch", "Products", "First 3 products", "Last 3 products", "Warnings"].map(label => (
+                      <th key={label} className="px-2 py-2 font-bold">{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {autopilotPreviewRows.map(row => (
+                    <tr key={row.id} className={hasAutopilotCriticalWarnings(row.warnings) ? "bg-amber-50/50" : "bg-white"}>
+                      <td className="px-2 py-2"><input type="checkbox" checked={row.include} onChange={() => handleToggleAutopilotPreviewRow(row.id)} /></td>
+                      <td className="px-2 py-2 font-bold text-gray-700">{row.channel}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.sheetTab}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.columnGroup}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.rowRangeUsed}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.streamDate || "-"}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.streamer || "-"}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.shift}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.setNumber}</td>
+                      <td className="px-2 py-2 font-semibold text-gray-800">{row.surpriseSetName}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.startingBid || "-"}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.hardFloor || "-"}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.stretch || "-"}</td>
+                      <td className="px-2 py-2 font-bold text-gray-800">{row.productCount}</td>
+                      <td className="px-2 py-2 text-gray-500">{row.productLines.slice(0, 3).join(", ") || "-"}</td>
+                      <td className="px-2 py-2 text-gray-500">{row.productLines.slice(-3).join(", ") || "-"}</td>
+                      <td className="px-2 py-2 text-amber-800">{row.warnings.join(", ") || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 text-[10px] text-gray-400">
+              Debug detail is shown in Sheet tab, Column group, Row range used, and product count.
+            </div>
           </div>
         )}
         {autopilotOpen && (
