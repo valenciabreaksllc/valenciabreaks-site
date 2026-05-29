@@ -43,7 +43,7 @@ Required JSON shape:
 }
 
 Classification rules:
-- Marketing emails, Facebook admin notifications, app notifications, promo blasts, Loox review requests, Shopify app emails, DHL/carrier receipts, or any non-customer message:
+- Marketing emails, Facebook admin notifications, app notifications, promo blasts, chatbot/admin spam, repeated automated prompts, Loox review requests, Shopify app emails, DHL/carrier receipts, or any non-customer message:
   issue_type = "Noise / Not CS", priority = "Low", risk_level = "Normal", recommended_reply_type = "archive_noise", needs_human_review = false
 
 - Customer reports delivered but not received:
@@ -60,6 +60,27 @@ Classification rules:
 
 - Customer requests return:
   issue_type = "Return Request", priority = "High", risk_level = "SLA Risk", needs_human_review = true
+
+- Customer asks to cancel, refund, reverse, or undo a surprise set, randomized order, accidental bid, or live opening purchase:
+  issue_type = "Surprise Set Policy", priority = "High", risk_level = "TikTok Policy", recommended_reply_type = "surprise_set_final_sale", needs_human_review = true
+
+- Customer asks for free product, compensation, credit, discount, refund, replacement, or reship as a resolution:
+  priority = "High", risk_level = "Compensation Review", needs_human_review = true
+
+- Customer asks for refund or cancellation after label created, tracking provided, or item shipped:
+  issue_type = "Refund Request", priority = "High", risk_level = "TikTok Policy", recommended_reply_type = "label_created_policy", needs_human_review = true
+
+- Customer mentions chargeback, dispute, scam, fraud, legal threat, or angry escalation:
+  issue_type = "Escalated Customer", priority = "High", risk_level = "Customer Escalation", needs_human_review = true
+
+- Customer needs a replacement, reship, refund, return, cancellation, or credit approval:
+  priority = "High", needs_human_review = true
+
+- Customer reports missing item, wrong item, damaged item, or delivered-not-received without enough order details or photo/evidence:
+  priority = "High", risk_level = "Needs Investigation", needs_human_review = true
+
+- Message is unclear, missing the order number needed to act, or confidence is low:
+  priority = "Medium", risk_level = "Needs Investigation", needs_human_review = true
 
 - Normal customer reply, thank you, follow-up, or general question:
   issue_type = "Customer Follow-Up", priority = "Medium", risk_level = "Normal", needs_human_review = false
@@ -169,6 +190,10 @@ serve(async (req: Request) => {
 
     // ── Write triage results back to Supabase ─────────────────────────────────
     const now = new Date().toISOString();
+    const normalizedRisk = String(triage.risk_level || "").toLowerCase();
+    const triageStatus = triage.needs_human_review
+      ? (normalizedRisk.includes("investigation") || normalizedRisk.includes("unclear") ? "Needs Investigation" : "Needs Human Review")
+      : "Triaged";
     const updatePayload = {
       issue_type:             triage.issue_type             ?? null,
       priority:               triage.priority               ?? null,
@@ -179,7 +204,7 @@ serve(async (req: Request) => {
       recommended_reply_type: triage.recommended_reply_type ?? null,
       needs_human_review:     triage.needs_human_review     ?? false,
       confidence_score:       triage.confidence_score       ?? null,
-      triage_status:          "Triaged",
+      triage_status:          triageStatus,
       triaged_at:             now,
       updated_at:             now,
     };

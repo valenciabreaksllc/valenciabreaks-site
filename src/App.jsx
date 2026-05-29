@@ -1011,6 +1011,7 @@ const AUTOPILOT_CRITICAL_WARNING_PATTERNS = [
   /missing streamer/i,
   /no product rows/i,
   /could not detect setup block/i,
+  /review shift assignment/i,
   /ambiguous column group/i,
 ];
 
@@ -1078,6 +1079,56 @@ const detectAutopilotShiftFromText = (text) => {
   if (/\b(morning|day\s*shift|day|am)\b/i.test(clean)) return "am";
   if (/\b(night|evening|pm)\b/i.test(clean)) return "pm";
   return "";
+};
+
+const getAutopilotSheetTabInfo = (tabName = "", tabIndex = 0) => {
+  const header = detectAutopilotDateStreamerFromTabName(tabName);
+  return {
+    tabOrder: tabIndex + 1,
+    tabName,
+    streamDate: header?.streamDate || "",
+    streamer: header?.streamer || "",
+    built: /\bBUILT\b/i.test(String(tabName || "")),
+    explicitShift: detectAutopilotShiftFromText(tabName),
+  };
+};
+
+const buildAutopilotTabShiftMap = (channel = "", tabs = []) => {
+  const tabInfos = (Array.isArray(tabs) ? tabs : []).map((tab, tabIndex) => ({
+    ...getAutopilotSheetTabInfo(tab?.tabName || "", tabIndex),
+    ignored: AUTOPILOT_IGNORED_SHEET_TAB_PATTERN.test(normalizeSetSheetProductName(tab?.tabName || "")),
+  }));
+  const groups = new Map();
+  tabInfos.forEach(info => {
+    if (info.ignored || !info.streamDate || !info.streamer) return;
+    const key = `${String(channel || "").toUpperCase()}|${info.streamDate}`;
+    groups.set(key, [...(groups.get(key) || []), info]);
+  });
+  const shiftMap = new Map();
+  groups.forEach(group => {
+    group.forEach((info, orderIndex) => {
+      const warnings = [];
+      let assignedShift = info.explicitShift;
+      if (!assignedShift) {
+        if (orderIndex === 0) assignedShift = "am";
+        else if (orderIndex === 1) assignedShift = "pm";
+        else assignedShift = "Extra / Needs Review";
+      }
+      if (!info.explicitShift && group.length === 1) {
+        warnings.push("Only one streamer tab found for this date. Shift assumed AM.");
+      }
+      if (!info.explicitShift && group.length > 2 && orderIndex >= 2) {
+        warnings.push("More than two streamer tabs found for this date. Review shift assignment.");
+      }
+      shiftMap.set(info.tabOrder, { ...info, assignedShift, streamerTabCount: group.length, tabDateOrder: orderIndex + 1, warnings });
+    });
+  });
+  tabInfos.forEach(info => {
+    if (!shiftMap.has(info.tabOrder)) {
+      shiftMap.set(info.tabOrder, { ...info, assignedShift: info.explicitShift || "", streamerTabCount: 0, tabDateOrder: 0, warnings: [] });
+    }
+  });
+  return shiftMap;
 };
 
 const detectAutopilotDateStreamerFromText = (text) => {
@@ -1421,7 +1472,7 @@ const collectAutopilotProductRowsForGroup = (groupRows = [], setupIndex = 0, gro
   return { productLines: productLines.reverse(), capped: false, productStartRow: startRow || "", productEndRow: endRow || "" };
 };
 
-const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsheetName, tabName, values }, selectedDates = []) => {
+const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsheetName, tabName, values, tabOrder, tabShiftMeta }, selectedDates = []) => {
   if (AUTOPILOT_IGNORED_SHEET_TAB_PATTERN.test(normalizeSetSheetProductName(tabName))) return { previewRows: [], ignored: 1 };
   const channelCode = String(channel || "").trim().toUpperCase();
   const brand = getAutopilotBrandFromChannelCode(channelCode);
@@ -1441,9 +1492,10 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
       const hardFloor = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "HARD\\s*FLOOR");
       const target = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "TARGET");
       const stretch = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "STRETCH");
-      const shift = detectAutopilotShiftFromText(`${tabName}\n${setup.line}`);
+      const explicitShift = detectAutopilotShiftFromText(`${tabName}\n${setup.line}`);
+      const shift = explicitShift || tabShiftMeta?.assignedShift || "";
       let surpriseSetName = findAutopilotSetNameFromGroupRows(groupRows, setup.index, channelCode, setNumber);
-      const warnings = [];
+      const warnings = [...(tabShiftMeta?.warnings || [])];
       if (!target) warnings.push("Missing target");
       if (!streamDate) warnings.push("Missing date");
       if (!header.streamer) warnings.push("Missing streamer");
@@ -1464,6 +1516,8 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
         channelLabel,
         spreadsheetName,
         sheetTab: tabName,
+        tabOrder: tabOrder || tabShiftMeta?.tabOrder || "",
+        tabDateOrder: tabShiftMeta?.tabDateOrder || "",
         columnGroup: getAutopilotGroupLabel(group.startCol, group.endCol),
         setupRowNumber: setup.rowNumber,
         productStartRow: productResult.productStartRow,
@@ -1491,12 +1545,16 @@ const buildAutopilotPreviewRowsFromSheetsImport = (payload = {}, selectedDates =
   const channelMap = payload?.data?.channels || payload?.channels || {};
   let ignoredTabs = 0;
   const previewRows = Object.entries(channelMap).flatMap(([channel, channelData]) =>
-    (Array.isArray(channelData?.tabs) ? channelData.tabs : []).flatMap(tab => {
+    (Array.isArray(channelData?.tabs) ? channelData.tabs : []).flatMap((tab, tabIndex, tabs) => {
+      const tabOrder = tabIndex + 1;
+      const shiftMap = buildAutopilotTabShiftMap(channel, tabs);
       const result = buildAutopilotPreviewRowsFromSheetTab({
         channel,
         channelLabel: channelData?.label || "",
         spreadsheetName: channelData?.spreadsheetName || "",
         tabName: tab?.tabName || channelData?.spreadsheetName || channel,
+        tabOrder,
+        tabShiftMeta: shiftMap.get(tabOrder),
         values: tab?.values || [],
       }, selectedDates);
       ignoredTabs += result.ignored || 0;
@@ -6951,10 +7009,10 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
               </div>
             </div>
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-[1320px] w-full text-left text-[11px]">
+              <table className="min-w-[1400px] w-full text-left text-[11px]">
                 <thead className="border-b border-gray-200 bg-gray-50 text-gray-500">
                   <tr>
-                    {["Include", "Channel", "Sheet tab", "Column group", "Row range used", "Date", "Streamer", "Shift", "Set", "Surprise set name", "Target bid", "Hard floor", "Stretch", "Products", "First 3 products", "Last 3 products", "Warnings"].map(label => (
+                    {["Include", "Channel", "Sheet tab", "Tab order", "Column group", "Row range used", "Date", "Streamer", "Shift", "Set", "Surprise set name", "Target bid", "Hard floor", "Stretch", "Products", "First 3 products", "Last 3 products", "Warnings"].map(label => (
                       <th key={label} className="px-2 py-2 font-bold">{label}</th>
                     ))}
                   </tr>
@@ -6965,6 +7023,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
                       <td className="px-2 py-2"><input type="checkbox" checked={row.include} onChange={() => handleToggleAutopilotPreviewRow(row.id)} /></td>
                       <td className="px-2 py-2 font-bold text-gray-700">{row.channel}</td>
                       <td className="px-2 py-2 text-gray-600">{row.sheetTab}</td>
+                      <td className="px-2 py-2 text-gray-600">{row.tabOrder || "-"}</td>
                       <td className="px-2 py-2 text-gray-600">{row.columnGroup}</td>
                       <td className="px-2 py-2 text-gray-600">{row.rowRangeUsed}</td>
                       <td className="px-2 py-2 text-gray-600">{row.streamDate || "-"}</td>
