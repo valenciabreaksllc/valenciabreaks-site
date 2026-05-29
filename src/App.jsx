@@ -5482,9 +5482,9 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopyDanteRows}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
           >
-            Copy Dante Rows
+            Export TXT
           </button>
           <button
             onClick={onRefresh}
@@ -7779,6 +7779,13 @@ export default function JonnyOpsCommandCenter() {
     } catch {}
     return false;
   });
+  const [appLocked, setAppLocked] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ops_command_hub_locked");
+      if (saved != null) return saved === "true";
+    } catch {}
+    return true;
+  });
   const [sidekickToast, setSidekickToast] = useState(false);
 
   // ── Inbox state ──────────────────────────────────────────────────────────────
@@ -7994,6 +8001,14 @@ export default function JonnyOpsCommandCenter() {
     setMobileNavOpen(false);
   };
 
+  const toggleAppLock = () => {
+    setAppLocked(prev => {
+      const next = !prev;
+      try { localStorage.setItem("ops_command_hub_locked", String(next)); } catch {}
+      return next;
+    });
+  };
+
   // Shared nav content rendered inside both the desktop sidebar and the mobile drawer
   const NavContent = ({ showLabels }) => (
     <>
@@ -8054,7 +8069,7 @@ export default function JonnyOpsCommandCenter() {
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex-1 overflow-hidden">
             <p className="text-sm font-bold text-gray-900">Ops Command Hub</p>
-            <p className="text-[10px] text-gray-400">Command Center v2.0</p>
+            <p className="text-[10px] text-gray-400">Command Center v3.0</p>
           </div>
           <button onClick={() => setMobileNavOpen(false)} className="text-xs font-semibold text-gray-400 hover:text-gray-700 p-1">Close</button>
         </div>
@@ -8070,10 +8085,10 @@ export default function JonnyOpsCommandCenter() {
           <button
             onClick={() => setSidebar(s => !s)}
             title={sidebar ? "Collapse sidebar" : "Expand sidebar"}
-            className={`mb-2 flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 ${sidebar ? "w-full" : "w-full"}`}
+            className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-800 ${sidebar ? "ml-auto" : "mx-auto"}`}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className={sidebar ? "" : "rotate-180"}>
-              <path d="M8.5 3.5 5 7l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" className={`transition-transform ${sidebar ? "" : "rotate-180"}`}>
+              <path d="M9 4 6 7.5 9 11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
           {NAV.map((section, si) => (
@@ -8107,7 +8122,7 @@ export default function JonnyOpsCommandCenter() {
               </svg>
             </button>
             <div>
-              <p className="text-sm font-bold text-gray-900 leading-tight">Ops Command Hub v2.0</p>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Ops Command Hub v3.0</p>
               <p className="text-[10px] text-gray-400 leading-tight">{PAGE_LABELS[activeView] || activeView}</p>
             </div>
           </div>
@@ -8118,17 +8133,28 @@ export default function JonnyOpsCommandCenter() {
                 <span className="text-[10px] font-bold text-red-700">{criticalSlaCount}</span>
               </button>
             )}
-            {inboxNeedsReplyCount > 0 && (
-              <button onClick={() => handleNavClick("inbox")} className="relative text-gray-500">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2a5 5 0 0 1 5 5v3l2 2H2l2-2V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M7 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <button
+              onClick={() => handleNavClick("inbox")}
+              className="relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800"
+              aria-label="Open notifications"
+              title="Notifications"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2a5 5 0 0 1 5 5v3l2 2H2l2-2V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M7 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              {inboxNeedsReplyCount > 0 && (
                 <span className="absolute -top-1 -right-1 text-[9px] bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">{inboxNeedsReplyCount > 9 ? "9+" : inboxNeedsReplyCount}</span>
-              </button>
-            )}
+              )}
+            </button>
             <button
               type="button"
-              className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600"
+              onClick={toggleAppLock}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${appLocked ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-white" : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-white"}`}
+              aria-label={appLocked ? "Unlock Ops Command Hub" : "Lock Ops Command Hub"}
+              title={appLocked ? "Locked" : "Unlocked"}
             >
-              Locked
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <rect x="3.25" y="6.25" width="8.5" height="6" rx="1.4" stroke="currentColor" strokeWidth="1.4"/>
+                <path d={appLocked ? "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.5 0v1.5" : "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.08-1.31"} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
             </button>
             <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[10px] font-bold text-gray-700">
               JV
@@ -8138,7 +8164,7 @@ export default function JonnyOpsCommandCenter() {
 
         {/* ── DESKTOP TOP BAR (hidden on mobile) ── */}
         <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
-          <p className="text-sm font-bold text-gray-900">Ops Command Hub v2.0</p>
+          <p className="text-sm font-bold text-gray-900">Ops Command Hub v3.0</p>
           <div className="flex items-center gap-3">
             <NotificationDropdown
               inboundMessages={safeInboundMessages}
@@ -8149,9 +8175,15 @@ export default function JonnyOpsCommandCenter() {
             />
             <button
               type="button"
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+              onClick={toggleAppLock}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${appLocked ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-white" : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-white"}`}
+              aria-label={appLocked ? "Unlock Ops Command Hub" : "Lock Ops Command Hub"}
+              title={appLocked ? "Locked" : "Unlocked"}
             >
-              Locked
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <rect x="3.25" y="6.25" width="8.5" height="6" rx="1.4" stroke="currentColor" strokeWidth="1.4"/>
+                <path d={appLocked ? "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.5 0v1.5" : "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.08-1.31"} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
             </button>
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xs font-bold text-gray-700">
               JV
