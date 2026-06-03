@@ -428,6 +428,8 @@ const normalizeSurpriseSetBoardEntry = (entry = {}) => {
     importSource: entry.importSource || "",
     sheetTab: entry.sheetTab || "",
     columnGroup: entry.columnGroup || "",
+    sourceProductUnits: Array.isArray(entry.sourceProductUnits) ? entry.sourceProductUnits : [],
+    exportDebug: entry.exportDebug || null,
   };
 };
 
@@ -631,6 +633,52 @@ const getSetSheetDefaults = (type) => {
   return { weight: "", height: "", width: "", length: "" };
 };
 
+const buildSourceProductUnit = (productName, meta = {}) => {
+  const rawProductName = String(productName ?? "").replace(/\t/g, " ").replace(/\s+/g, " ").trim();
+  const normalizedProductName = normalizeSetSheetProductName(rawProductName);
+  if (!normalizedProductName) return null;
+  const type = detectSetSheetType(normalizedProductName);
+  const defaults = getSetSheetDefaults(type);
+  return {
+    channel: meta.channel || "",
+    sheetTab: meta.sheetTab || "",
+    columnGroup: meta.columnGroup || "",
+    sourceRowNumber: meta.sourceRowNumber || "",
+    rawProductName,
+    normalizedProductName,
+    unitQuantityContribution: Number(meta.unitQuantityContribution || 1) || 1,
+    weight: meta.weight ?? defaults.weight,
+    height: meta.height ?? defaults.height,
+    width: meta.width ?? defaults.width,
+    length: meta.length ?? defaults.length,
+  };
+};
+
+const buildSourceProductUnitsFromLines = (productLines = [], meta = {}) =>
+  (Array.isArray(productLines) ? productLines : [])
+    .map((line, index) => buildSourceProductUnit(line, { ...meta, sourceRowNumber: meta.sourceRowNumber || index + 1 }))
+    .filter(Boolean);
+
+const buildSetSheetRowsFromSourceProductUnits = (sourceProductUnits = []) =>
+  (Array.isArray(sourceProductUnits) ? sourceProductUnits : [])
+    .map((unit, index) => ({
+      order: index + 1,
+      productName: unit.rawProductName || unit.normalizedProductName || "",
+      quantity: unit.unitQuantityContribution || 1,
+      type: detectSetSheetType(unit.rawProductName || unit.normalizedProductName),
+      weight: unit.weight ?? "",
+      height: unit.height ?? "",
+      width: unit.width ?? "",
+      length: unit.length ?? "",
+    }))
+    .filter(row => normalizeSetSheetProductName(row.productName));
+
+const getSourceProductUnitCount = (sourceProductUnits = []) =>
+  (Array.isArray(sourceProductUnits) ? sourceProductUnits : []).reduce((sum, unit) => {
+    const count = Number(unit?.unitQuantityContribution);
+    return sum + (Number.isFinite(count) && count > 0 ? count : 1);
+  }, 0);
+
 const parseSetSheetLine = (line, index) => {
   const productName = normalizeSetSheetProductName(line);
   if (!productName) return null;
@@ -679,65 +727,473 @@ const parseSetSheetInput = (input) => {
   return reverseSetSheetRows(combineSetSheetRowsKeepOrder(parsed));
 };
 
+const getSetSheetRowQuantity = (row) => {
+  const number = Number(row?.quantity);
+  if (!Number.isFinite(number) || number <= 0) return 1;
+  return Math.max(1, Math.floor(number));
+};
+
 const getSetSheetSummary = (rows) => {
   const safeRows = Array.isArray(rows) ? rows : [];
   return {
     totalRows: safeRows.length,
-    totalQuantity: safeRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+    totalQuantity: safeRows.reduce((sum, row) => sum + getSetSheetRowQuantity(row), 0),
     unknownCount: safeRows.filter(row => row.type === "unknown").length,
   };
 };
 
-const escapeSpreadsheetCell = (value) =>
-  String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-const buildSetSheetSpreadsheet = (rows, options = {}) => {
-  const safeRows = Array.isArray(rows) ? rows : [];
-  const templateConfig = getSetSheetTemplateConfig(options.brand);
-  const warehouse = templateConfig.usesWarehouse ? String(options.warehouse || SETSHEET_WAREHOUSES[0] || "") : "";
-  const rowXml = safeRows.map(row => `
-    <Row>
-      <Cell><Data ss:Type="String">${escapeSpreadsheetCell(row.productName)}</Data></Cell>
-      <Cell><Data ss:Type="Number">${Number(row.quantity || 0)}</Data></Cell>
-      ${templateConfig.usesWarehouse ? `<Cell><Data ss:Type="String">${escapeSpreadsheetCell(warehouse)}</Data></Cell>` : ""}
-      <Cell><Data ss:Type="${row.weight === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.weight)}</Data></Cell>
-      <Cell><Data ss:Type="${row.height === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.height)}</Data></Cell>
-      <Cell><Data ss:Type="${row.width === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.width)}</Data></Cell>
-      <Cell><Data ss:Type="${row.length === "" ? "String" : "Number"}">${escapeSpreadsheetCell(row.length)}</Data></Cell>
-    </Row>`).join("");
-  return `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
-  xmlns:o="urn:schemas-microsoft-com:office:office"
-  xmlns:x="urn:schemas-microsoft-com:office:excel"
-  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Worksheet ss:Name="SetSheet">
-    <Table>
-      <Row>
-        <Cell><Data ss:Type="String">Product Name</Data></Cell>
-        <Cell><Data ss:Type="String">Quantity</Data></Cell>
-        ${templateConfig.usesWarehouse ? `<Cell><Data ss:Type="String">Warehouse</Data></Cell>` : ""}
-        <Cell><Data ss:Type="String">Weight</Data></Cell>
-        <Cell><Data ss:Type="String">Height</Data></Cell>
-        <Cell><Data ss:Type="String">Width</Data></Cell>
-        <Cell><Data ss:Type="String">Length</Data></Cell>
-      </Row>${rowXml}
-    </Table>
-  </Worksheet>
-</Workbook>`;
+const SETSHEET_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const SETSHEET_TIKTOK_ROW_LIMIT = 500;
+const toSetSheetNumberCell = (value) => {
+  if (value === "" || value == null) return "";
+  const number = Number(value);
+  return Number.isFinite(number) ? number : "";
+};
+const SETSHEET_PRODUCT_NAME_LIMIT = 254;
+const normalizeSetSheetExportKeyPart = (value) =>
+  normalizeSetSheetProductName(value).toUpperCase();
+const withTikTokUniqueProductSuffix = (productName, occurrence, usedNames) => {
+  const baseName = normalizeSetSheetProductName(productName) || "Surprise Item";
+  const suffix = occurrence > 1 ? ` #${String(occurrence).padStart(3, "0")}` : "";
+  const maxBaseLength = Math.max(1, SETSHEET_PRODUCT_NAME_LIMIT - suffix.length);
+  let candidate = `${baseName.slice(0, maxBaseLength).trim()}${suffix}`;
+  let guard = occurrence;
+  while (usedNames.has(normalizeSetSheetExportKeyPart(candidate))) {
+    guard += 1;
+    const nextSuffix = ` #${String(guard).padStart(3, "0")}`;
+    candidate = `${baseName.slice(0, Math.max(1, SETSHEET_PRODUCT_NAME_LIMIT - nextSuffix.length)).trim()}${nextSuffix}`;
+  }
+  usedNames.add(normalizeSetSheetExportKeyPart(candidate));
+  return candidate;
+};
+const buildSetSheetExportRows = (rows, sourceProductUnits = []) => {
+  const sourceRows = Array.isArray(sourceProductUnits) && sourceProductUnits.length
+    ? buildSetSheetRowsFromSourceProductUnits(sourceProductUnits)
+    : (Array.isArray(rows) ? rows : []);
+  const nameCounts = new Map();
+  const usedNames = new Set();
+  const exportRows = [];
+  sourceRows.forEach(row => {
+    const productName = normalizeSetSheetProductName(row?.productName);
+    if (!productName) return;
+    const quantity = getSetSheetRowQuantity(row);
+    for (let index = 0; index < quantity; index += 1) {
+      const baseKey = normalizeSetSheetExportKeyPart(productName);
+      const occurrence = (nameCounts.get(baseKey) || 0) + 1;
+      nameCounts.set(baseKey, occurrence);
+      exportRows.push({
+        ...row,
+        productName: withTikTokUniqueProductSuffix(productName, occurrence, usedNames),
+        quantity: 1,
+        weight: toSetSheetNumberCell(row.weight),
+        height: toSetSheetNumberCell(row.height),
+        width: toSetSheetNumberCell(row.width),
+        length: toSetSheetNumberCell(row.length),
+      });
+    }
+  });
+  return exportRows.map((row, index) => ({ ...row, order: index + 1 }));
+};
+const findDuplicateSetSheetExportRows = (rows) => {
+  const seen = new Set();
+  const duplicates = [];
+  (Array.isArray(rows) ? rows : []).forEach(row => {
+    const key = normalizeSetSheetExportKeyPart(row.productName);
+    if (seen.has(key)) duplicates.push(key);
+    else seen.add(key);
+  });
+  return duplicates;
+};
+const getSetSheetExpectedProductCount = (rows, options = {}) => {
+  if (Array.isArray(options.sourceProductUnits) && options.sourceProductUnits.length) {
+    return getSourceProductUnitCount(options.sourceProductUnits);
+  }
+  const previewCount = Number(options.previewProductCount);
+  if (Number.isFinite(previewCount) && previewCount >= 0) return previewCount;
+  return getSetSheetSummary(rows).totalQuantity;
+};
+const getSetSheetExportDebug = (sourceRows, exportRows, previewProductCount) => ({
+  parsedProducts: previewProductCount,
+  sourceUnits: previewProductCount,
+  exportQuantity: getSetSheetSummary(exportRows).totalQuantity,
+  xlsxRows: Array.isArray(exportRows) ? exportRows.length : 0,
+  sourceRows: Array.isArray(sourceRows) ? sourceRows.length : 0,
+});
+const getSetSheetExportRowsForEntry = (entry = {}) => {
+  const rows = Array.isArray(entry.rows) && entry.rows.length ? entry.rows : parseSetSheetInput(entry.input);
+  return {
+    sourceRows: Array.isArray(entry.sourceProductUnits) && entry.sourceProductUnits.length ? entry.sourceProductUnits : rows,
+    exportRows: buildSetSheetExportRows(rows, entry.sourceProductUnits),
+    sourceCount: getSetSheetExpectedProductCount(rows, { sourceProductUnits: entry.sourceProductUnits, previewProductCount: entry.summary?.totalQuantity }),
+  };
+};
+const formatExportAuditRow = (row) => {
+  if (row?.rawProductName || row?.normalizedProductName) {
+    return `${row.sourceRowNumber || "-"} | ${row.rawProductName || row.normalizedProductName} | qty ${row.unitQuantityContribution || 1}`;
+  }
+  return `${row.productName || ""} | qty ${getSetSheetRowQuantity(row)}`;
+};
+const buildSetSheetExportAuditText = (entry = {}) => {
+  const { sourceRows, exportRows, sourceCount } = getSetSheetExportRowsForEntry(entry);
+  const exportQuantity = getSetSheetSummary(exportRows).totalQuantity;
+  return [
+    `Set: ${entry.surpriseSetName || entry.fileName || "Untitled set"}`,
+    `Source count: ${sourceCount}`,
+    `Export quantity: ${exportQuantity}`,
+    `Export row count: ${exportRows.length}`,
+    "",
+    "First 10 source rows:",
+    ...sourceRows.slice(0, 10).map(formatExportAuditRow),
+    "",
+    "Last 10 source rows:",
+    ...sourceRows.slice(-10).map(formatExportAuditRow),
+    "",
+    "Final export rows:",
+    ...exportRows.map(row => `${row.productName} | ${row.quantity} | ${row.weight} | ${row.height} | ${row.width} | ${row.length}`),
+  ].join("\n");
 };
 
-const downloadSetSheetRows = (rows, fileName, options = {}) => {
-  const workbook = buildSetSheetSpreadsheet(rows, options);
-  const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${sanitizeSetSheetFileName(fileName)}.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+const ZIP_TEXT_DECODER = new TextDecoder();
+const ZIP_TEXT_ENCODER = new TextEncoder();
+let crc32TableCache = null;
+
+const getZipU16 = (bytes, offset) => bytes[offset] | (bytes[offset + 1] << 8);
+const getZipU32 = (bytes, offset) => (
+  (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0
+);
+const setZipU16 = (bytes, offset, value) => {
+  bytes[offset] = value & 255;
+  bytes[offset + 1] = (value >>> 8) & 255;
+};
+const setZipU32 = (bytes, offset, value) => {
+  bytes[offset] = value & 255;
+  bytes[offset + 1] = (value >>> 8) & 255;
+  bytes[offset + 2] = (value >>> 16) & 255;
+  bytes[offset + 3] = (value >>> 24) & 255;
+};
+const concatZipParts = (parts) => {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  parts.forEach(part => {
+    output.set(part, offset);
+    offset += part.length;
+  });
+  return output;
+};
+const getCrc32Table = () => {
+  if (crc32TableCache) return crc32TableCache;
+  crc32TableCache = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    crc32TableCache[i] = c >>> 0;
+  }
+  return crc32TableCache;
+};
+const getCrc32 = (bytes) => {
+  const table = getCrc32Table();
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) crc = table[(crc ^ bytes[i]) & 255] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+};
+const streamZipBytes = async (bytes, streamType, format) => {
+  if (typeof streamType !== "function") throw new Error("This browser cannot patch XLSX templates.");
+  const input = new Blob([bytes]).stream().pipeThrough(new streamType(format));
+  return new Uint8Array(await new Response(input).arrayBuffer());
+};
+const inflateZipEntry = async (entry) => {
+  if (entry.method === 0) return entry.compressedData;
+  if (entry.method === 8) return streamZipBytes(entry.compressedData, DecompressionStream, "deflate-raw");
+  throw new Error("Unsupported XLSX template compression.");
+};
+const deflateZipEntry = async (bytes, method) => {
+  if (method === 0) return bytes;
+  if (method === 8) return streamZipBytes(bytes, CompressionStream, "deflate-raw");
+  throw new Error("Unsupported XLSX template compression.");
+};
+const parseXlsxZip = (arrayBuffer) => {
+  const bytes = new Uint8Array(arrayBuffer);
+  const minOffset = Math.max(0, bytes.length - 65557);
+  let eocdOffset = -1;
+  for (let i = bytes.length - 22; i >= minOffset; i -= 1) {
+    if (getZipU32(bytes, i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset < 0) throw new Error("Invalid XLSX template.");
+  const entryCount = getZipU16(bytes, eocdOffset + 10);
+  const centralDirectoryOffset = getZipU32(bytes, eocdOffset + 16);
+  const commentLength = getZipU16(bytes, eocdOffset + 20);
+  const eocdComment = bytes.slice(eocdOffset + 22, eocdOffset + 22 + commentLength);
+  const entries = [];
+  let offset = centralDirectoryOffset;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (getZipU32(bytes, offset) !== 0x02014b50) throw new Error("Invalid XLSX central directory.");
+    const nameLength = getZipU16(bytes, offset + 28);
+    const extraLength = getZipU16(bytes, offset + 30);
+    const commentLen = getZipU16(bytes, offset + 32);
+    const localOffset = getZipU32(bytes, offset + 42);
+    const nameBytes = bytes.slice(offset + 46, offset + 46 + nameLength);
+    const centralExtra = bytes.slice(offset + 46 + nameLength, offset + 46 + nameLength + extraLength);
+    const comment = bytes.slice(offset + 46 + nameLength + extraLength, offset + 46 + nameLength + extraLength + commentLen);
+    const localNameLength = getZipU16(bytes, localOffset + 26);
+    const localExtraLength = getZipU16(bytes, localOffset + 28);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressedSize = getZipU32(bytes, offset + 20);
+    entries.push({
+      versionMade: getZipU16(bytes, offset + 4),
+      versionNeeded: getZipU16(bytes, offset + 6),
+      flags: getZipU16(bytes, offset + 8) & ~8,
+      method: getZipU16(bytes, offset + 10),
+      modTime: getZipU16(bytes, offset + 12),
+      modDate: getZipU16(bytes, offset + 14),
+      crc: getZipU32(bytes, offset + 16),
+      compressedSize,
+      uncompressedSize: getZipU32(bytes, offset + 24),
+      diskStart: getZipU16(bytes, offset + 34),
+      internalAttrs: getZipU16(bytes, offset + 36),
+      externalAttrs: getZipU32(bytes, offset + 38),
+      name: ZIP_TEXT_DECODER.decode(nameBytes),
+      nameBytes,
+      localExtra: bytes.slice(localOffset + 30 + localNameLength, dataStart),
+      centralExtra,
+      comment,
+      compressedData: bytes.slice(dataStart, dataStart + compressedSize),
+    });
+    offset += 46 + nameLength + extraLength + commentLen;
+  }
+  return { entries, eocdComment };
+};
+const buildXlsxZip = (zip) => {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  zip.entries.forEach(entry => {
+    const localHeader = new Uint8Array(30 + entry.nameBytes.length + entry.localExtra.length);
+    setZipU32(localHeader, 0, 0x04034b50);
+    setZipU16(localHeader, 4, entry.versionNeeded);
+    setZipU16(localHeader, 6, entry.flags);
+    setZipU16(localHeader, 8, entry.method);
+    setZipU16(localHeader, 10, entry.modTime);
+    setZipU16(localHeader, 12, entry.modDate);
+    setZipU32(localHeader, 14, entry.crc);
+    setZipU32(localHeader, 18, entry.compressedData.length);
+    setZipU32(localHeader, 22, entry.uncompressedSize);
+    setZipU16(localHeader, 26, entry.nameBytes.length);
+    setZipU16(localHeader, 28, entry.localExtra.length);
+    localHeader.set(entry.nameBytes, 30);
+    localHeader.set(entry.localExtra, 30 + entry.nameBytes.length);
+    localParts.push(localHeader, entry.compressedData);
+
+    const centralHeader = new Uint8Array(46 + entry.nameBytes.length + entry.centralExtra.length + entry.comment.length);
+    setZipU32(centralHeader, 0, 0x02014b50);
+    setZipU16(centralHeader, 4, entry.versionMade);
+    setZipU16(centralHeader, 6, entry.versionNeeded);
+    setZipU16(centralHeader, 8, entry.flags);
+    setZipU16(centralHeader, 10, entry.method);
+    setZipU16(centralHeader, 12, entry.modTime);
+    setZipU16(centralHeader, 14, entry.modDate);
+    setZipU32(centralHeader, 16, entry.crc);
+    setZipU32(centralHeader, 20, entry.compressedData.length);
+    setZipU32(centralHeader, 24, entry.uncompressedSize);
+    setZipU16(centralHeader, 28, entry.nameBytes.length);
+    setZipU16(centralHeader, 30, entry.centralExtra.length);
+    setZipU16(centralHeader, 32, entry.comment.length);
+    setZipU16(centralHeader, 34, entry.diskStart);
+    setZipU16(centralHeader, 36, entry.internalAttrs);
+    setZipU32(centralHeader, 38, entry.externalAttrs);
+    setZipU32(centralHeader, 42, offset);
+    centralHeader.set(entry.nameBytes, 46);
+    centralHeader.set(entry.centralExtra, 46 + entry.nameBytes.length);
+    centralHeader.set(entry.comment, 46 + entry.nameBytes.length + entry.centralExtra.length);
+    centralParts.push(centralHeader);
+    offset += localHeader.length + entry.compressedData.length;
+  });
+  const centralDirectory = concatZipParts(centralParts);
+  const eocd = new Uint8Array(22 + zip.eocdComment.length);
+  setZipU32(eocd, 0, 0x06054b50);
+  setZipU16(eocd, 8, zip.entries.length);
+  setZipU16(eocd, 10, zip.entries.length);
+  setZipU32(eocd, 12, centralDirectory.length);
+  setZipU32(eocd, 16, offset);
+  setZipU16(eocd, 20, zip.eocdComment.length);
+  eocd.set(zip.eocdComment, 22);
+  return concatZipParts([...localParts, centralDirectory, eocd]);
+};
+const normalizeXlsxPath = (basePath, target) => {
+  const cleanTarget = String(target || "").replace(/^\/+/, "");
+  if (!cleanTarget) return "";
+  if (target.startsWith("/")) return cleanTarget;
+  const baseParts = basePath.split("/");
+  baseParts.pop();
+  cleanTarget.split("/").forEach(part => {
+    if (!part || part === ".") return;
+    if (part === "..") baseParts.pop();
+    else baseParts.push(part);
+  });
+  return baseParts.join("/");
+};
+const getXmlAttribute = (tag, name) => {
+  const match = String(tag || "").match(new RegExp(`\\b${name}=(["'])([^"']*)\\1`, "i"));
+  return match ? match[2] : "";
+};
+const findSetSheetPath = async (zip) => {
+  const workbookEntry = zip.entries.find(entry => entry.name === "xl/workbook.xml");
+  const relsEntry = zip.entries.find(entry => entry.name === "xl/_rels/workbook.xml.rels");
+  if (!workbookEntry || !relsEntry) throw new Error("Template workbook metadata is missing.");
+  const workbookXml = ZIP_TEXT_DECODER.decode(await inflateZipEntry(workbookEntry));
+  const relsXml = ZIP_TEXT_DECODER.decode(await inflateZipEntry(relsEntry));
+  const sheetTags = Array.from(workbookXml.matchAll(/<sheet\b[^>]*>/gi)).map(match => match[0]);
+  const sheetTag =
+    sheetTags.find(tag => getXmlAttribute(tag, "name").toLowerCase() === "setsheet") ||
+    sheetTags.find(tag => getXmlAttribute(tag, "name").toLowerCase() === "surprise_set_batch_template") ||
+    sheetTags.find(tag => getXmlAttribute(tag, "state").toLowerCase() !== "hidden") ||
+    sheetTags[0];
+  if (!sheetTag) throw new Error("SetSheet worksheet was not found in the template.");
+  const relationshipId = getXmlAttribute(sheetTag, "r:id");
+  if (!relationshipId) throw new Error("SetSheet worksheet relationship was not found.");
+  const relPattern = new RegExp(`<Relationship\\b[^>]*Id=(["'])${relationshipId}\\1[^>]*Target=(["'])([^"']+)\\2`, "i");
+  const relMatch = relsXml.match(relPattern);
+  if (!relMatch) throw new Error("SetSheet worksheet target was not found.");
+  return normalizeXlsxPath("xl/workbook.xml", relMatch[3]);
+};
+const getCellColumn = (cellRef) => String(cellRef || "").replace(/\d+/g, "").toUpperCase();
+const sortSetSheetRowCells = (row) => {
+  const cells = Array.from(row.children);
+  cells
+    .sort((a, b) => getCellColumn(a.getAttribute("r")).localeCompare(getCellColumn(b.getAttribute("r")), undefined, { numeric: true }))
+    .forEach(cell => row.appendChild(cell));
+};
+const sortSetSheetRows = (sheetData) => {
+  Array.from(sheetData.children)
+    .sort((a, b) => Number(a.getAttribute("r") || 0) - Number(b.getAttribute("r") || 0))
+    .forEach(row => sheetData.appendChild(row));
+};
+const patchSetSheetXml = (worksheetXml, rows) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(worksheetXml, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("SetSheet XML could not be parsed.");
+  const sheetData = doc.getElementsByTagName("sheetData")[0];
+  if (!sheetData) throw new Error("SetSheet worksheet data was not found.");
+  const ns = sheetData.namespaceURI || "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+  const rowsByNumber = new Map(Array.from(sheetData.children).map(row => [Number(row.getAttribute("r")), row]));
+  const cellAttributesByRef = new Map();
+  for (let rowNumber = 2; rowNumber <= 501; rowNumber += 1) {
+    const row = rowsByNumber.get(rowNumber);
+    if (!row) continue;
+    Array.from(row.children).forEach(cell => {
+      const col = getCellColumn(cell.getAttribute("r"));
+      if (["A", "B", "C", "D", "E", "F"].includes(col)) {
+        cellAttributesByRef.set(cell.getAttribute("r"), Array.from(cell.attributes).map(attr => [attr.name, attr.value]));
+        cell.remove();
+      }
+    });
+  }
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    let rowNode = rowsByNumber.get(rowNumber);
+    if (!rowNode) {
+      rowNode = doc.createElementNS(ns, "row");
+      rowNode.setAttribute("r", String(rowNumber));
+      sheetData.appendChild(rowNode);
+      rowsByNumber.set(rowNumber, rowNode);
+    }
+    const values = [
+      { col: "A", type: "string", value: row.productName || "" },
+      { col: "B", type: "number", value: toSetSheetNumberCell(row.quantity) || 0 },
+      { col: "C", type: "number", value: toSetSheetNumberCell(row.weight) },
+      { col: "D", type: "number", value: toSetSheetNumberCell(row.height) },
+      { col: "E", type: "number", value: toSetSheetNumberCell(row.width) },
+      { col: "F", type: "number", value: toSetSheetNumberCell(row.length) },
+    ];
+    values.forEach(cellValue => {
+      const cell = doc.createElementNS(ns, "c");
+      (cellAttributesByRef.get(`${cellValue.col}${rowNumber}`) || []).forEach(([name, value]) => {
+        if (name !== "r" && name !== "t") cell.setAttribute(name, value);
+      });
+      cell.setAttribute("r", `${cellValue.col}${rowNumber}`);
+      if (cellValue.type === "string" || cellValue.value === "") {
+        cell.setAttribute("t", "inlineStr");
+        const isNode = doc.createElementNS(ns, "is");
+        const textNode = doc.createElementNS(ns, "t");
+        textNode.textContent = String(cellValue.value ?? "");
+        isNode.appendChild(textNode);
+        cell.appendChild(isNode);
+      } else {
+        const valueNode = doc.createElementNS(ns, "v");
+        valueNode.textContent = String(cellValue.value);
+        cell.appendChild(valueNode);
+      }
+      rowNode.appendChild(cell);
+    });
+    sortSetSheetRowCells(rowNode);
+  });
+  sortSetSheetRows(sheetData);
+  return new XMLSerializer().serializeToString(doc);
+};
+const buildSetSheetSpreadsheetFromTemplate = async (rows, options = {}) => {
+  const templateConfig = getSetSheetTemplateConfig(options.brand);
+  const response = await fetch(templateConfig.path);
+  if (!response.ok) throw new Error(`Could not load ${templateConfig.label}.`);
+  const zip = parseXlsxZip(await response.arrayBuffer());
+  const sheetPath = await findSetSheetPath(zip);
+  const sheetEntry = zip.entries.find(entry => entry.name === sheetPath);
+  if (!sheetEntry) throw new Error("SetSheet worksheet file was not found in the template.");
+  const worksheetXml = ZIP_TEXT_DECODER.decode(await inflateZipEntry(sheetEntry));
+  const patchedXml = patchSetSheetXml(worksheetXml, rows);
+  const patchedBytes = ZIP_TEXT_ENCODER.encode(patchedXml);
+  sheetEntry.compressedData = await deflateZipEntry(patchedBytes, sheetEntry.method);
+  sheetEntry.uncompressedSize = patchedBytes.length;
+  sheetEntry.crc = getCrc32(patchedBytes);
+  return buildXlsxZip(zip);
+};
+
+const downloadSetSheetRows = async (rows, fileName, options = {}) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const previewProductCount = getSetSheetExpectedProductCount(safeRows, options);
+  const sourceRowsForDebug = Array.isArray(options.sourceProductUnits) && options.sourceProductUnits.length
+    ? options.sourceProductUnits
+    : safeRows;
+  const exportRows = buildSetSheetExportRows(safeRows, options.sourceProductUnits);
+  const exportDebug = getSetSheetExportDebug(sourceRowsForDebug, exportRows, previewProductCount);
+  if (findDuplicateSetSheetExportRows(exportRows).length) {
+    return {
+      ok: false,
+      error: "Duplicate final product names found. Export must make each TikTok row unique before upload.",
+      exportDebug,
+    };
+  }
+  if (exportDebug.xlsxRows !== previewProductCount || exportDebug.exportQuantity !== previewProductCount) {
+    return {
+      ok: false,
+      error: `Export quantity mismatch: source has ${previewProductCount}, XLSX would export ${exportDebug.exportQuantity}.`,
+      exportDebug,
+    };
+  }
+  if (exportRows.length > SETSHEET_TIKTOK_ROW_LIMIT) {
+    return {
+      ok: false,
+      error: `TikTok allows up to ${SETSHEET_TIKTOK_ROW_LIMIT} rows per SetSheet. This export would write ${exportRows.length} rows. Review or split this set before downloading.`,
+      exportDebug,
+    };
+  }
+  try {
+    const workbook = await buildSetSheetSpreadsheetFromTemplate(exportRows, options);
+    const blob = new Blob([workbook], { type: SETSHEET_XLSX_MIME });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${sanitizeSetSheetFileName(fileName)}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    return { ok: true, exportDebug };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Could not build the TikTok template file.", exportDebug };
+  }
 };
 
 const loadSetSheetConverterEntries = () => {
@@ -1470,30 +1926,40 @@ const findAutopilotSetNameFromGroupRows = (groupRows = [], setupIndex = 0, chann
 
 const collectAutopilotProductRowsForGroup = (groupRows = [], setupIndex = 0, groupMeta = {}) => {
   const productLines = [];
-  let blankRun = 0;
+  const sourceProductUnits = [];
   let startRow = "";
   let endRow = "";
+  const lowerBound = Number.isFinite(groupMeta.previousSetupIndex) ? groupMeta.previousSetupIndex : -1;
   for (let index = setupIndex - 1; index >= 0; index -= 1) {
+    if (index <= lowerBound) break;
     const row = groupRows[index];
     if (!row) continue;
-    if (isAutopilotBlankGroupRow(row.cells)) {
-      blankRun += 1;
-      if (productLines.length && blankRun > 3) break;
-      continue;
-    }
-    blankRun = 0;
+    if (isAutopilotBlankGroupRow(row.cells)) continue;
     const line = getAutopilotGroupLine(row.cells);
-    if (getAutopilotSetupHeader(line) || isAutopilotStopScanLine(line) || /\b(retail|cost)\b/i.test(line)) {
-      if (productLines.length) break;
+    if (getAutopilotSetupHeader(line)) break;
+    if (isAutopilotStopScanLine(line) || /\b(retail|cost)\b/i.test(line)) {
       continue;
     }
     const productName = row.cells[0] || "";
     if (!isValidSurpriseProductRow(row, groupMeta)) continue;
     productLines.push(productName);
+    const unit = buildSourceProductUnit(productName, {
+      channel: groupMeta.channelCode,
+      sheetTab: groupMeta.sheetTab,
+      columnGroup: groupMeta.columnGroup,
+      sourceRowNumber: row.rowNumber,
+    });
+    if (unit) sourceProductUnits.push(unit);
     startRow = row.rowNumber;
     if (!endRow) endRow = row.rowNumber;
   }
-  return { productLines: productLines.reverse(), capped: false, productStartRow: startRow || "", productEndRow: endRow || "" };
+  return {
+    productLines: productLines.reverse(),
+    sourceProductUnits: sourceProductUnits.reverse(),
+    capped: false,
+    productStartRow: startRow || "",
+    productEndRow: endRow || "",
+  };
 };
 
 const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsheetName, tabName, values, tabOrder, tabShiftMeta }, selectedDates = []) => {
@@ -1515,7 +1981,13 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
       const streamDate = header.streamDate || "";
       if (selectedDates.length && streamDate && !selectedDates.includes(streamDate)) return;
       const setNumber = String(groupIndex + verticalIndex + 1);
-      const productResult = collectAutopilotProductRowsForGroup(groupRows, setup.index, { channelCode, columnGroup: getAutopilotGroupLabel(group.startCol, group.endCol) });
+      const columnGroup = getAutopilotGroupLabel(group.startCol, group.endCol);
+      const productResult = collectAutopilotProductRowsForGroup(groupRows, setup.index, {
+        channelCode,
+        sheetTab: tabName,
+        columnGroup,
+        previousSetupIndex: setupRows[verticalIndex - 1]?.index ?? -1,
+      });
       const hardFloor = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "HARD\\s*FLOOR");
       const target = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "TARGET");
       const stretch = detectAutopilotPriceFromGroupRows(groupRows, setup.index, "STRETCH");
@@ -1536,7 +2008,7 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
       }
       if (!brand) warnings.push("Ambiguous column group");
       previewRows.push({
-        id: `${channelCode}-${tabName}-${getAutopilotGroupLabel(group.startCol, group.endCol)}-${setup.rowNumber}-${setNumber}`.replace(/[^A-Za-z0-9_-]+/g, "_"),
+        id: `${channelCode}-${tabName}-${columnGroup}-${setup.rowNumber}-${setNumber}`.replace(/[^A-Za-z0-9_-]+/g, "_"),
         include: !hasAutopilotCriticalWarnings(warnings),
         channel: channelCode,
         brand: brand || "CardKing47",
@@ -1545,7 +2017,7 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
         sheetTab: tabName,
         tabOrder: tabOrder || tabShiftMeta?.tabOrder || "",
         tabDateOrder: tabShiftMeta?.tabDateOrder || "",
-        columnGroup: getAutopilotGroupLabel(group.startCol, group.endCol),
+        columnGroup,
         setupRowNumber: setup.rowNumber,
         productStartRow: productResult.productStartRow,
         productEndRow: productResult.productEndRow,
@@ -1560,7 +2032,8 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
         hardFloor,
         stretch,
         productLines: productResult.productLines,
-        productCount: productResult.productLines.length,
+        sourceProductUnits: productResult.sourceProductUnits,
+        productCount: getSourceProductUnitCount(productResult.sourceProductUnits),
         warnings,
       });
     });
@@ -1704,6 +2177,9 @@ const normalizeImportedSet = (block, fallbackOptions = {}) => {
 
   const extractedProducts = extractProductLinesFromSheetBlock(block?.text);
   const productLines = extractedProducts.productLines.filter(line => line !== surpriseSetName);
+  const sourceProductUnits = buildSourceProductUnitsFromLines(productLines, {
+    channel: getSurpriseSetBrandCode(brand),
+  });
   if (!productLines.length) warnings.push("No product rows found.");
 
   return {
@@ -1720,13 +2196,21 @@ const normalizeImportedSet = (block, fallbackOptions = {}) => {
     stretch,
     input: productLines.join("\n"),
     productLines,
+    sourceProductUnits,
     warnings,
   };
 };
 
 const buildImportedSetCard = (importedSet) => {
-  const rows = parseSetSheetInput(importedSet.input);
-  const summary = getSetSheetSummary(rows);
+  const sourceProductUnits = Array.isArray(importedSet.sourceProductUnits) && importedSet.sourceProductUnits.length
+    ? importedSet.sourceProductUnits
+    : buildSourceProductUnitsFromLines(importedSet.productLines || String(importedSet.input || "").split(/\r?\n/), {
+        channel: importedSet.brandCode || getSurpriseSetBrandCode(importedSet.brand),
+        sheetTab: importedSet.sheetTab || "",
+        columnGroup: importedSet.columnGroup || "",
+      });
+  const rows = sourceProductUnits.length ? parseSetSheetInput(sourceProductUnits.map(unit => unit.rawProductName || unit.normalizedProductName).join("\n")) : parseSetSheetInput(importedSet.input);
+  const summary = { ...getSetSheetSummary(rows), totalQuantity: sourceProductUnits.length ? getSourceProductUnitCount(sourceProductUnits) : getSetSheetSummary(rows).totalQuantity };
   const converted = rows.length > 0 && !importedSet.needsReview;
   const warnings = [...(importedSet.warnings || [])];
   if (!converted && !warnings.includes("No product rows found.")) warnings.push("No product rows found.");
@@ -1735,6 +2219,7 @@ const buildImportedSetCard = (importedSet) => {
     fileName: buildSurpriseSetFileName(importedSet),
     rows,
     summary,
+    sourceProductUnits,
     status: converted ? "Converted" : "Needs Review",
     convertedAt: converted ? nowISO() : "",
     warnings,
@@ -5685,7 +6170,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
 };
 
 // ─── STUDIO READINESS ─────────────────────────────────────────────────────────
-const StudioReadinessView = ({ studios, setStudios }) => {
+const LegacyStudioReadinessView = ({ studios, setStudios }) => {
   const safeStudios = Array.isArray(studios) ? studios : [];
   const upd = (id, field, val) => setStudios(p => p.map(s => s.id === id ? { ...s, [field]: val } : s));
   const score = s => { let sc = 0; if (s.countCompleted) sc += 25; if (s.fullyStocked) sc += 25; if (s.discrepanciesLogged === 0 || s.discrepanciesResolved === s.discrepanciesLogged) sc += 25; if (s.streamReady) sc += 25; return sc; };
@@ -5739,6 +6224,143 @@ const StudioReadinessView = ({ studios, setStudios }) => {
 };
 
 // ─── SURPRISE SET TRACKER ─────────────────────────────────────────────────────
+const INVENTORY_CONTROL_SAMPLE_ROWS = [
+  { id: "inv-vr-lorwyn-play", studio: "VR", zone: "Row 3C", internalName: "Lorwyn Play", shopifyTitle: "Lorwyn Eclipsed Play Booster Pack", sku: "VR-LORWYN-PLAY", countUnit: "Pack", conversion: "1 pack = 1 unit", shopifyQty: 42, physicalQty: "", notes: "" },
+  { id: "inv-ps-chaos-etb", studio: "PS", zone: "PS3A", internalName: "Chaos Rising ETB", shopifyTitle: "Chaos Rising Elite Trainer Box", sku: "PS-CHAOS-ETB", countUnit: "Box", conversion: "1 box = 1 unit", shopifyQty: 18, physicalQty: "", notes: "" },
+  { id: "inv-ck-lorwyn-pack", studio: "CK", zone: "Shelf 1", internalName: "Lorwyn Eclipsed Pack", shopifyTitle: "Lorwyn Eclipsed Collector Pack", sku: "CK-LORWYN-PACK", countUnit: "Pack", conversion: "1 pack = 1 unit", shopifyQty: 64, physicalQty: "", notes: "" },
+  { id: "inv-pm-perfect-etb", studio: "PM", zone: "Holding", internalName: "Perfect Order ETB", shopifyTitle: "Perfect Order Elite Trainer Box", sku: "PM-PERFECT-ETB", countUnit: "Box", conversion: "1 box = 1 unit", shopifyQty: 22, physicalQty: "", notes: "" },
+];
+const createInventoryControlState = () => ({ inventoryControlVersion: 1, sessionActive: false, sessionStartedAt: "", lastShopifySnapshotAt: "", snapshotText: "", studioFilter: "All", statusFilter: "All", rows: INVENTORY_CONTROL_SAMPLE_ROWS, history: [] });
+const normalizeInventoryStudioCode = (value) => {
+  const raw = String(value || "").trim().toUpperCase();
+  if (raw.includes("VAULTED") || raw === "VR") return "VR";
+  if (raw.includes("POKESPINS") || raw === "PS") return "PS";
+  if (raw.includes("CARDKING") || raw === "CK" || raw === "CK47") return "CK";
+  if (raw.includes("POKIEMART") || raw.includes("POKIE") || raw === "PM") return "PM";
+  return raw || "VR";
+};
+const normalizeInventoryControlState = (value) => value && !Array.isArray(value) && value.inventoryControlVersion
+  ? { ...createInventoryControlState(), ...value, rows: Array.isArray(value.rows) ? value.rows : INVENTORY_CONTROL_SAMPLE_ROWS, history: Array.isArray(value.history) ? value.history : [] }
+  : createInventoryControlState();
+const parseInventoryDelimitedLine = (line, delimiter) => {
+  const cells = [];
+  let current = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (quoted && line[i + 1] === '"') { current += '"'; i += 1; }
+      else quoted = !quoted;
+    } else if (char === delimiter && !quoted) {
+      cells.push(current.trim());
+      current = "";
+    } else current += char;
+  }
+  cells.push(current.trim());
+  return cells;
+};
+const parseInventorySnapshotRows = (rawText) => {
+  const lines = String(rawText || "").split(/\r?\n/).filter(line => line.trim());
+  if (lines.length < 2) return [];
+  const delimiter = lines[0].includes("\t") ? "\t" : ",";
+  const headers = parseInventoryDelimitedLine(lines[0], delimiter).map(header => header.toLowerCase().replace(/[^a-z0-9]+/g, ""));
+  const findHeader = (...names) => names.map(name => headers.indexOf(name)).find(index => index >= 0);
+  const titleIndex = findHeader("title", "producttitle", "product", "name");
+  const skuIndex = findHeader("sku", "variantsku");
+  const qtyIndex = findHeader("quantity", "available", "onhand", "inventoryquantity", "variantinventoryqty");
+  const variantIndex = findHeader("variant", "varianttitle", "option1value");
+  const locationIndex = findHeader("location", "inventorylocation");
+  const vendorIndex = findHeader("vendor", "producttype", "type");
+  return lines.slice(1).map((line, index) => {
+    const cells = parseInventoryDelimitedLine(line, delimiter);
+    const title = cells[titleIndex] || cells[0] || "";
+    const variant = cells[variantIndex] || "";
+    const vendor = cells[vendorIndex] || "";
+    return { id: `shopify-${Date.now()}-${index}`, studio: normalizeInventoryStudioCode(vendor || cells[locationIndex] || title), zone: cells[locationIndex] || "Unmapped", internalName: variant || title, shopifyTitle: title, sku: cells[skuIndex] || "", countUnit: "Unit", conversion: "1 Shopify unit = 1 physical unit", shopifyQty: Number(cells[qtyIndex] || 0) || 0, physicalQty: "", notes: "" };
+  }).filter(row => row.shopifyTitle || row.sku);
+};
+const getInventoryVariance = (row) => row.physicalQty === "" || row.physicalQty == null ? null : (Number(row.physicalQty) || 0) - (Number(row.shopifyQty) || 0);
+const getInventoryRiskLabel = (row) => {
+  const variance = getInventoryVariance(row);
+  if (!row.shopifyTitle) return "Mapping Issue";
+  if (row.recountNeeded) return "Recount Needed";
+  if (variance == null) return "Not Counted";
+  if ((Number(row.physicalQty) || 0) === 0 && (Number(row.shopifyQty) || 0) > 0) return "Oversell Risk";
+  if ((Number(row.physicalQty) || 0) > 0 && (Number(row.shopifyQty) || 0) === 0) return "Missed Sales Risk";
+  if (Math.abs(variance) >= 10) return "Recount Needed";
+  return variance === 0 ? "Matched" : "Variance";
+};
+const getInventoryStatus = (row) => {
+  const variance = getInventoryVariance(row);
+  if (row.updatedAt) return "Updated";
+  if (!row.shopifyTitle) return "Mapping Issue";
+  if (row.recountNeeded || Math.abs(variance || 0) >= 10) return "Recount";
+  if (variance == null) return "Not Counted";
+  if (variance === 0) return "Matched";
+  return "Ready to Update";
+};
+const isInventoryReadyToUpdate = (row) => {
+  const variance = getInventoryVariance(row);
+  return variance != null && variance !== 0 && getInventoryStatus(row) === "Ready to Update";
+};
+const StudioReadinessView = ({ studios, setStudios }) => {
+  const inventory = normalizeInventoryControlState(studios);
+  const rows = Array.isArray(inventory.rows) ? inventory.rows : [];
+  const filteredRows = rows.filter(row => {
+    const studioMatches = inventory.studioFilter === "All" || row.studio === inventory.studioFilter;
+    const status = getInventoryStatus(row);
+    const statusMatches = inventory.statusFilter === "All" || status === inventory.statusFilter || (inventory.statusFilter === "Variance" && getInventoryVariance(row) !== 0 && getInventoryVariance(row) != null);
+    return studioMatches && statusMatches;
+  });
+  const varianceRows = rows.filter(row => { const variance = getInventoryVariance(row); return variance != null && variance !== 0; });
+  const updateQueue = rows.filter(isInventoryReadyToUpdate);
+  const countedRows = rows.filter(row => getInventoryVariance(row) != null);
+  const updateInventory = (patch) => setStudios(prev => ({ ...normalizeInventoryControlState(prev), ...patch }));
+  const updateRow = (id, patch) => updateInventory({ rows: rows.map(row => row.id === id ? { ...row, ...patch } : row) });
+  const importSnapshot = () => {
+    const parsedRows = parseInventorySnapshotRows(inventory.snapshotText);
+    if (!parsedRows.length) return updateInventory({ lastImportMessage: "Snapshot not imported yet. Paste Shopify export rows first." });
+    updateInventory({ rows: parsedRows, lastShopifySnapshotAt: nowISO(), lastImportMessage: `Imported ${parsedRows.length} Shopify snapshot row${parsedRows.length === 1 ? "" : "s"}.` });
+  };
+  const saveCount = () => {
+    const entry = { id: uid(), at: nowISO(), totalCounted: countedRows.length, variances: varianceRows.length, updatedRows: rows.filter(row => row.updatedAt).length, notes: "Manual count checkpoint saved." };
+    updateInventory({ history: [entry, ...(inventory.history || [])].slice(0, 8), lastImportMessage: "Count saved." });
+  };
+  const resetSession = () => { if (window.confirm("Reset this Inventory Control count session?")) updateInventory(createInventoryControlState()); };
+  const exportUpdateTxt = async () => {
+    const body = ["Inventory Shopify Update Queue", `Generated: ${fmtDate(nowISO())}`, "", ...updateQueue.map(row => `${row.sku || "-"}\t${row.shopifyTitle}\told=${row.shopifyQty}\tnew=${row.physicalQty}\tvariance=${getInventoryVariance(row)}`)].join("\n");
+    try { await navigator.clipboard.writeText(body); } catch {}
+    const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `inventory-update-queue-${todayDate()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    updateInventory({ lastImportMessage: `Exported ${updateQueue.length} update row${updateQueue.length === 1 ? "" : "s"}.` });
+  };
+  const markSelectedUpdated = () => updateInventory({ rows: rows.map(row => row.selectedForUpdate && isInventoryReadyToUpdate(row) ? { ...row, updatedAt: nowISO(), selectedForUpdate: false } : row) });
+  const readiness = ["VR", "PS", "CK", "PM"].map(studio => {
+    const brandRows = rows.filter(row => row.studio === studio);
+    return { studio, ready: brandRows.length > 0 && brandRows.every(row => getInventoryVariance(row) != null) };
+  });
+  const metricCards = [["SKUs tracked", rows.length], ["Counted this session", countedRows.length], ["Variances found", varianceRows.length], ["Recount needed", rows.filter(row => getInventoryStatus(row) === "Recount").length], ["Ready to update", updateQueue.length], ["Last Shopify snapshot", inventory.lastShopifySnapshotAt ? fmtDate(inventory.lastShopifySnapshotAt) : "Not imported"]];
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div><h2 className="text-2xl font-bold text-gray-900">Inventory Control</h2><p className="text-xs text-gray-400 mt-0.5">Count physical stock, compare to Shopify, and build the update queue.</p></div>
+        <div className="flex flex-wrap gap-2"><BtnPrimary onClick={() => updateInventory({ sessionActive: true, sessionStartedAt: nowISO(), lastImportMessage: "Count Session started." })} size="md">Start Count Session</BtnPrimary><button onClick={saveCount} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">Save Count</button><button onClick={resetSession} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Reset Session</button></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">{metricCards.map(([label, value]) => <Card key={label} className="p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p><p className="mt-1 text-xl font-bold text-gray-900">{value}</p></Card>)}</div>
+      <Card className="p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-gray-900">Studio Readiness</p><p className="text-xs text-gray-400">Quick count coverage by active inventory lane.</p></div><div className="flex flex-wrap gap-2">{readiness.map(item => <span key={item.studio} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${item.ready ? "border-slate-200 bg-slate-50 text-slate-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>{item.studio} {item.ready ? "ready" : "open"}</span>)}</div></div></Card>
+      <Card className="p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0 flex-1"><p className="text-sm font-bold text-gray-900">Shopify Snapshot Import</p><p className="text-xs text-gray-400 mt-0.5">Paste Shopify export rows to freeze quantities for this Count Session.</p><Txt value={inventory.snapshotText || ""} onChange={value => updateInventory({ snapshotText: value })} rows={5} className="mt-3 font-mono text-xs" placeholder="Paste Shopify export here" /></div><div className="flex shrink-0 flex-col gap-2 lg:w-56"><BtnPrimary onClick={importSnapshot} size="md">Import Snapshot</BtnPrimary><div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">{inventory.lastImportMessage || (inventory.lastShopifySnapshotAt ? `Snapshot imported ${fmtDate(inventory.lastShopifySnapshotAt)}` : "Snapshot not imported yet")}</div></div></div></Card>
+      <Card className="p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-gray-900">Room Map / Count List</p><p className="text-xs text-gray-400 mt-0.5">Enter physical quantities. Variance calculates automatically.</p></div><div className="flex flex-wrap gap-2"><Sel value={inventory.studioFilter || "All"} onChange={value => updateInventory({ studioFilter: value })} options={["All", "VR", "PS", "CK", "PM"]} placeholder="" /><Sel value={inventory.statusFilter || "All"} onChange={value => updateInventory({ statusFilter: value })} options={["All", "Not Counted", "Variance", "Recount", "Ready to Update", "Updated"]} placeholder="" /></div></div><div className="mt-3 overflow-x-auto"><table className="min-w-[1280px] w-full text-left text-xs"><thead className="border-y border-gray-100 bg-gray-50 text-gray-500"><tr>{["Studio / Brand", "Zone / Location", "Internal Name", "Shopify Title", "Count Unit", "Conversion", "Shopify Qty", "Physical Qty", "Variance", "Status", "Notes", "Recount"].map(label => <th key={label} className="px-3 py-2 font-bold">{label}</th>)}</tr></thead><tbody className="divide-y divide-gray-50">{filteredRows.map(row => { const variance = getInventoryVariance(row); const status = getInventoryStatus(row); return <tr key={row.id} className="hover:bg-gray-50"><td className="px-3 py-2 font-bold text-gray-700">{row.studio}</td><td className="px-3 py-2 text-gray-600">{row.zone}</td><td className="px-3 py-2 text-gray-800">{row.internalName}</td><td className="px-3 py-2 text-gray-600">{row.shopifyTitle || <span className="text-amber-700">Missing title</span>}</td><td className="px-3 py-2 text-gray-500">{row.countUnit}</td><td className="px-3 py-2 text-gray-500">{row.conversion}</td><td className="px-3 py-2 font-mono text-gray-700">{row.shopifyQty}</td><td className="px-3 py-2"><Inp type="number" value={row.physicalQty} onChange={value => updateRow(row.id, { physicalQty: value })} className="w-24" /></td><td className={`px-3 py-2 font-bold ${variance == null ? "text-gray-300" : variance === 0 ? "text-gray-500" : variance < 0 ? "text-red-700" : "text-emerald-700"}`}>{variance == null ? "-" : variance}</td><td className="px-3 py-2"><Badge label={status} className={status === "Ready to Update" ? "border-slate-200 bg-slate-50 text-slate-700" : status === "Recount" || status === "Mapping Issue" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-gray-200 bg-gray-50 text-gray-500"} /></td><td className="px-3 py-2"><Inp value={row.notes || ""} onChange={value => updateRow(row.id, { notes: value })} className="w-44" placeholder="Count notes" /></td><td className="px-3 py-2"><input type="checkbox" checked={Boolean(row.recountNeeded)} onChange={e => updateRow(row.id, { recountNeeded: e.target.checked })} className="accent-slate-700" /></td></tr>; })}</tbody></table></div></Card>
+      <div className="grid gap-4 xl:grid-cols-2"><Card className="p-4"><p className="text-sm font-bold text-gray-900">Variance Review</p><div className="mt-3 space-y-2">{varianceRows.length ? varianceRows.map(row => <div key={row.id} className="rounded-lg border border-gray-200 bg-white px-3 py-2"><div className="flex items-center justify-between gap-3"><p className="text-xs font-bold text-gray-900">{row.internalName}</p><Badge label={getInventoryRiskLabel(row)} className="border-amber-200 bg-amber-50 text-amber-800" /></div><p className="mt-1 text-[11px] text-gray-500">{row.studio} / {row.zone} - Shopify {row.shopifyQty}, physical {row.physicalQty}, variance {getInventoryVariance(row)}</p></div>) : <p className="text-xs text-gray-400">No mismatches yet.</p>}</div></Card><Card className="p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-bold text-gray-900">Update Shopify Queue</p><p className="text-xs text-gray-400">Export-only for now. No Shopify writes happen here.</p></div><div className="flex gap-2"><button onClick={exportUpdateTxt} disabled={!updateQueue.length} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">Export Update TXT</button><BtnPrimary onClick={markSelectedUpdated} size="md">Mark Selected Updated</BtnPrimary></div></div><div className="mt-3 space-y-2">{updateQueue.length ? updateQueue.map(row => <div key={row.id} className="rounded-lg border border-gray-200 bg-white px-3 py-2"><div className="flex items-center justify-between gap-3"><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={Boolean(row.selectedForUpdate)} onChange={e => updateRow(row.id, { selectedForUpdate: e.target.checked })} className="accent-slate-700" /><span className="truncate text-xs font-bold text-gray-900">{row.shopifyTitle}</span></label><button onClick={() => updateRow(row.id, { updatedAt: nowISO(), selectedForUpdate: false })} className="shrink-0 rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Mark Updated</button></div><p className="mt-1 text-[11px] text-gray-500">Old {row.shopifyQty} - New {row.physicalQty} - Variance {getInventoryVariance(row)}</p></div>) : <p className="text-xs text-gray-400">No rows ready to update.</p>}</div></Card></div>
+      <Card className="p-4"><p className="text-sm font-bold text-gray-900">Variance History</p><div className="mt-3 space-y-2">{(inventory.history || []).length ? inventory.history.map(entry => <div key={entry.id} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600"><span className="font-bold text-gray-900">{fmtDate(entry.at)}</span> - counted {entry.totalCounted}, variances {entry.variances}, updated {entry.updatedRows}. {entry.notes}</div>) : <p className="text-xs text-gray-400">No saved count sessions yet.</p>}</div></Card>
+    </div>
+  );
+};
+
 const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const defaultConverterForm = {
     brand: "Vaulted Rarities",
@@ -5795,6 +6417,17 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       setTimeout(() => setSetupCopyStatus(""), 2200);
     } catch {
       setSetupCopyStatus("Copy failed. Try again.");
+      setTimeout(() => setSetupCopyStatus(""), 2600);
+    }
+  };
+
+  const copyExportAudit = async (entry) => {
+    try {
+      await navigator.clipboard.writeText(buildSetSheetExportAuditText(entry));
+      setSetupCopyStatus("Copied export audit.");
+      setTimeout(() => setSetupCopyStatus(""), 2200);
+    } catch {
+      setSetupCopyStatus("Export audit copy failed.");
       setTimeout(() => setSetupCopyStatus(""), 2600);
     }
   };
@@ -5858,7 +6491,10 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       setConverterError("Paste some surprise set lines first.");
       return;
     }
-    const nextSummary = getSetSheetSummary(rows);
+    const sourceProductUnits = buildSourceProductUnitsFromLines(String(converterForm.input || "").split(/\r?\n/), {
+      channel: converterForm.brandCode || getSurpriseSetBrandCode(converterForm.brand),
+    });
+    const nextSummary = { ...getSetSheetSummary(rows), totalQuantity: sourceProductUnits.length ? getSourceProductUnitCount(sourceProductUnits) : getSetSheetSummary(rows).totalQuantity };
     const safeFileName = converterForm.fileName || buildSurpriseSetFileName(converterForm);
     const entry = {
       id: uid(),
@@ -5869,6 +6505,7 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       usesWarehouse: getSetSheetTemplateConfig(converterForm.brand).usesWarehouse,
       rows,
       summary: nextSummary,
+      sourceProductUnits,
     };
     setConverterForm(prev => ({ ...prev, fileName: safeFileName }));
     setConverterRows(rows);
@@ -5881,33 +6518,43 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     });
   };
 
-  const handleDownload = (entry = null) => {
+  const handleDownload = async (entry = null) => {
     const rows = entry?.rows || converterRows;
     const fileName = entry?.fileName || converterForm.fileName || "setsheet_export";
     if (!Array.isArray(rows) || rows.length === 0) {
       setConverterError("Convert a surprise set before downloading.");
-      return;
+      return { ok: false };
     }
-    downloadSetSheetRows(rows, fileName, {
+    const downloadResult = await downloadSetSheetRows(rows, fileName, {
       brand: entry?.brand || converterForm.brand,
       warehouse: entry?.warehouse || converterForm.warehouse,
+      previewProductCount: entry?.summary?.totalQuantity || getSetSheetSummary(rows).totalQuantity,
+      sourceProductUnits: entry?.sourceProductUnits,
     });
+    if (!downloadResult.ok) {
+      setConverterError(downloadResult.error);
+      return downloadResult;
+    }
     const brand = entry?.brand || converterForm.brand;
     const day = entry?.day || converterForm.day;
     const shift = entry?.shift || converterForm.shift;
     patchTrackerBlock(brand, day, shift, { downloadedSetSheet: true });
     if (entry?.id) {
-      setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === entry.id ? { ...item, downloadedAt: nowISO() } : item));
+      setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === entry.id ? { ...item, downloadedAt: nowISO(), exportDebug: downloadResult.exportDebug } : item));
     }
+    return downloadResult;
   };
 
-  const handleDownloadAll = () => {
+  const handleDownloadAll = async () => {
     const safeEntries = Array.isArray(convertedEntries) ? convertedEntries : [];
     if (!safeEntries.length) {
       setConverterError("Convert at least one surprise set first.");
       return;
     }
-    safeEntries.forEach(entry => handleDownload(entry));
+    for (const entry of safeEntries) {
+      const result = await handleDownload(entry);
+      if (!result?.ok) break;
+    }
   };
 
   const handleResetConverter = () => {
@@ -6222,6 +6869,9 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold text-gray-800">{entry.fileName}</p>
                       <p className="text-[10px] text-gray-400">{entry.day} {String(entry.shift).toUpperCase()} - {entry.summary?.totalQuantity || 0} items</p>
+                      {entry.exportDebug && (
+                        <p className="text-[10px] text-gray-400">Source units: {entry.exportDebug.sourceUnits || entry.exportDebug.parsedProducts} - Export quantity: {entry.exportDebug.exportQuantity} - Export rows: {entry.exportDebug.xlsxRows}</p>
+                      )}
                     </div>
                     <button onClick={() => handleDownload(entry)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Download</button>
                   </div>
@@ -6509,13 +7159,19 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       setConverterError("Paste some surprise set lines first.");
       return;
     }
-    const summary = getSetSheetSummary(rows);
+    const sourceProductUnits = buildSourceProductUnitsFromLines(String(builderForm.input || "").split(/\r?\n/), {
+      channel: builderForm.brandCode || getSurpriseSetBrandCode(builderForm.brand),
+      sheetTab: builderForm.sheetTab || "",
+      columnGroup: builderForm.columnGroup || "",
+    });
+    const summary = { ...getSetSheetSummary(rows), totalQuantity: sourceProductUnits.length ? getSourceProductUnitCount(sourceProductUnits) : getSetSheetSummary(rows).totalQuantity };
     const safeFileName = builderForm.fileName || buildSurpriseSetFileName(builderForm);
     const converted = normalizeSurpriseSetBoardEntry({
       ...builderForm,
       fileName: safeFileName,
       rows,
       summary,
+      sourceProductUnits,
       status: "Converted",
       convertedAt: nowISO(),
     });
@@ -6538,6 +7194,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       usesWarehouse: templateConfig.usesWarehouse,
       rows,
       summary,
+      sourceProductUnits,
     };
     upsertBoardEntry(converted);
     setBuilderForm(converted);
@@ -6549,18 +7206,24 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     });
   };
 
-  const handleDownloadSet = (entry = builderForm) => {
-    if (!entry) return;
+  const handleDownloadSet = async (entry = builderForm) => {
+    if (!entry) return { ok: false };
     const rows = Array.isArray(entry.rows) && entry.rows.length ? entry.rows : parseSetSheetInput(entry.input);
     const fileName = entry.fileName || buildSurpriseSetFileName(entry);
     if (!Array.isArray(rows) || rows.length === 0) {
       setConverterError("Convert a surprise set before downloading.");
-      return;
+      return { ok: false };
     }
-    downloadSetSheetRows(rows, fileName, {
+    const downloadResult = await downloadSetSheetRows(rows, fileName, {
       brand: entry.brand,
       warehouse: entry.warehouse || SETSHEET_WAREHOUSES[0],
+      previewProductCount: entry.summary?.totalQuantity || getSetSheetSummary(rows).totalQuantity,
+      sourceProductUnits: entry.sourceProductUnits,
     });
+    if (!downloadResult.ok) {
+      setConverterError(downloadResult.error);
+      return downloadResult;
+    }
     const downloaded = normalizeSurpriseSetBoardEntry({
       ...entry,
       rows,
@@ -6568,11 +7231,13 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
       summary: getSetSheetSummary(rows),
       status: ["Uploaded", "Live Ready"].includes(entry.status) ? entry.status : "Downloaded",
       downloadedAt: entry.downloadedAt || nowISO(),
+      exportDebug: downloadResult.exportDebug,
     });
     upsertBoardEntry(downloaded);
     if (builderForm?.id === downloaded.id) setBuilderForm(downloaded);
-    setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === downloaded.id ? { ...item, downloadedAt: downloaded.downloadedAt } : item));
+    setConvertedEntries(prev => (Array.isArray(prev) ? prev : []).map(item => item.id === downloaded.id ? { ...item, downloadedAt: downloaded.downloadedAt, exportDebug: downloadResult.exportDebug } : item));
     patchTrackerBlock(downloaded.brand, downloaded.day, downloaded.shift, { downloadedSetSheet: true });
+    return downloadResult;
   };
 
   const handleMarkUploaded = (entry = builderForm) => {
@@ -6592,13 +7257,16 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     });
   };
 
-  const handleDownloadAll = () => {
+  const handleDownloadAll = async () => {
     const safeEntries = Array.isArray(convertedEntries) ? convertedEntries : [];
     if (!safeEntries.length) {
       setConverterError("Convert at least one surprise set first.");
       return;
     }
-    safeEntries.forEach(entry => handleDownloadSet(entry));
+    for (const entry of safeEntries) {
+      const result = await handleDownloadSet(entry);
+      if (!result?.ok) break;
+    }
   };
 
   const handleToggleAutopilotChannel = (code) => {
@@ -6655,6 +7323,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           usesWarehouse: templateConfig.usesWarehouse,
           rows: merge.card.rows,
           summary: merge.card.summary,
+          sourceProductUnits: merge.card.sourceProductUnits,
         });
         patchTrackerBlock(merge.card.brand, merge.card.day, merge.card.shift, {
           convertedSetSheet: true,
@@ -6782,6 +7451,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
         stretch: row.stretch,
         input: row.productLines.join("\n"),
         productLines: row.productLines,
+        sourceProductUnits: row.sourceProductUnits,
         warnings: row.warnings,
         needsReview: critical,
         sheetTab: row.sheetTab,
@@ -6810,6 +7480,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           usesWarehouse: templateConfig.usesWarehouse,
           rows: merge.card.rows,
           summary: merge.card.summary,
+          sourceProductUnits: merge.card.sourceProductUnits,
         });
         patchTrackerBlock(merge.card.brand, merge.card.day, merge.card.shift, {
           convertedSetSheet: true,
@@ -6860,6 +7531,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const renderSetCard = (entry) => {
     const productCount = entry.summary?.totalQuantity || entry.rows?.length || 0;
     const canDownload = Array.isArray(entry.rows) && entry.rows.length > 0;
+    const exportAudit = canDownload ? getSetSheetExportRowsForEntry(entry) : null;
     return (
       <div key={entry.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
         <div className="flex items-start justify-between gap-2">
@@ -6883,6 +7555,11 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
             <p className="font-bold text-gray-800">{entry.streamDate ? entry.streamDate.slice(5) : "-"}</p>
           </div>
         </div>
+        {canDownload && (
+          <p className="mt-2 text-[10px] font-medium text-gray-400">
+            Source units: {entry.exportDebug?.sourceUnits || exportAudit?.sourceCount || productCount} - Export quantity: {entry.exportDebug?.exportQuantity || getSetSheetSummary(exportAudit?.exportRows || []).totalQuantity} - Export rows: {entry.exportDebug?.xlsxRows || exportAudit?.exportRows?.length || 0}
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap gap-1.5">
           {(entry.warnings || []).slice(0, 2).map(warning => (
             <span key={warning} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">{getAutopilotWarningChipLabel(warning)}</span>
@@ -6891,6 +7568,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           <button onClick={() => copySetupValue(entry.surpriseSetName, "Copied name.")} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Copy Name</button>
           <button onClick={() => copySetupValue(entry.startingBid, "Copied bid.")} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50">Copy Bid</button>
           <button onClick={() => handleDownloadSet(entry)} disabled={!canDownload} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Download</button>
+          <button onClick={() => copyExportAudit(entry)} disabled={!canDownload} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Copy Export Audit</button>
           <button onClick={() => handleMarkUploaded(entry)} className="rounded border border-slate-800 bg-slate-700 px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-800">Mark Uploaded</button>
           <button onClick={() => handleDeleteSet(entry.id)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-50">Delete</button>
         </div>
