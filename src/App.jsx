@@ -3727,11 +3727,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
   const safeReplacements = Array.isArray(replacements) ? replacements : [];
 
-  const needsReply    = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
-  const inProgress    = safeInboundMessages.filter(m => m.status === "In Progress").length;
-  const ticketCreated = safeInboundMessages.filter(m => m.status === "Ticket Created").length;
-  const complete      = safeInboundMessages.filter(m => m.status === "Closed" || m.status === "Archived" || m.archived_at).length;
-  const openMessages  = safeInboundMessages.filter(m => m.status !== "Closed" && m.status !== "Archived" && !m.archived_at).length;
+  const openInboxMessages = getOpenMessages(safeInboundMessages);
+  const needsReply    = getNeedsReplyMessages(safeInboundMessages).length;
+  const inProgress    = openInboxMessages.filter(m => normalizeWorkQueueStatus(m.status) === "in_progress").length;
+  const ticketCreated = openInboxMessages.filter(m => normalizeWorkQueueStatus(m.status) === "ticket_created").length;
+  const complete      = safeInboundMessages.filter(m => m.archived_at || ["closed", "archived", "resolved"].includes(normalizeWorkQueueStatus(m.status))).length;
+  const openMessages  = openInboxMessages.length;
   const overdueMessages = getOverdueMessages(safeInboundMessages);
 
   // ── filter logic ─────────────────────────────────────────────────────────────
@@ -5486,13 +5487,16 @@ const CLOSED_INBOUND_STATUSES = ["Closed", "Archived", "Resolved"];
 const OPEN_INBOUND_STATUSES = ["Needs Reply", "In Progress", "Draft Ready", "Ticket Created", "Manual Review", ""];
 const getMessageSortTimestamp = (message) =>
   new Date(message?.received_at || message?.email_received_at || message?.received_time || message?.created_at || 0).getTime() || 0;
+const normalizeWorkQueueStatus = (status) =>
+  String(status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 const getOpenMessages = (messages) => {
   const safeMessages = Array.isArray(messages) ? messages : [];
   return safeMessages.filter(message => !message?.archived_at);
 };
 const getNeedsReplyMessages = (messages) => getOpenMessages(messages).filter(message => {
-  const status = String(message?.status || "").trim();
-  return status === "Needs Reply" || status === "needs_reply";
+  const status = normalizeWorkQueueStatus(message?.status);
+  const tags = getInboundTags(message).map(tag => normalizeWorkQueueStatus(tag));
+  return status === "needs_reply" || tags.includes("needs_reply");
 });
 const getRefundMessages = (messages) => getOpenMessages(messages).filter(message =>
   isTikTokRefund(message) ||
