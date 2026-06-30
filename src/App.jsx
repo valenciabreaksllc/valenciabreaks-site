@@ -2405,17 +2405,99 @@ const Chk = ({ checked, onChange, label }) => (
 );
 const FL = ({ children }) => <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{children}</p>;
 
+const showOpsToast = (message, options = {}) => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("ops-hub-toast", {
+    detail: {
+      id: Date.now() + Math.random(),
+      message,
+      type: options.type || "info",
+      title: options.title || "",
+    },
+  }));
+};
+
+const showOpsConfirm = ({ title, body, confirmLabel, variant = "archive", onConfirm }) => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("ops-hub-confirm", {
+    detail: { title, body, confirmLabel, variant, onConfirm },
+  }));
+};
+
+const OpsConfirmModal = ({ config, onCancel, onConfirm, busy }) => {
+  if (!config) return null;
+  const isDanger = ["delete", "clear", "archive"].includes(config.variant);
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-5 shadow-xl">
+        <div className="mb-4">
+          <p className="text-lg font-bold text-gray-900">{config.title}</p>
+          <p className="mt-2 text-sm leading-relaxed text-gray-600">{config.body}</p>
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${isDanger ? "border-slate-900 bg-slate-800 hover:bg-slate-900" : "border-slate-800 bg-slate-700 hover:bg-slate-800"}`}
+          >
+            {busy ? "Working..." : config.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const OpsToastStack = ({ toasts, onDismiss }) => (
+  <div className="fixed right-4 top-16 z-[9999] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2">
+    {toasts.map(toast => (
+      <div key={toast.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-lg" role="status">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            {toast.title && <p className="text-sm font-bold text-gray-900">{toast.title}</p>}
+            <p className={`${toast.title ? "mt-1 " : ""}text-xs leading-relaxed text-gray-600`}>{toast.message}</p>
+          </div>
+          <button
+            onClick={() => onDismiss(toast.id)}
+            className="text-xs font-semibold text-gray-400 transition-colors hover:text-gray-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 // ─── PATCH 3: ArchiveBtn - reusable trash icon button ────────────────────────
 const ArchiveBtn = ({ ticketId, setTickets }) => {
-  const handleArchive = async () => {
-    const confirmed = window.confirm("Archive this ticket from the active queue?");
-    if (!confirmed) return;
+  const runArchive = async () => {
     const { error } = await archiveTicketInSupabase(ticketId, "manual archive");
     if (error) {
-      alert(`Archive failed: ${error.message || "Unknown Supabase error"}`);
+      showOpsToast(`Archive failed: ${error.message || "Unknown Supabase error"}`, { type: "error" });
       return;
     }
     setTickets(prev => prev.filter(t => t.id !== ticketId));
+    showOpsToast("Ticket archived.");
+  };
+
+  const handleArchive = () => {
+    showOpsConfirm({
+      title: "Archive ticket?",
+      body: "This ticket will be hidden from the active queue. You can still keep the record in Supabase.",
+      confirmLabel: "Archive Ticket",
+      variant: "archive",
+      onConfirm: runArchive,
+    });
   };
 
   return (
@@ -2589,7 +2671,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
     setBusyId(id);
     const { error } = await updateOpsActionStatusInSupabase(id, status);
     setBusyId(null);
-    if (error) { alert(`Update failed: ${error.message}`); return; }
+    if (error) { showOpsToast(`Update failed: ${error.message}`, { type: "error" }); return; }
     if (status === "Completed") {
       setOpsActions(prev => prev.filter(a => a.id !== id));
     } else {
@@ -3883,20 +3965,30 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     setManualMessageSaving(false);
   };
 
-  const handleArchive = async (id) => {
-    if (!window.confirm("Archive this message from the inbox?")) return;
+  const runArchiveMessage = async (id) => {
     setBusyId(id);
     const { error } = await archiveInboundInSupabase(id);
     setBusyId(null);
-    if (error) { alert(`Archive failed: ${error.message}`); return; }
+    if (error) { showOpsToast(`Archive failed: ${error.message}`, { type: "error" }); return; }
     setInboundMessages(prev => prev.filter(m => m.id !== id));
+    showOpsToast("Message archived.");
+  };
+
+  const handleArchive = (id) => {
+    showOpsConfirm({
+      title: "Archive message?",
+      body: "This message will be removed from the active Command Inbox. The record stays in the work queue as archived.",
+      confirmLabel: "Archive Message",
+      variant: "archive",
+      onConfirm: () => runArchiveMessage(id),
+    });
   };
 
   const handleStatus = async (id, status) => {
     setBusyId(id);
     const { error } = await updateInboundStatusInSupabase(id, status);
     setBusyId(null);
-    if (error) { alert(`Update failed: ${error.message}`); return; }
+    if (error) { showOpsToast(`Update failed: ${error.message}`, { type: "error" }); return; }
     setInboundMessages(prev => prev.map(m => m.id === id ? { ...m, status } : m));
   };
 
@@ -3918,7 +4010,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       source: "command-inbox",
     };
     const { data, error } = await insertTicketToSupabase(newTicket);
-    if (error) { setBusyId(null); alert(`Ticket create failed: ${error.message}`); return; }
+    if (error) { setBusyId(null); showOpsToast(`Ticket create failed: ${error.message}`, { type: "error" }); return; }
     setTickets(prev => [data, ...prev]);
     await updateInboundStatusInSupabase(msg.id, "Ticket Created");
     setBusyId(null);
@@ -3935,7 +4027,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         .neq("status", "Completed")
         .limit(1);
       if (existing && existing.length > 0) {
-        alert("An open action already exists for this message.");
+        showOpsToast("An open action already exists for this message.", { type: "error" });
         return;
       }
     }
@@ -3963,7 +4055,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     };
     const { data: inserted, error } = await insertOpsActionToSupabase(row);
     setBusyId(null);
-    if (error) { alert(`Create action failed: ${error.message}`); return; }
+    if (error) { showOpsToast(`Create action failed: ${error.message}`, { type: "error" }); return; }
     // Push returned row into local Next Actions state so it shows immediately
     if (inserted) setOpsActions(prev => [inserted, ...prev]);
   };
@@ -3988,7 +4080,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     const { data: inserted, error } = await insertReplacementToSupabase(replacementCase);
     if (error) {
       setBusyId(null);
-      alert(`Replacement log failed: ${error.message}`);
+      showOpsToast(`Replacement log failed: ${error.message}`, { type: "error" });
       return;
     }
 
@@ -4036,7 +4128,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         setInboundMessages(prev => prev.map(m => m.id === msgId ? { ...m, ...updated } : m));
       }
     } catch (err) {
-      alert(`Triage failed: ${err?.message || "Unknown error. Check Supabase Edge Function logs."}`);
+      showOpsToast(`Triage failed: ${err?.message || "Unknown error. Check Supabase Edge Function logs."}`, { type: "error" });
     } finally {
       setBusyId(null);
     }
@@ -4052,7 +4144,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       setTimeout(() => setCopiedDraftId(null), 2000);
       return true;
     } catch (_) {
-      alert("Could not copy draft. Please copy it manually.");
+      showOpsToast("Could not copy draft. Please copy it manually.", { type: "error" });
       return false;
     }
   };
@@ -4060,7 +4152,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const handleCopyReply = async (msg) => {
     const replyText = msg.approved_reply || msg.ai_draft || "";
     if (!replyText) {
-      alert("Generate or approve a draft first.");
+      showOpsToast("Generate or approve a draft first.", { type: "error" });
       return;
     }
 
@@ -4069,7 +4161,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       setCopiedDraftId(msg.id);
       setTimeout(() => setCopiedDraftId(null), 2000);
     } catch (_) {
-      alert("Could not copy draft. Please copy it manually.");
+      showOpsToast("Could not copy draft. Please copy it manually.", { type: "error" });
     }
   };
 
@@ -4085,7 +4177,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         setInboundMessages(prev => prev.map(m => m.id === msg.id ? { ...m, ...updated } : m));
       }
     } catch (err) {
-      alert(`Draft failed: ${err?.message || "Unknown error. Check Supabase Edge Function logs."}`);
+      showOpsToast(`Draft failed: ${err?.message || "Unknown error. Check Supabase Edge Function logs."}`, { type: "error" });
     } finally {
       setDraftBusyId(null);
     }
@@ -4099,7 +4191,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       .from(INBOUND_MESSAGES_TABLE)
       .update({ approved_reply: msg.ai_draft, draft_status: "Approved", updated_at: now })
       .eq("id", msg.id);
-    if (updateErr) { alert(`Approve failed: ${updateErr.message}`); return; }
+    if (updateErr) { showOpsToast(`Approve failed: ${updateErr.message}`, { type: "error" }); return; }
 
     // 2. Insert into reply_examples for future few-shot context
     const { displayBody } = getDisplayInboundMessage(msg);
@@ -5447,10 +5539,10 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
   const addTicket = async () => {
-    if (!form.brand || !form.issueType) return alert("Pick a brand and issue type first.");
+    if (!form.brand || !form.issueType) return showOpsToast("Pick a brand and issue type first.", { type: "error" });
     const newTicket = { ...form, createdAt: nowISO(), source: "command-center" };
     const { data, error } = await insertTicketToSupabase(newTicket);
-    if (error) return alert(`Ticket save failed: ${error.message || "Unknown Supabase error"}`);
+    if (error) return showOpsToast(`Ticket save failed: ${error.message || "Unknown Supabase error"}`, { type: "error" });
     setTickets(prev => [data, ...prev]);
     setForm(emptyF);
     setShowForm(false);
@@ -5779,10 +5871,10 @@ const TicketQueueView = ({ tickets, setTickets }) => {
 
   // Supabase insert, then add the inserted row to the visible queue
   const add = async () => {
-    if (!form.brand || !form.issueType) return alert("Pick a brand and issue type first.");
+    if (!form.brand || !form.issueType) return showOpsToast("Pick a brand and issue type first.", { type: "error" });
     const newTicket = { ...form, createdAt: nowISO(), source: "command-center" };
     const { data, error } = await insertTicketToSupabase(newTicket);
-    if (error) return alert(`Ticket save failed: ${error.message || "Unknown Supabase error"}`);
+    if (error) return showOpsToast(`Ticket save failed: ${error.message || "Unknown Supabase error"}`, { type: "error" });
     setTickets(prev => [data, ...prev]);
     setForm(emptyF);
     setShowForm(false);
@@ -5933,7 +6025,7 @@ const CSTemplateView = ({ setTickets }) => {
       source: "cs-template",
     };
     const { data, error } = await insertTicketToSupabase(newTicket);
-    if (error) return alert(`Ticket save failed: ${error.message || "Unknown Supabase error"}`);
+    if (error) return showOpsToast(`Ticket save failed: ${error.message || "Unknown Supabase error"}`, { type: "error" });
     setTickets(prev => [data, ...prev]);
     setTicketCreated(true);
   };
@@ -6127,17 +6219,27 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   };
 
   // ── Archive row (soft-delete via Supabase, fall back to local remove) ──────
-  const handleArchive = async (row) => {
-    if (!window.confirm(`Archive replacement case ${row.orderNum || row.id}? It will be hidden but not deleted.`)) return;
+  const runArchiveReplacement = async (row) => {
     if (supabase && row.id && !/^[a-z0-9]{7}$/.test(row.id)) {
       // Only call Supabase for UUID-format ids (real rows); skip local uid() rows
       const { error } = await supabase
         .from("replacements")
         .update({ archived_at: nowISO(), updated_at: nowISO() })
         .eq("id", row.id);
-      if (error) { alert(`Archive failed: ${error.message}`); return; }
+      if (error) { showOpsToast(`Archive failed: ${error.message}`, { type: "error" }); return; }
     }
     setReplacements(prev => prev.filter(r => r.id !== row.id));
+    showOpsToast("Replacement case archived.");
+  };
+
+  const handleArchive = (row) => {
+    showOpsConfirm({
+      title: "Archive replacement case?",
+      body: `Replacement case ${row.orderNum || row.id} will be hidden from the active loss log. The record is archived, not hard-deleted.`,
+      confirmLabel: "Archive Case",
+      variant: "archive",
+      onConfirm: () => runArchiveReplacement(row),
+    });
   };
 
   // ── Save inline edit ────────────────────────────────────────────────────────
@@ -6165,7 +6267,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
           updated_at:         updated.updated_at,
         })
         .eq("id", editRow);
-      if (error) { alert(`Save failed: ${error.message}`); setSavingId(null); return; }
+      if (error) { showOpsToast(`Save failed: ${error.message}`, { type: "error" }); setSavingId(null); return; }
     }
     setReplacements(prev => prev.map(r => r.id === editRow ? { ...r, ...updated } : r));
     setEditRow(null);
@@ -6586,7 +6688,18 @@ const StudioReadinessView = ({ studios, setStudios }) => {
     const entry = { id: uid(), at: nowISO(), totalCounted: countedRows.length, variances: varianceRows.length, updatedRows: rows.filter(row => row.updatedAt).length, notes: "Manual count checkpoint saved." };
     updateInventory({ history: [entry, ...(inventory.history || [])].slice(0, 8), lastImportMessage: "Count saved." });
   };
-  const resetSession = () => { if (window.confirm("Reset this Inventory Control count session?")) updateInventory(createInventoryControlState()); };
+  const resetSession = () => {
+    showOpsConfirm({
+      title: "Clear this data?",
+      body: "This will reset the current Inventory Control count session and clear the active count workspace.",
+      confirmLabel: "Clear",
+      variant: "clear",
+      onConfirm: () => {
+        updateInventory(createInventoryControlState());
+        showOpsToast("Inventory count session reset.");
+      },
+    });
+  };
   const exportUpdateTxt = async () => {
     const body = [
       "Shopify Title\tSKU\tCurrent Shopify Qty\tNew Physical Qty\tVariance\tNotes",
@@ -6850,11 +6963,21 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setSmartPasteResult(null);
   };
 
-  const clearWeek = () => {
-    if (!window.confirm("Clear this week's surprise set setup?")) return;
+  const runClearWeek = () => {
     const fresh = createDefaultWeeklySurpriseSets();
     try { localStorage.removeItem(SURPRISE_SET_STORAGE_KEY); } catch {}
     setSurpriseSets(fresh);
+    showOpsToast("Surprise set week cleared.");
+  };
+
+  const clearWeek = () => {
+    showOpsConfirm({
+      title: "Clear this data?",
+      body: "This will clear this week's surprise set setup and reload the default weekly blocks.",
+      confirmLabel: "Clear",
+      variant: "clear",
+      onConfirm: runClearWeek,
+    });
   };
 
   const dayShort = { Monday: "M", Tuesday: "T", Wednesday: "W", Thursday: "T", Friday: "F" };
@@ -7776,8 +7899,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     ]);
   };
 
-  const clearWeek = () => {
-    if (!window.confirm("Clear this week's surprise set setup?")) return;
+  const runClearWeek = () => {
     const fresh = createDefaultWeeklySurpriseSets();
     try { localStorage.removeItem(SURPRISE_SET_STORAGE_KEY); } catch {}
     try { localStorage.removeItem(SURPRISE_SET_BOARD_STORAGE_KEY); } catch {}
@@ -7789,6 +7911,17 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setAutopilotSummary(null);
     setAgentActivity(["VR default recurring surprise set remains active."]);
     setSurpriseSets(fresh);
+    showOpsToast("Surprise set week cleared.");
+  };
+
+  const clearWeek = () => {
+    showOpsConfirm({
+      title: "Clear this data?",
+      body: "This will clear this week's surprise set setup, board entries, and converted set sheet history.",
+      confirmLabel: "Clear",
+      variant: "clear",
+      onConfirm: runClearWeek,
+    });
   };
 
   const renderSetCard = (entry) => {
@@ -8321,7 +8454,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      alert("Could not copy summary. Please copy it manually.");
+      showOpsToast("Could not copy summary. Please copy it manually.", { type: "error" });
     }
   };
 
@@ -8453,7 +8586,6 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────────────────────────
 const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setTickets, setReplacements, setStudios, setSurpriseSets, raiseScores, setInboundMessages }) => {
-const [confirmClear, setConfirmClear] = useState(false);
 const [importErr, setImportErr] = useState("");
 const [clearErr, setClearErr] = useState("");
 const [saved, setSaved] = useState(false);
@@ -8518,7 +8650,7 @@ const clearAll = async () => {
       if (error) throw error;
     }
     if (setInboundMessages) setInboundMessages([]);
-    setConfirmClear(false);
+    showOpsToast("Command Inbox queue cleared.");
   } catch (err) {
     console.error("Clear all failed:", err);
     setClearErr(`Clear failed: ${err.message || "Unknown Supabase error"}`);
@@ -8530,7 +8662,27 @@ const clearAll = async () => {
     setReplacements([]);
     setStudios(FRESH_STUDIOS);
     setSurpriseSets([]);
-    setConfirmClear(false);
+    showOpsToast("Fresh local data loaded.");
+  };
+
+  const confirmResetFresh = () => {
+    showOpsConfirm({
+      title: "Clear this data?",
+      body: "This will reset tickets, replacements, studios, and surprise sets in the local app state.",
+      confirmLabel: "Clear",
+      variant: "clear",
+      onConfirm: resetFresh,
+    });
+  };
+
+  const confirmClearAll = () => {
+    showOpsConfirm({
+      title: "Clear this data?",
+      body: "This will erase all Command Inbox queue rows from Supabase. This cannot be undone from the app.",
+      confirmLabel: "Clear",
+      variant: "clear",
+      onConfirm: clearAll,
+    });
   };
 
   return (
@@ -8580,18 +8732,10 @@ const clearAll = async () => {
 
       <Card className="p-4">
         <p className="text-sm font-bold text-gray-900 mb-3">Reset &amp; Clear</p>
-        {!confirmClear ? (
-          <div className="flex gap-2">
-            <BtnSecondary onClick={resetFresh} size="md">Reset to Fresh Data</BtnSecondary>
-            <BtnDanger onClick={() => setConfirmClear(true)} size="md">Clear All Data</BtnDanger>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <p className="text-sm text-gray-700">This will erase all Command Inbox queue rows. Are you sure?</p>
-            <BtnDanger onClick={clearAll} size="md">Yes, Clear All</BtnDanger>
-            <BtnSecondary onClick={() => setConfirmClear(false)} size="md">Cancel</BtnSecondary>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <BtnSecondary onClick={confirmResetFresh} size="md">Reset to Fresh Data</BtnSecondary>
+          <BtnDanger onClick={confirmClearAll} size="md">Clear All Data</BtnDanger>
+        </div>
       </Card>
 
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
@@ -8732,6 +8876,9 @@ export default function JonnyOpsCommandCenter() {
   const [inboundError, setInboundError] = useState("");
   const inboundWatcherInitialized = useRef(false);
   const [assistantToast, setAssistantToast] = useState(null);
+  const [opsToasts, setOpsToasts] = useState([]);
+  const [confirmConfig, setConfirmConfig] = useState(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [recentNewMessageCount, setRecentNewMessageCount] = useState(0);
 
   const refreshInbox = async () => {
@@ -8826,6 +8973,48 @@ export default function JonnyOpsCommandCenter() {
     return () => clearTimeout(timer);
   }, [assistantToast]);
 
+  useEffect(() => {
+    const handleToast = (event) => {
+      const toast = event.detail || {};
+      const id = toast.id || Date.now();
+      setOpsToasts(prev => [...prev, { ...toast, id }].slice(-4));
+      setTimeout(() => {
+        setOpsToasts(prev => prev.filter(item => item.id !== id));
+      }, 4200);
+    };
+    const handleConfirm = (event) => {
+      setConfirmConfig(event.detail || null);
+      setConfirmBusy(false);
+    };
+    window.addEventListener("ops-hub-toast", handleToast);
+    window.addEventListener("ops-hub-confirm", handleConfirm);
+    return () => {
+      window.removeEventListener("ops-hub-toast", handleToast);
+      window.removeEventListener("ops-hub-confirm", handleConfirm);
+    };
+  }, []);
+
+  const handleConfirmCancel = () => {
+    if (confirmBusy) return;
+    setConfirmConfig(null);
+  };
+
+  const handleConfirmRun = async () => {
+    if (!confirmConfig?.onConfirm) {
+      setConfirmConfig(null);
+      return;
+    }
+    setConfirmBusy(true);
+    try {
+      await confirmConfig.onConfirm();
+      setConfirmConfig(null);
+    } catch (err) {
+      showOpsToast(err?.message || "Action failed.", { type: "error" });
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
   // Fetch ops actions on mount
   useEffect(() => { refreshOpsActions(); }, []);
 
@@ -8871,7 +9060,7 @@ export default function JonnyOpsCommandCenter() {
     const insertSidekickTicket = async () => {
       const { data, error } = await insertTicketToSupabase({ ...ticket, source: "OP Sidekick" });
       if (error) {
-        alert(`Sidekick ticket save failed: ${error.message || "Unknown Supabase error"}`);
+        showOpsToast(`Sidekick ticket save failed: ${error.message || "Unknown Supabase error"}`, { type: "error" });
         return;
       }
       setTickets(prev => [data, ...prev]);
@@ -8968,6 +9157,9 @@ export default function JonnyOpsCommandCenter() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+      <OpsToastStack toasts={opsToasts} onDismiss={id => setOpsToasts(prev => prev.filter(item => item.id !== id))} />
+      <OpsConfirmModal config={confirmConfig} onCancel={handleConfirmCancel} onConfirm={handleConfirmRun} busy={confirmBusy} />
+
       {/* Sidekick toast */}
       {sidekickToast && (
         <div className="fixed right-4 bottom-20 z-[9999] flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-700 px-4 py-3 text-sm font-semibold text-white shadow-lg" role="status">
