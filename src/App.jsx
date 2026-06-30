@@ -2897,6 +2897,78 @@ const fetchReplacementsFromSupabase = async () => {
   return { data: rows, error: null };
 };
 
+const dbReplacementToApp = (r = {}) => ({
+  id:                r.id,
+  date:              r.date              || r.created_at?.slice(0, 10) || "",
+  brand:             r.brand             || "",
+  customerName:      r.customer_name     || "",
+  orderNum:          r.order_number      || "",
+  reason:            r.reason            || "",
+  rootCause:         r.root_cause        || "",
+  replacementItems:  r.replacement_items || "",
+  notes:             r.notes             || "",
+  marketValue:       parseFloat(r.value  || 0),
+  preventable:       r.preventable       || "No",
+  followUp:          r.follow_up         || "No",
+  status:            r.status            || "Open",
+  archived_at:       r.archived_at,
+  created_at:        r.created_at,
+  updated_at:        r.updated_at,
+});
+
+const insertReplacementToSupabase = async (row = {}) => {
+  const appRow = {
+    id: row.id,
+    date: row.date || todayDate(),
+    brand: row.brand || "",
+    customerName: row.customerName || "",
+    orderNum: row.orderNum || "",
+    reason: row.reason || "Customer support replacement case",
+    rootCause: row.rootCause || "Needs review",
+    replacementItems: row.replacementItems || "",
+    notes: row.notes || "",
+    marketValue: parseFloat(row.marketValue || 0) || 0,
+    preventable: row.preventable || "No",
+    followUp: row.followUp || "Yes",
+    status: row.status || "Follow-up Needed",
+    created_at: row.created_at || nowISO(),
+    updated_at: nowISO(),
+  };
+
+  if (!supabase) {
+    return { data: { ...appRow, id: row.id || uid() }, error: null };
+  }
+
+  const payload = {
+    date: appRow.date,
+    brand: appRow.brand || null,
+    customer_name: appRow.customerName || null,
+    order_number: appRow.orderNum || null,
+    reason: appRow.reason || null,
+    root_cause: appRow.rootCause || null,
+    replacement_items: appRow.replacementItems || null,
+    notes: appRow.notes || null,
+    value: appRow.marketValue || 0,
+    preventable: appRow.preventable || "No",
+    follow_up: appRow.followUp || "Yes",
+    status: appRow.status || "Follow-up Needed",
+    created_at: appRow.created_at,
+    updated_at: appRow.updated_at,
+  };
+
+  const { data, error } = await supabase
+    .from("replacements")
+    .insert([payload])
+    .select("id, date, brand, customer_name, order_number, reason, root_cause, replacement_items, notes, value, preventable, follow_up, status, archived_at, created_at, updated_at")
+    .single();
+
+  if (error) {
+    console.error("Supabase replacement insert error:", error);
+    return { data: null, error };
+  }
+  return { data: dbReplacementToApp(data), error: null };
+};
+
 // ─── TIKTOK SHOP CHAT EMAIL NORMALIZER ───────────────────────────────────────
 // Cleans TikTok Seller Assistant email boilerplate for display only.
 // Raw message_body in Supabase is NEVER modified.
@@ -3444,7 +3516,104 @@ const isCommandInboxAutoDraftEligible = (msg) => {
   return !getCommandInboxRiskFlag(msg);
 };
 
-const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
+const getInboundMetadata = (msg) => {
+  const raw = msg?.metadata;
+  if (!raw) return {};
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+};
+
+const getInboundTags = (msg) => {
+  const raw = msg?.tags;
+  if (Array.isArray(raw)) return raw.map(tag => String(tag || "").trim()).filter(Boolean);
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map(tag => String(tag || "").trim()).filter(Boolean);
+    } catch {}
+    return raw.split(",").map(tag => tag.trim()).filter(Boolean);
+  }
+  return [];
+};
+
+const getWorkQueueReplacementSourceId = (msg) => String(msg?.id || msg?.external_id || "").trim();
+
+const getInboundReplacementDate = (msg) => {
+  const value = msg?.received_at || msg?.email_received_at || msg?.received_time || msg?.created_at || nowISO();
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+  return String(value || todayDate()).slice(0, 10);
+};
+
+const getInboundOrderNumber = (msg) =>
+  msg?.order_id || msg?.order_number || msg?.orderNumber || "";
+
+const getExistingReplacementCaseForMessage = (msg, replacements) => {
+  const metadata = getInboundMetadata(msg);
+  const sourceId = getWorkQueueReplacementSourceId(msg);
+  const replacementCaseId = metadata.replacement_case_id || msg?.replacement_case_id;
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+
+  if (replacementCaseId) {
+    const byId = safeReplacements.find(row => String(row.id) === String(replacementCaseId));
+    if (byId) return byId;
+    return { id: replacementCaseId };
+  }
+  if (!sourceId) return null;
+  return safeReplacements.find(row =>
+    String(row.sourceWorkQueueId || row.source_work_queue_id || "").trim() === sourceId ||
+    String(row.notes || "").includes(`Source work_queue id: ${sourceId}`) ||
+    String(row.notes || "").includes(`Source external id: ${sourceId}`)
+  ) || null;
+};
+
+const buildReplacementCaseFromWorkQueue = (msg) => {
+  const { displayName, displayBody } = getDisplayInboundMessage(msg || {});
+  const sourceId = getWorkQueueReplacementSourceId(msg);
+  const externalId = String(msg?.external_id || "").trim();
+  const customer = displayName || msg?.customer_name || msg?.sender_name || msg?.sender_email || "";
+  const account = msg?.account || msg?.brand || "";
+  const subject = msg?.subject || "";
+  const snippet = String(displayBody || msg?.message || msg?.message_body || msg?.message_text || "").replace(/\s+/g, " ").trim().slice(0, 280);
+  const channelPlatform = msg?.channel || msg?.platform || msg?.source || msg?.message_type || "";
+  const notes = [
+    customer ? `Customer: ${customer}` : null,
+    account ? `Account: ${account}` : null,
+    subject ? `Subject: ${subject}` : null,
+    snippet ? `Message snippet: ${snippet}` : null,
+    channelPlatform ? `Channel/platform: ${channelPlatform}` : null,
+    sourceId ? `Source work_queue id: ${sourceId}` : null,
+    externalId && externalId !== sourceId ? `Source external id: ${externalId}` : null,
+  ].filter(Boolean).join("\n");
+
+  return {
+    date: getInboundReplacementDate(msg),
+    brand: getDisplayBrand(msg),
+    customerName: customer,
+    orderNum: getInboundOrderNumber(msg),
+    reason: msg?.issue_type || msg?.subject || "Customer support replacement case",
+    rootCause: "Needs review",
+    replacementItems: msg?.item_name || "",
+    marketValue: 0,
+    preventable: "No",
+    followUp: "Yes",
+    notes,
+    status: "Follow-up Needed",
+    evidence: sourceId || externalId,
+    sourceWorkQueueId: sourceId,
+    channel: channelPlatform,
+  };
+};
+
+const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, replacements, setReplacements, setActiveView, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [sortMode, setSortMode] = useState("Newest first");
@@ -3475,6 +3644,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
   const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
+  const safeReplacements = Array.isArray(replacements) ? replacements : [];
 
   const needsReply    = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
   const inProgress    = safeInboundMessages.filter(m => m.status === "In Progress").length;
@@ -3796,6 +3966,62 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (error) { alert(`Create action failed: ${error.message}`); return; }
     // Push returned row into local Next Actions state so it shows immediately
     if (inserted) setOpsActions(prev => [inserted, ...prev]);
+  };
+
+  const handleSendToReplacementLog = async (msg) => {
+    const existing = getExistingReplacementCaseForMessage(msg, safeReplacements);
+    if (existing) {
+      const metadata = getInboundMetadata(msg);
+      const tags = getInboundTags(msg);
+      const nextTags = tags.includes("replacement") ? tags : [...tags, "replacement"];
+      setInboundMessages(prev => prev.map(m => m.id === msg.id ? {
+        ...m,
+        metadata: { ...metadata, replacement_logged: true, replacement_case_id: existing.id },
+        tags: nextTags,
+      } : m));
+      setActiveView("replacements");
+      return;
+    }
+
+    setBusyId(msg.id);
+    const replacementCase = buildReplacementCaseFromWorkQueue(msg);
+    const { data: inserted, error } = await insertReplacementToSupabase(replacementCase);
+    if (error) {
+      setBusyId(null);
+      alert(`Replacement log failed: ${error.message}`);
+      return;
+    }
+
+    const replacementRow = {
+      ...inserted,
+      evidence: replacementCase.evidence,
+      sourceWorkQueueId: replacementCase.sourceWorkQueueId,
+      channel: replacementCase.channel,
+    };
+    if (setReplacements) setReplacements(prev => [replacementRow, ...prev]);
+
+    const metadata = getInboundMetadata(msg);
+    const tags = getInboundTags(msg);
+    const nextMetadata = { ...metadata, replacement_logged: true, replacement_case_id: replacementRow.id };
+    const nextTags = tags.includes("replacement") ? tags : [...tags, "replacement"];
+
+    if (supabase && msg.id) {
+      const { error: updateError } = await supabase
+        .from(INBOUND_MESSAGES_TABLE)
+        .update({ metadata: nextMetadata, tags: nextTags, updated_at: nowISO() })
+        .eq("id", msg.id);
+      if (updateError) {
+        console.warn("Replacement cross-link metadata update skipped:", updateError.message);
+      }
+    }
+
+    setInboundMessages(prev => prev.map(m => m.id === msg.id ? {
+      ...m,
+      metadata: nextMetadata,
+      tags: nextTags,
+    } : m));
+    setBusyId(null);
+    setActiveView("replacements");
   };
 
   const handleRunTriage = async (msgId) => {
@@ -4360,6 +4586,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           ? "Triaged"
           : msg.triage_status;
         const triageStyle = TRIAGE_STATUS_STYLE[displayTriageStatus] || "bg-gray-100 text-gray-500 border-gray-200";
+        const existingReplacementCase = getExistingReplacementCaseForMessage(msg, safeReplacements);
+        const replacementLogged = Boolean(existingReplacementCase || getInboundMetadata(msg).replacement_logged);
 
         return (
           <Card key={msg.id} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
@@ -4392,6 +4620,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                     label={riskFlag.label}
                     className="bg-amber-50 text-amber-700 border-amber-200"
                   />
+                )}
+                {replacementLogged && (
+                  <Badge label="Replacement Logged" className="bg-slate-100 text-slate-700 border-slate-200" />
                 )}
               </div>
               {/* Timestamp - Pacific time, labeled Received or Imported */}
@@ -4650,6 +4881,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               <button disabled={isBusy || isAssistantLoading} onClick={() => handleAskAssistant(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isAssistantLoading ? "Reviewing..." : isAssistantOpen ? "Hide Assistant" : "Ask Assistant"}
+              </button>
+              <button disabled={isBusy} onClick={() => handleSendToReplacementLog(msg)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                {isBusy ? "Sending..." : replacementLogged ? "Open Replacement Log" : "Send to Replacement Log"}
               </button>
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
@@ -5819,7 +6054,8 @@ const getDanteBrand = (row) => {
 
 const getDanteChannelPlatform = (row) => {
   const brand = getDanteBrand(row);
-  const channel = String(getReplacementValue(row, ["channel", "platform", "source"], "")).toLowerCase();
+  const noteChannelMatch = String(row?.notes || "").match(/Channel\/platform:\s*([^\n]+)/i);
+  const channel = String(getReplacementValue(row, ["channel", "platform", "source"], noteChannelMatch?.[1] || "")).toLowerCase();
   const isTikTok = channel.includes("tiktok") || channel.includes("tik tok") || channel.includes("shop");
   const isWhatnot = channel.includes("whatnot");
   if (brand === "Vaulted Rarities" && isWhatnot) return "VR Whatnot";
@@ -5829,6 +6065,12 @@ const getDanteChannelPlatform = (row) => {
   if (brand === "PokeSpins" && isTikTok) return "PS TikTok";
   if (brand === "Pokiemart" && isTikTok) return "PM TikTok";
   return "";
+};
+
+const getReplacementEvidenceFromNotes = (notes) => {
+  const text = String(notes || "");
+  const match = text.match(/Source (?:work_queue|external) id:\s*([^\n]+)/i);
+  return match ? match[1].trim() : "";
 };
 
 const getDanteReplacementFields = (row) => {
@@ -5846,7 +6088,7 @@ const getDanteReplacementFields = (row) => {
     marketValue: `$${value.toFixed(2)}`,
     channelPlatform: getDanteChannelPlatform(row),
     notes,
-    evidence: String(getReplacementValue(row, ["evidence", "evidence_url"], "")).trim(),
+    evidence: String(getReplacementValue(row, ["evidence", "evidence_url"], "")).trim() || getReplacementEvidenceFromNotes(notes),
   };
 };
 
@@ -8666,7 +8908,7 @@ export default function JonnyOpsCommandCenter() {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores, setInboundMessages };
     switch (activeView) {
       case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} newMessageNoticeCount={recentNewMessageCount} />;
-      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
+      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} replacements={replacements} setReplacements={setReplacements} setActiveView={setActiveView} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
       case "actions": return <NextActionQueueView opsActions={opsActions} setOpsActions={setOpsActions} opsLoading={opsLoading} opsError={opsError} onRefresh={refreshOpsActions} setActiveView={setActiveView} />;
       case "daily": return <DailyCommandView tickets={tickets} />;
       case "tickets": return <TicketQueueView tickets={tickets} setTickets={setTickets} />;
