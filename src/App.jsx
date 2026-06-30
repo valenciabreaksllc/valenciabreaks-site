@@ -2950,7 +2950,6 @@ const fetchReplacementsFromSupabase = async () => {
   const { data, error } = await supabase
     .from("replacements")
     .select("id, date, brand, customer_name, order_number, reason, root_cause, replacement_items, notes, value, preventable, follow_up, status, archived_at, created_at, updated_at")
-    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(300);
   if (error) {
@@ -3695,7 +3694,7 @@ const buildReplacementCaseFromWorkQueue = (msg) => {
   };
 };
 
-const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, replacements, setReplacements, setActiveView, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
+const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, replacements, setReplacements, setActiveView, setReplacementFocus, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [sortMode, setSortMode] = useState("Newest first");
@@ -4071,6 +4070,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         metadata: { ...metadata, replacement_logged: true, replacement_case_id: existing.id },
         tags: nextTags,
       } : m));
+      if (setReplacementFocus) {
+        setReplacementFocus({ caseId: existing.id, showArchived: Boolean(existing.archived_at), requestedAt: Date.now() });
+      }
       setActiveView("replacements");
       return;
     }
@@ -4113,7 +4115,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       tags: nextTags,
     } : m));
     setBusyId(null);
-    setActiveView("replacements");
+    showOpsToast("Replacement case logged.");
   };
 
   const handleRunTriage = async (msgId) => {
@@ -4680,6 +4682,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const triageStyle = TRIAGE_STATUS_STYLE[displayTriageStatus] || "bg-gray-100 text-gray-500 border-gray-200";
         const existingReplacementCase = getExistingReplacementCaseForMessage(msg, safeReplacements);
         const replacementLogged = Boolean(existingReplacementCase || getInboundMetadata(msg).replacement_logged);
+        const replacementArchived = Boolean(existingReplacementCase?.archived_at);
+        const replacementButtonLabel = replacementArchived
+          ? "View Archived Replacement"
+          : replacementLogged
+          ? "Open Replacement Case"
+          : "Send to Replacement Log";
 
         return (
           <Card key={msg.id} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
@@ -4713,7 +4721,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                     className="bg-amber-50 text-amber-700 border-amber-200"
                   />
                 )}
-                {replacementLogged && (
+                {replacementArchived ? (
+                  <Badge label="Replacement Archived" className="bg-gray-100 text-gray-600 border-gray-200" />
+                ) : replacementLogged && (
                   <Badge label="Replacement Logged" className="bg-slate-100 text-slate-700 border-slate-200" />
                 )}
               </div>
@@ -4976,7 +4986,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </button>
               <button disabled={isBusy} onClick={() => handleSendToReplacementLog(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isBusy ? "Sending..." : replacementLogged ? "Open Replacement Log" : "Send to Replacement Log"}
+                {isBusy ? "Sending..." : replacementButtonLabel}
               </button>
               <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
@@ -4995,7 +5005,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 };
 
 const buildSlackSummary = ({ tickets, replacements, studios, surpriseSets, raiseScores }) => {
-  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+  const safeReplacements = Array.isArray(replacements) ? replacements.filter(r => !r.archived_at) : [];
   const safeStudios = Array.isArray(studios) ? studios : [];
   const safeSurpriseSets = Array.isArray(surpriseSets) ? surpriseSets : [];
   const safeTickets = Array.isArray(tickets) ? tickets : [];
@@ -5033,7 +5043,7 @@ Consistency ${raiseScores.consistency}% | Accuracy ${raiseScores.accuracy}% | Lo
 };
 
 const buildFullReport = ({ tickets, replacements, studios, surpriseSets, raiseScores, improvements, risks, nextFocus }) => {
-  const safeReplacements = Array.isArray(replacements) ? replacements : [];
+  const safeReplacements = Array.isArray(replacements) ? replacements.filter(r => !r.archived_at) : [];
   const safeStudios = Array.isArray(studios) ? studios : [];
   const safeSurpriseSets = Array.isArray(surpriseSets) ? surpriseSets : [];
   const safeTickets = Array.isArray(tickets) ? tickets : [];
@@ -5396,7 +5406,7 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
   });
 
   const draftsReady        = safeInboundMessages.filter(m => m.draft_status === "Draft Ready").length;
-  const followUpNeeded     = safeReplacements.filter(r => r.followUp === "Yes" || r.follow_up === "Yes").length;
+  const followUpNeeded     = safeReplacements.filter(r => !r.archived_at && (r.followUp === "Yes" || r.follow_up === "Yes")).length;
   const overdueActionsCount = safeOpsActions.filter(isOverdue).length;
   const overdueInboxCount = getOverdueMessages(safeInboundMessages).length;
   const highPriorityInboxCount = getHighPriorityMessages(safeInboundMessages).length;
@@ -5556,17 +5566,18 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   const safeTickets = Array.isArray(tickets) ? tickets : [];
   const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
   const safeInbound = safeInboundMessages;
+  const activeReplacements = safeReplacements.filter(r => !r.archived_at);
 
   // Primary counts driven by Command Inbox data
   const openInboxMessages   = getOpenMessages(safeInbound);
-  const replacementFollowUps = safeReplacements.filter(r => !r.archived_at && (r.followUp === "Yes" || r.follow_up === "Yes"));
+  const replacementFollowUps = activeReplacements.filter(r => r.followUp === "Yes" || r.follow_up === "Yes");
   const msgsNeedingReply    = getNeedsReplyMessages(safeInbound).length;
   const refundItems         = getRefundMessages(safeInbound).length;
   const replacementFU       = replacementFollowUps.length;
   const actionRequiredCount = openInboxMessages.length + replacementFollowUps.length;
   const actionRequired      = actionRequiredCount; // alias used by metric card
 
-  const totalLoss   = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || r.market_value || 0), 0);
+  const totalLoss   = activeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || r.market_value || 0), 0);
   const studioReady = safeStudios.filter(s => s.streamReady).length;
   const studioScore = safeStudios.length ? Math.round((studioReady / safeStudios.length) * 100) : 0;
   const highPriorityMessages = getHighPriorityMessages(safeInbound);
@@ -5790,8 +5801,8 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
               <p>{msgsNeedingReply} needing reply - {refundItems} refund/return item{refundItems !== 1 ? "s" : ""}</p>
               <p>{actionRequiredCount} total action required</p>
               <p className="font-semibold text-gray-800 pt-1">Shipping Loss</p>
-              <p>{safeReplacements.length} replacement cases - ${totalLoss.toFixed(2)} tracked</p>
-              <p>{safeReplacements.filter(r => r.preventable === "Yes").length} preventable</p>
+              <p>{activeReplacements.length} replacement cases - ${totalLoss.toFixed(2)} tracked</p>
+              <p>{activeReplacements.filter(r => r.preventable === "Yes").length} preventable</p>
               <p className="font-semibold text-gray-800 pt-1">Studios</p>
               <p>{studioReady}/{safeStudios.length} stream-ready - {studioScore}% readiness</p>
               <p className="font-semibold text-gray-800 pt-1">Sets</p>
@@ -6098,7 +6109,7 @@ const CSTemplateView = ({ setTickets }) => {
 
 // ─── REPLACEMENT LOG ──────────────────────────────────────────────────────────
 const REPLACEMENT_STATUS_OPTIONS = ["Open", "Reshipped", "Refunded", "Resolved", "Pending"];
-const REPLACEMENT_FILTERS = ["All", "CardKing47", "Vaulted Rarities", "PokeSpins", "Pokiemart", "Follow-Up Needed"];
+const REPLACEMENT_FILTERS = ["Active", "All", "Archived", "CardKing47", "Vaulted Rarities", "PokeSpins", "Pokiemart", "Follow-Up Needed"];
 const DANTE_DEPT_FAULT_OPTIONS = ["James", "JB", "Jojo", "Gio", "Gurt", "Bernardo", "Sarah", "Streamer"];
 
 const getReplacementValue = (row, keys, fallback = "") => {
@@ -6191,7 +6202,7 @@ const buildDanteReplacementRow = (row) => {
     .join("\t");
 };
 
-const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading, replacementsError, onRefresh }) => {
+const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading, replacementsError, onRefresh, replacementFocus }) => {
   const emptyF = {
     date: todayDate(), brand: "", orderNum: "", customerName: "",
     reason: "", rootCause: "", replacementItems: "", marketValue: "",
@@ -6199,7 +6210,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   };
   const [form, setForm]         = useState(emptyF);
   const [show, setShow]         = useState(false);
-  const [activeFilter, setActiveFilter] = useState("All");
+  const [activeFilter, setActiveFilter] = useState("Active");
   const [editRow, setEditRow]   = useState(null);   // row being edited
   const [editForm, setEditForm] = useState({});
   const [savingId, setSavingId] = useState(null);
@@ -6207,6 +6218,16 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   const f  = k => v => setForm(p => ({ ...p, [k]: v }));
   const ef = k => v => setEditForm(p => ({ ...p, [k]: v }));
   const safeReplacements = Array.isArray(replacements) ? replacements : [];
+
+  useEffect(() => {
+    if (!replacementFocus?.caseId) return;
+    setActiveFilter(replacementFocus.showArchived ? "Archived" : "Active");
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-replacement-row-id="${replacementFocus.caseId}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [replacementFocus, safeReplacements.length]);
 
   // ── Add new row (local-only until Supabase migration of replacements table) ──
   const add = () => {
@@ -6228,7 +6249,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
         .eq("id", row.id);
       if (error) { showOpsToast(`Archive failed: ${error.message}`, { type: "error" }); return; }
     }
-    setReplacements(prev => prev.filter(r => r.id !== row.id));
+    setReplacements(prev => prev.map(r => r.id === row.id ? { ...r, archived_at: nowISO(), updated_at: nowISO() } : r));
     showOpsToast("Replacement case archived.");
   };
 
@@ -6277,15 +6298,18 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
 
   // ── Filter + derived stats ──────────────────────────────────────────────────
   const displayRows = safeReplacements.filter(r => {
-    if (activeFilter === "All")             return true;
-    if (activeFilter === "Follow-Up Needed") return r.followUp === "Yes";
-    return r.brand === activeFilter;
+    if (activeFilter === "All")              return true;
+    if (activeFilter === "Active")           return !r.archived_at;
+    if (activeFilter === "Archived")         return Boolean(r.archived_at);
+    if (activeFilter === "Follow-Up Needed") return !r.archived_at && r.followUp === "Yes";
+    return !r.archived_at && r.brand === activeFilter;
   });
 
-  const loss = safeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
-  const prev = safeReplacements.filter(r => r.preventable === "Yes").length;
-  const fu   = safeReplacements.filter(r => r.followUp === "Yes").length;
-  const rc   = ROOT_CAUSES.map(c => ({ c, n: safeReplacements.filter(r => r.rootCause === c).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
+  const activeReplacements = safeReplacements.filter(r => !r.archived_at);
+  const loss = activeReplacements.reduce((a, r) => a + parseFloat(r.marketValue || 0), 0);
+  const prev = activeReplacements.filter(r => r.preventable === "Yes").length;
+  const fu   = activeReplacements.filter(r => r.followUp === "Yes").length;
+  const rc   = ROOT_CAUSES.map(c => ({ c, n: activeReplacements.filter(r => r.rootCause === c).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
 
   const handleCopyDanteRows = async () => {
     setCopyStatus("");
@@ -6358,9 +6382,9 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
 
       {/* Metric chips */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{safeReplacements.length}</p></Card>
+        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cases Logged</p><p className="text-3xl font-bold text-gray-900 mt-1">{activeReplacements.length}</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estimated Loss</p><p className="text-3xl font-bold text-gray-900 mt-1">${loss.toFixed(2)}</p></Card>
-        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-gray-900 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{safeReplacements.length > 0 ? Math.round((prev / safeReplacements.length) * 100) : 0}% of total</p></Card>
+        <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Preventable</p><p className="text-3xl font-bold text-gray-900 mt-1">{prev}</p><p className="text-xs text-gray-400 mt-0.5">{activeReplacements.length > 0 ? Math.round((prev / activeReplacements.length) * 100) : 0}% of total</p></Card>
         <Card className="p-4"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Follow-Up Needed</p><p className="text-3xl font-bold text-slate-700 mt-1">{fu}</p></Card>
       </div>
 
@@ -6368,7 +6392,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
       {rc.length > 0 && (
         <Card className="p-4">
           <p className="text-sm font-bold text-gray-900 mb-3">Root Cause Breakdown</p>
-          <div className="space-y-2">{rc.slice(0, 5).map(({ c, n }) => <div key={c} className="flex items-center gap-3"><span className="text-xs text-gray-500 w-44 truncate">{c}</span><div className="flex-1"><ProgressBar pct={safeReplacements.length ? (n / safeReplacements.length) * 100 : 0} color="bg-slate-500" /></div><span className="text-xs text-gray-400 w-6 text-right">{n}</span></div>)}</div>
+          <div className="space-y-2">{rc.slice(0, 5).map(({ c, n }) => <div key={c} className="flex items-center gap-3"><span className="text-xs text-gray-500 w-44 truncate">{c}</span><div className="flex-1"><ProgressBar pct={activeReplacements.length ? (n / activeReplacements.length) * 100 : 0} color="bg-slate-500" /></div><span className="text-xs text-gray-400 w-6 text-right">{n}</span></div>)}</div>
         </Card>
       )}
 
@@ -6427,8 +6451,14 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
               {displayRows.map(r => {
                 const isEditing = editRow === r.id;
                 const dante = getDanteReplacementFields(r);
+                const isFocused = replacementFocus?.caseId && String(replacementFocus.caseId) === String(r.id);
+                const isArchived = Boolean(r.archived_at);
                 return (
-                  <tr key={r.id} className={`border-b border-gray-50 ${isEditing ? "bg-slate-50" : "hover:bg-gray-50"}`}>
+                  <tr
+                    key={r.id}
+                    data-replacement-row-id={r.id}
+                    className={`border-b border-gray-50 ${isFocused ? "bg-slate-100 ring-1 ring-inset ring-slate-300" : isEditing ? "bg-slate-50" : isArchived ? "bg-gray-50 text-gray-500" : "hover:bg-gray-50"}`}
+                  >
                     {isEditing ? (
                       /* ── Inline edit row ── */
                       <>
@@ -6477,7 +6507,9 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                         <td className="px-3 py-2.5 text-gray-500 max-w-[180px] truncate">{dante.notes || "-"}</td>
                         <td className="px-3 py-2.5 text-gray-400 max-w-[120px] truncate">{dante.evidence || "-"}</td>
                         <td className="px-3 py-2.5">
-                          {r.status
+                          {isArchived
+                            ? <Badge label="Archived" className="bg-gray-100 text-gray-600 border-gray-200" />
+                            : r.status
                             ? <Badge label={r.status} className={r.status === "Reshipped" || r.status === "Resolved" ? "bg-gray-100 text-gray-600 border-gray-200" : r.status === "Open" ? "bg-slate-50 text-slate-700 border-slate-200" : "bg-gray-100 text-gray-500 border-gray-200"} />
                             : <span className="text-gray-300">-</span>
                           }
@@ -6490,12 +6522,13 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                               onClick={() => { setEditRow(r.id); setEditForm({ ...r }); }}
                               className="text-[10px] font-semibold text-gray-500 hover:text-slate-800 cursor-pointer leading-none"
                             >Edit</button>
-                            {/* Archive */}
-                            <button
-                              title="Archive this row"
-                              onClick={() => handleArchive(r)}
-                              className="text-[10px] font-semibold text-gray-400 hover:text-red-600 cursor-pointer leading-none"
-                            >Archive</button>
+                            {!isArchived && (
+                              <button
+                                title="Archive this row"
+                                onClick={() => handleArchive(r)}
+                                className="text-[10px] font-semibold text-gray-400 hover:text-red-600 cursor-pointer leading-none"
+                              >Archive</button>
+                            )}
                           </div>
                         </td>
                       </>
@@ -6505,7 +6538,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
               })}
               {displayRows.length === 0 && (
                 <tr><td colSpan={11} className="text-center py-8 text-gray-300">
-                  {activeFilter === "All" ? "No replacement cases logged" : `No cases match "${activeFilter}"`}
+                  {activeFilter === "Archived" ? "No archived replacement cases" : activeFilter === "Active" ? "No active replacement cases logged" : activeFilter === "All" ? "No replacement cases logged" : `No cases match "${activeFilter}"`}
                 </td></tr>
               )}
             </tbody>
@@ -8365,6 +8398,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   // ── Safe arrays ─────────────────────────────────────────────────────────────
   const safeInbound      = Array.isArray(inboundMessages) ? inboundMessages : [];
   const safeReplacements = Array.isArray(replacements)    ? replacements    : [];
+  const activeReplacements = safeReplacements.filter(r => !r.archived_at);
   const safeStudios      = Array.isArray(studios)         ? studios         : [];
   const safeSets         = Array.isArray(surpriseSets)    ? surpriseSets    : [];
 
@@ -8386,8 +8420,8 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   const needsReply      = getNeedsReplyMessages(safeInbound).length;
   const closedMsgs      = safeInbound.filter(m => m.status === "Closed").length;
   const refundsReviewed = safeInbound.filter(m => isTikTokRefund(m) && !m.archived_at).length;
-  const replacementsLogged = safeReplacements.filter(r => isThisWeek(r.created_at || r.date, week.start, week.end)).length || safeReplacements.length;
-  const followUpsNeeded = safeReplacements.filter(r => !r.archived_at && (r.followUp === "Yes" || r.follow_up === "Yes")).length;
+  const replacementsLogged = activeReplacements.filter(r => isThisWeek(r.created_at || r.date, week.start, week.end)).length || activeReplacements.length;
+  const followUpsNeeded = activeReplacements.filter(r => r.followUp === "Yes" || r.follow_up === "Yes").length;
   const studioReady     = safeStudios.filter(s => s.streamReady).length;
   const studioScore     = safeStudios.length ? Math.round((studioReady / safeStudios.length) * 100) : 0;
   const setsReady       = safeSets.filter(s => s.readyForLive).length;
@@ -8399,11 +8433,11 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
     open:        getOpenMessages(safeInbound).filter(m => getDisplayBrand(m) === brand).length,
     closed:      safeInbound.filter(m => getDisplayBrand(m) === brand && m.status === "Closed").length,
     refunds:     safeInbound.filter(m => getDisplayBrand(m) === brand && isTikTokRefund(m) && !m.archived_at).length,
-    replacements: safeReplacements.filter(r => r.brand === brand).length,
+    replacements: activeReplacements.filter(r => r.brand === brand).length,
   }));
 
   // ── Estimated time saved ─────────────────────────────────────────────────────
-  const timeMins = (msgsImported * 2) + (draftsGenerated * 5) + (safeReplacements.length * 3) + (setsReady * 5);
+  const timeMins = (msgsImported * 2) + (draftsGenerated * 5) + (activeReplacements.length * 3) + (setsReady * 5);
   const timeHours = (timeMins / 60).toFixed(1);
 
   // ── Plain-text summary builder ───────────────────────────────────────────────
@@ -8432,7 +8466,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
       "",
       "ESTIMATED TIME SAVED",
       `  ~${timeMins} minutes  (~${timeHours} hours)`,
-      `  Formula: ${msgsImported} msgs x2 + ${draftsGenerated} drafts x5 + ${safeReplacements.length} replacements x3 + ${setsReady} sets x5`,
+      `  Formula: ${msgsImported} msgs x2 + ${draftsGenerated} drafts x5 + ${activeReplacements.length} replacements x3 + ${setsReady} sets x5`,
       "",
       "PROCESS IMPROVEMENTS / WINS",
       wins || "  None noted.",
@@ -8543,7 +8577,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
           <span className="text-sm text-gray-500">hours</span>
         </div>
         <p className="text-[10px] text-gray-400 leading-relaxed">
-          Formula: {msgsImported} messages x 2 min + {draftsGenerated} AI drafts x 5 min + {safeReplacements.length} replacements x 3 min + {setsReady} sets x 5 min
+          Formula: {msgsImported} messages x 2 min + {draftsGenerated} AI drafts x 5 min + {activeReplacements.length} replacements x 3 min + {setsReady} sets x 5 min
         </p>
       </div>
 
@@ -8912,6 +8946,7 @@ export default function JonnyOpsCommandCenter() {
   // ── Replacements state ────────────────────────────────────────────────────────
   const [replacementsLoading, setReplacementsLoading] = useState(false);
   const [replacementsError,   setReplacementsError]   = useState("");
+  const [replacementFocus, setReplacementFocus] = useState(null);
 
   const refreshReplacements = async () => {
     setReplacementsLoading(true);
@@ -9097,13 +9132,13 @@ export default function JonnyOpsCommandCenter() {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores, setInboundMessages };
     switch (activeView) {
       case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} newMessageNoticeCount={recentNewMessageCount} />;
-      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} replacements={replacements} setReplacements={setReplacements} setActiveView={setActiveView} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
+      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} replacements={replacements} setReplacements={setReplacements} setActiveView={setActiveView} setReplacementFocus={setReplacementFocus} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
       case "actions": return <NextActionQueueView opsActions={opsActions} setOpsActions={setOpsActions} opsLoading={opsLoading} opsError={opsError} onRefresh={refreshOpsActions} setActiveView={setActiveView} />;
       case "daily": return <DailyCommandView tickets={tickets} />;
       case "tickets": return <TicketQueueView tickets={tickets} setTickets={setTickets} />;
       case "browser": return <BrowserProfileView />;
       case "cs": return <CSTemplateView setTickets={setTickets} />;
-      case "replacements": return <ReplacementLogView replacements={replacements} setReplacements={setReplacements} replacementsLoading={replacementsLoading} replacementsError={replacementsError} onRefresh={refreshReplacements} />;
+      case "replacements": return <ReplacementLogView replacements={replacements} setReplacements={setReplacements} replacementsLoading={replacementsLoading} replacementsError={replacementsError} onRefresh={refreshReplacements} replacementFocus={replacementFocus} />;
       case "studio": return <StudioReadinessView studios={studios} setStudios={setStudios} />;
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
       case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} inboundMessages={inboundMessages} />;
