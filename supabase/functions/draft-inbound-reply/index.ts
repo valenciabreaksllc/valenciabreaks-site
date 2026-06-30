@@ -10,6 +10,7 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+const INBOUND_MESSAGES_TABLE = "work_queue";
 
 // ── TikTok body cleaner (mirrors App.jsx logic, server-side) ──────────────────
 // Extracts only the new-message section, strips junk lines.
@@ -190,7 +191,7 @@ serve(async (req: Request) => {
 
     // ── Fetch inbound message ─────────────────────────────────────────────────
     const { data: msg, error: fetchErr } = await supabase
-      .from("inbound_messages")
+      .from(INBOUND_MESSAGES_TABLE)
       .select("*")
       .eq("id", message_id)
       .single();
@@ -294,10 +295,10 @@ serve(async (req: Request) => {
       );
     }
 
-    // ── Save draft back to inbound_messages ───────────────────────────────────
+    // ── Save draft back to work_queue ─────────────────────────────────────────
     const now = new Date().toISOString();
     const { data: updated, error: updateErr } = await supabase
-      .from("inbound_messages")
+      .from(INBOUND_MESSAGES_TABLE)
       .update({ ai_draft: draft, draft_status: "Draft Ready", updated_at: now })
       .eq("id", message_id)
       .select("*")

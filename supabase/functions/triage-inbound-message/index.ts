@@ -23,6 +23,7 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+const INBOUND_MESSAGES_TABLE = "work_queue";
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are a customer support triage assistant for an e-commerce company that sells trading cards and mystery boxes on TikTok Shop, Instagram, and email.
@@ -114,9 +115,9 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // ── Fetch the inbound_messages row ────────────────────────────────────────
+    // ── Fetch the work_queue row ──────────────────────────────────────────────
     const { data: msg, error: fetchError } = await supabase
-      .from("inbound_messages")
+      .from(INBOUND_MESSAGES_TABLE)
       .select("id, brand, channel, label, sender_name, sender_email, subject, message_body, customer_name")
       .eq("id", message_id)
       .single();
@@ -210,7 +211,7 @@ serve(async (req: Request) => {
     };
 
     const { data: updated, error: updateError } = await supabase
-      .from("inbound_messages")
+      .from(INBOUND_MESSAGES_TABLE)
       .update(updatePayload)
       .eq("id", message_id)
       .select("*")

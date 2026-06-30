@@ -9,6 +9,7 @@ const supabase = supabaseUrl && supabaseAnonKey
   : null;
 const MAKE_INTAKE_WEBHOOK_URL = "https://hook.us2.make.com/ndd4uty3uvua7lmgqxg9lsmjvd61i3ih";
 const LAST_SEEN_MESSAGE_STORAGE_KEY = "ops_command_hub_last_seen_message_at";
+const INBOUND_MESSAGES_TABLE = "work_queue";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -2831,7 +2832,7 @@ const findAutomationRule = (rules, msg) => {
 const fetchInboundMessagesFromSupabase = async () => {
   if (!supabase) return { data: [], error: { message: "No Supabase client." } };
   const { data, error } = await supabase
-    .from("inbound_messages")
+    .from(INBOUND_MESSAGES_TABLE)
     .select("*")
     .is("archived_at", null)
     .order("received_at", { ascending: false })
@@ -2843,7 +2844,7 @@ const fetchInboundMessagesFromSupabase = async () => {
 const updateInboundStatusInSupabase = async (id, status) => {
   if (!supabase || !id) return { error: null };
   const { error } = await supabase
-    .from("inbound_messages")
+    .from(INBOUND_MESSAGES_TABLE)
     .update({ status, updated_at: nowISO() })
     .eq("id", id);
   if (error) console.error("Supabase inbound status update error:", error);
@@ -2853,7 +2854,7 @@ const updateInboundStatusInSupabase = async (id, status) => {
 const archiveInboundInSupabase = async (id) => {
   if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
   const { error } = await supabase
-    .from("inbound_messages")
+    .from(INBOUND_MESSAGES_TABLE)
     .update({ archived_at: nowISO(), updated_at: nowISO() })
     .eq("id", id);
   if (error) console.error("Supabase inbound archive error:", error);
@@ -3685,7 +3686,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     setManualMessageSaving(true);
     try {
       const result = await supabase
-        .from("inbound_messages")
+        .from(INBOUND_MESSAGES_TABLE)
         .insert([payload])
         .select("*")
         .single();
@@ -3861,9 +3862,9 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const handleApproveDraft = async (msg) => {
     if (!msg.ai_draft) return;
     const now = nowISO();
-    // 1. Update inbound_messages: copy draft → approved_reply, set draft_status
+    // 1. Update work_queue: copy draft -> approved_reply, set draft_status
     const { error: updateErr } = await supabase
-      .from("inbound_messages")
+      .from(INBOUND_MESSAGES_TABLE)
       .update({ approved_reply: msg.ai_draft, draft_status: "Approved", updated_at: now })
       .eq("id", msg.id);
     if (updateErr) { alert(`Approve failed: ${updateErr.message}`); return; }
@@ -3988,7 +3989,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         if (rule?.auto_archive_noise) {
           try {
             await supabase
-              .from("inbound_messages")
+              .from(INBOUND_MESSAGES_TABLE)
               .update({ archived_at: nowISO(), updated_at: nowISO() })
               .eq("id", triaged.id);
             setInboundMessages(prev => prev.filter(m => m.id !== triaged.id));
@@ -8207,7 +8208,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
 };
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────────────────────────
-const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setTickets, setReplacements, setStudios, setSurpriseSets, raiseScores }) => {
+const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setTickets, setReplacements, setStudios, setSurpriseSets, raiseScores, setInboundMessages }) => {
 const [confirmClear, setConfirmClear] = useState(false);
 const [importErr, setImportErr] = useState("");
 const [clearErr, setClearErr] = useState("");
@@ -8267,15 +8268,12 @@ const clearAll = async () => {
   try {
     if (supabase) {
       const { error } = await supabase
-        .from("tickets")
+        .from(INBOUND_MESSAGES_TABLE)
         .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
+        .not("id", "is", null);
       if (error) throw error;
     }
-    setTickets([]);
-    setReplacements([]);
-    setStudios(FRESH_STUDIOS);
-    setSurpriseSets([]);
+    if (setInboundMessages) setInboundMessages([]);
     setConfirmClear(false);
   } catch (err) {
     console.error("Clear all failed:", err);
@@ -8345,7 +8343,7 @@ const clearAll = async () => {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <p className="text-sm text-gray-700">This will erase all tickets, replacements, and sets. Are you sure?</p>
+            <p className="text-sm text-gray-700">This will erase all Command Inbox queue rows. Are you sure?</p>
             <BtnDanger onClick={clearAll} size="md">Yes, Clear All</BtnDanger>
             <BtnSecondary onClick={() => setConfirmClear(false)} size="md">Cancel</BtnSecondary>
           </div>
@@ -8354,7 +8352,7 @@ const clearAll = async () => {
 
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
         <p className="text-sm font-bold text-slate-800 mb-1">Supabase Sync Active</p>
-        <p className="text-xs text-slate-600">All ticket data is read from and written to your Supabase <code className="font-mono bg-white border border-slate-200 px-1 rounded">tickets</code> table. Export a JSON backup regularly for off-database safety.</p>
+        <p className="text-xs text-slate-600">Command Inbox data is read from and written to your Supabase <code className="font-mono bg-white border border-slate-200 px-1 rounded">{INBOUND_MESSAGES_TABLE}</code> table. Export a JSON backup regularly for off-database safety.</p>
       </div>
     </div>
   );
@@ -8663,7 +8661,7 @@ export default function JonnyOpsCommandCenter() {
   ].filter(Boolean).length;
 
   const renderView = () => {
-    const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores };
+    const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores, setInboundMessages };
     switch (activeView) {
       case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} newMessageNoticeCount={recentNewMessageCount} />;
       case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
