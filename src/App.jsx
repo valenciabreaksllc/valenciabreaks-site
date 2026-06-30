@@ -2979,17 +2979,18 @@ const cleanTikTokBody = (raw, username) => {
 // used to show the optional collapsed note in the card.
 // Non-TikTok messages pass through unchanged.
 const getDisplayInboundMessage = (msg) => {
+  const body = msg?.message || msg?.message_body || msg?.message_text || "";
   if (!isTikTokShopMessage(msg)) {
-    return { displayName: null, displayBody: msg.message_body || "", hasHistory: false };
+    return { displayName: null, displayBody: body, hasHistory: false };
   }
 
   const nameFromSubject = extractTikTokCustomerName(msg.subject);
 
   // Detect history presence before cleaning
-  const rawLines = (msg.message_body || "").split(/\r?\n/).map(l => l.trim());
+  const rawLines = body.split(/\r?\n/).map(l => l.trim());
   const hasHistory = rawLines.some(l => /^your previous chat with\b/i.test(l));
 
-  const displayBody = cleanTikTokBody(msg.message_body, nameFromSubject);
+  const displayBody = cleanTikTokBody(body, nameFromSubject);
 
   // Username fallback: first non-empty line after new-message header
   let nameFromBody = null;
@@ -3081,10 +3082,13 @@ const inferInboxBrandFromText = (value) => {
 
 const getDisplayBrand = (message) => {
   const msg = message || {};
-  const brand = String(msg.brand || "").trim();
-  const rawBrand = brand.toLowerCase();
-  if (brand && rawBrand !== "unassigned" && rawBrand !== "unknown") {
-    return inferInboxBrandFromText(brand) || brand;
+  const preferred = [msg.account, msg.brand];
+  for (const candidate of preferred) {
+    const value = String(candidate || "").trim();
+    const rawValue = value.toLowerCase();
+    if (value && rawValue !== "unassigned" && rawValue !== "unknown") {
+      return inferInboxBrandFromText(value) || value;
+    }
   }
 
   const sources = [msg.label, msg.external_id, msg.source, msg.channel, msg.subject];
@@ -3112,7 +3116,7 @@ const fmtPacific = (iso) => {
 
 // Returns the best display timestamp + a label ("Received" or "Imported").
 const getInboundTimestamp = (msg) => {
-  const recv = msg.email_received_at;
+  const recv = msg.received_at || msg.email_received_at || msg.received_time;
   if (recv) return { iso: recv, label: "Received", display: fmtPacific(recv) };
   if (msg.created_at) return { iso: msg.created_at, label: "Imported", display: fmtPacific(msg.created_at) };
   return { iso: null, label: "", display: "" };
@@ -3358,7 +3362,9 @@ const getCommandInboxMessageText = (msg) => {
   const { displayBody } = getDisplayInboundMessage(msg || {});
   return [
     msg?.subject,
+    msg?.message,
     msg?.message_body,
+    msg?.message_text,
     displayBody,
     msg?.channel,
     msg?.message_type,
@@ -5141,19 +5147,15 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
 // ─── DASHBOARD VIEW ───────────────────────────────────────────────────────────
 const CLOSED_INBOUND_STATUSES = ["Closed", "Archived", "Resolved"];
 const OPEN_INBOUND_STATUSES = ["Needs Reply", "In Progress", "Draft Ready", "Ticket Created", "Manual Review", ""];
-const getMessageSortTimestamp = (message) => new Date(message?.email_received_at || message?.created_at || 0).getTime() || 0;
+const getMessageSortTimestamp = (message) =>
+  new Date(message?.received_at || message?.email_received_at || message?.received_time || message?.created_at || 0).getTime() || 0;
 const getOpenMessages = (messages) => {
   const safeMessages = Array.isArray(messages) ? messages : [];
-  return safeMessages.filter(message => {
-    if (message?.archived_at) return false;
-    const status = String(message?.status || "").trim();
-    if (CLOSED_INBOUND_STATUSES.includes(status)) return false;
-    return OPEN_INBOUND_STATUSES.includes(status) || !status;
-  });
+  return safeMessages.filter(message => !message?.archived_at);
 };
 const getNeedsReplyMessages = (messages) => getOpenMessages(messages).filter(message => {
   const status = String(message?.status || "").trim();
-  return status === "Needs Reply" || !status;
+  return status === "Needs Reply" || status === "needs_reply";
 });
 const getRefundMessages = (messages) => getOpenMessages(messages).filter(message =>
   isTikTokRefund(message) ||
@@ -5457,7 +5459,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded p-3 text-[11px] text-gray-600 leading-relaxed space-y-1.5">
               <p className="font-semibold text-gray-800">Command Inbox</p>
-              <p>{safeInbound.length} active messages</p>
+              <p>{openInboxMessages.length} active messages</p>
               <p>{msgsNeedingReply} needing reply - {refundItems} refund/return item{refundItems !== 1 ? "s" : ""}</p>
               <p>{actionRequiredCount} total action required</p>
               <p className="font-semibold text-gray-800 pt-1">Shipping Loss</p>
@@ -6982,7 +6984,7 @@ const isThisWeek = (isoStr, weekStart, weekEnd) => {
   } catch { return false; }
 };
 
-const REPORT_BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "Pokiemart"];
+const REPORT_BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "PokieMart"];
 
 const OpsImpactMetricCard = ({ label, value, accent = false, sub }) => (
   <div className={`bg-white border rounded-lg px-3 py-3 ${accent ? "border-l-4 border-l-slate-400 border-t border-r border-b border-gray-200" : "border-gray-200"}`}>
@@ -8005,8 +8007,8 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   const saveNextFocus = (v) => { setNextFocus(v); try { localStorage.setItem("ops_report_focus_v1", v); } catch {} };
 
   // ── Core metric counts ───────────────────────────────────────────────────────
-  const msgsImported    = safeInbound.filter(m => isThisWeek(m.received_at || m.created_at, week.start, week.end)).length || safeInbound.length;
-  const needsReply      = safeInbound.filter(m => m.status === "Needs Reply" && !m.archived_at).length;
+  const msgsImported    = safeInbound.filter(m => isThisWeek(m.received_at || m.email_received_at || m.received_time || m.created_at, week.start, week.end)).length || safeInbound.length;
+  const needsReply      = getNeedsReplyMessages(safeInbound).length;
   const closedMsgs      = safeInbound.filter(m => m.status === "Closed").length;
   const refundsReviewed = safeInbound.filter(m => isTikTokRefund(m) && !m.archived_at).length;
   const replacementsLogged = safeReplacements.filter(r => isThisWeek(r.created_at || r.date, week.start, week.end)).length || safeReplacements.length;
@@ -8019,9 +8021,9 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   // ── Brand breakdown ──────────────────────────────────────────────────────────
   const brandRows = REPORT_BRANDS.map(brand => ({
     brand,
-    open:        safeInbound.filter(m => m.brand === brand && m.status !== "Closed" && !m.archived_at).length,
-    closed:      safeInbound.filter(m => m.brand === brand && m.status === "Closed").length,
-    refunds:     safeInbound.filter(m => m.brand === brand && isTikTokRefund(m) && !m.archived_at).length,
+    open:        getOpenMessages(safeInbound).filter(m => getDisplayBrand(m) === brand).length,
+    closed:      safeInbound.filter(m => getDisplayBrand(m) === brand && m.status === "Closed").length,
+    refunds:     safeInbound.filter(m => getDisplayBrand(m) === brand && isTikTokRefund(m) && !m.archived_at).length,
     replacements: safeReplacements.filter(r => r.brand === brand).length,
   }));
 
