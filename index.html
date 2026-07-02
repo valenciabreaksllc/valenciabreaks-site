@@ -92,25 +92,6 @@
         margin: 10px 0 0;
       }
 
-      .lock-button {
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        z-index: 9999;
-        border: 1px solid #d1d5db;
-        background: #ffffff;
-        color: #374151;
-        border-radius: 10px;
-        padding: 8px 10px;
-        font-size: 14px;
-        font-weight: 700;
-        cursor: pointer;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
-      }
-
-      .lock-button:hover {
-        background: #f9fafb;
-      }
     </style>
   </head>
 
@@ -145,19 +126,6 @@
       function showApp() {
         document.getElementById("password-screen").style.display = "none";
         document.getElementById("root").style.display = "block";
-
-        if (!document.getElementById("shell-lock-button")) {
-          const btn = document.createElement("button");
-          btn.id = "shell-lock-button";
-          btn.className = "lock-button";
-          btn.textContent = "🔒";
-          btn.title = "Lock";
-          btn.onclick = () => {
-            localStorage.removeItem(SHELL_KEY);
-            location.reload();
-          };
-          document.body.appendChild(btn);
-        }
       }
 
       if (localStorage.getItem(SHELL_KEY) === "yes") {

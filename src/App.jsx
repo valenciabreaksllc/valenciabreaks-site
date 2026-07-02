@@ -10,6 +10,7 @@ const supabase = supabaseUrl && supabaseAnonKey
 const MAKE_INTAKE_WEBHOOK_URL = "https://hook.us2.make.com/ndd4uty3uvua7lmgqxg9lsmjvd61i3ih";
 const LAST_SEEN_MESSAGE_STORAGE_KEY = "ops_command_hub_last_seen_message_at";
 const INBOUND_MESSAGES_TABLE = "work_queue";
+const SHELL_UNLOCK_STORAGE_KEY = "jonny_ops_shell_unlocked_v3";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -2347,8 +2348,8 @@ const generateTemplate = (brand, issueType, tone, orderNum, customerName) => {
 };
 
 // ─── PRIMITIVES ───────────────────────────────────────────────────────────────
-const Card = ({ children, className = "" }) => (
-  <div className={`bg-white border border-gray-200 rounded-xl shadow-sm ${className}`}>{children}</div>
+const Card = ({ children, className = "", ...props }) => (
+  <div {...props} className={`bg-white border border-gray-200 rounded-xl shadow-sm ${className}`}>{children}</div>
 );
 
 const Badge = ({ label, className = "" }) => (
@@ -3694,7 +3695,7 @@ const buildReplacementCaseFromWorkQueue = (msg) => {
   };
 };
 
-const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, replacements, setReplacements, setActiveView, setReplacementFocus, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
+const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, replacements, setReplacements, setActiveView, setReplacementFocus, inboxFilter, onClearInboxFilter, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [sortMode, setSortMode] = useState("Newest first");
@@ -3734,10 +3735,28 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const complete      = safeInboundMessages.filter(m => m.archived_at || ["closed", "archived", "resolved"].includes(normalizeWorkQueueStatus(m.status))).length;
   const openMessages  = openInboxMessages.length;
   const overdueMessages = getOverdueMessages(safeInboundMessages);
+  const inboxFilterKey = JSON.stringify(inboxFilter || {});
+
+  useEffect(() => {
+    if (!inboxFilter) return;
+    const nextFilter =
+      inboxFilter.kind === "refunds" ? "Refunds / Returns" :
+      inboxFilter.kind === "high-priority" ? "High Priority" :
+      "All";
+    setActiveFilter(nextFilter);
+    if (inboxFilter.kind === "overdue") setSortMode("Oldest first");
+    if (inboxFilter.messageId) {
+      setExpandedMessages(prev => ({ ...prev, [inboxFilter.messageId]: true }));
+      window.requestAnimationFrame(() => {
+        document.getElementById(`inbox-message-${inboxFilter.messageId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+      });
+    }
+  }, [inboxFilterKey]);
 
   // ── filter logic ─────────────────────────────────────────────────────────────
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
   const filtered = safeInboundMessages.filter(m => {
+    if (inboxFilter && !matchesCommandInboxFilter(m, inboxFilter)) return false;
     if (activeFilter === "All")                 return true;
     if (activeFilter === "TikTok Shop Chat")      return classifyInboundSource(m) === "TikTok Shop Chat";
     if (activeFilter === "Refunds / Returns")   return classifyInboundSource(m) === "TikTok Refund";
@@ -3747,7 +3766,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       m.triage_status === "Noise / Not CS" || m.issue_type === "Noise / Not CS";
     if (activeFilter === "Untriaged")           return isUntriaged(m);
     if (activeFilter === "Needs Human Review")  return getCommandInboxRiskFlag(m)?.label === "Needs Human Review";
-    if (activeFilter === "High Priority")       return m.risk_level === "High" || m.priority === "High" || m.triage_status === "High Priority";
+    if (activeFilter === "High Priority")       return isHighPriorityMessage(m);
     if (activeFilter === "Closed")              return m.status === "Closed" || m.status === "Archived" || m.archived_at;
     if (activeFilter === "Archived")            return false;
     return true;
@@ -3767,6 +3786,15 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
     return newestFirst(a, b);
   });
+  const inboxFilterLabel = inboxFilter
+    ? [
+        inboxFilter.kind === "overdue" ? "Overdue" :
+        inboxFilter.kind === "refunds" ? "Refunds / Returns" :
+        inboxFilter.kind === "high-priority" ? "High Priority" :
+        "Open messages",
+        inboxFilter.brand,
+      ].filter(Boolean).join(" - ")
+    : "";
 
   useEffect(() => {
     if (inboundLoading || !supabase?.functions?.invoke) return undefined;
@@ -4612,6 +4640,16 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           {activeFilter === "Archived" && (
             <span className="text-[10px] font-medium text-gray-400">Archived message viewer coming soon.</span>
           )}
+          {inboxFilterLabel && (
+            <button
+              type="button"
+              onClick={onClearInboxFilter}
+              className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600 transition-colors hover:bg-white hover:text-slate-900"
+              title="Clear dashboard filter"
+            >
+              Dashboard filter: {inboxFilterLabel} x
+            </button>
+          )}
         </div>
         <label className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 sm:ml-auto">
           <span className="whitespace-nowrap">Sort:</span>
@@ -4691,7 +4729,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           : "Send to Replacement Log";
 
         return (
-          <Card key={msg.id} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
+          <Card key={msg.id} id={`inbox-message-${msg.id}`} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
             {/* Card header row */}
             <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -5379,7 +5417,57 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
 };
 
 // ─── NOTIFICATION DROPDOWN ────────────────────────────────────────────────────
-const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setActiveView, agentAlertCount = 0 }) => {
+const SystemStatusPanel = ({ inboundMessages, inboundLoading, inboundError, lastSyncAt }) => {
+  const [open, setOpen] = useState(false);
+  const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
+  const newestInboundTime = Math.max(0, ...safeInboundMessages.map(message => getMessageSortTimestamp(message)).filter(Boolean));
+  const lastSyncLabel = lastSyncAt
+    ? fmtPacific(lastSyncAt)
+    : newestInboundTime
+    ? fmtPacific(new Date(newestInboundTime).toISOString())
+    : "Not synced yet";
+  const rows = [
+    { label: "Supabase connection", value: inboundError ? "Attention needed" : supabase ? "Connected" : "Unavailable" },
+    { label: "Active table", value: "public.work_queue" },
+    { label: "Last sync time", value: inboundLoading ? "Syncing now" : lastSyncLabel },
+    { label: "Dashboard source", value: "Live queue" },
+    { label: "AI intake status", value: supabase?.functions?.invoke ? "Ready" : "Unavailable" },
+  ];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+        aria-label="System Status"
+        title="System Status"
+      >
+        Status
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-9 z-50 w-72 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+            <div className="border-b border-gray-100 bg-gray-50 px-4 py-2.5">
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-700">System Status</p>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {rows.map(row => (
+                <div key={row.label} className="px-4 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{row.label}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-gray-800">{row.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setActiveView, openCommandInbox, agentAlertCount = 0 }) => {
   const [open, setOpen] = useState(false);
 
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
@@ -5418,16 +5506,32 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
 
   const items = [];
   Object.entries(refundsByBrand).forEach(([brand, n]) => {
-    items.push({ label: `${brand}: ${n} refund/return${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-900" });
+    items.push({ label: `${brand}: ${n} refund/return${n > 1 ? "s" : ""}`, nav: "inbox", filter: { kind: "refunds", brand }, color: "text-gray-900" });
   });
   Object.entries(chatsByBrand).forEach(([brand, n]) => {
-    items.push({ label: `${brand}: ${n} shop chat${n > 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-700" });
+    items.push({ label: `${brand}: ${n} shop chat${n > 1 ? "s" : ""}`, nav: "inbox", filter: { kind: "open", brand }, color: "text-gray-700" });
   });
-  if (draftsReady > 0)        items.push({ label: `${draftsReady} draft${draftsReady > 1 ? "s" : ""} ready to approve`, nav: "inbox", color: "text-gray-700" });
-  if (overdueInboxCount > 0)  items.push({ label: `${overdueInboxCount} overdue inbox message${overdueInboxCount !== 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-900" });
-  if (highPriorityInboxCount > 0) items.push({ label: `${highPriorityInboxCount} high priority message${highPriorityInboxCount !== 1 ? "s" : ""}`, nav: "inbox", color: "text-gray-900" });
+  if (draftsReady > 0)        items.push({ label: `${draftsReady} draft${draftsReady > 1 ? "s" : ""} ready to approve`, nav: "inbox", filter: { kind: "open" }, color: "text-gray-700" });
+  if (overdueInboxCount > 0)  items.push({ label: `${overdueInboxCount} overdue inbox message${overdueInboxCount !== 1 ? "s" : ""}`, nav: "inbox", filter: { kind: "overdue" }, color: "text-gray-900" });
+  if (highPriorityInboxCount > 0) items.push({ label: `${highPriorityInboxCount} high priority message${highPriorityInboxCount !== 1 ? "s" : ""}`, nav: "inbox", filter: { kind: "high-priority" }, color: "text-gray-900" });
   if (followUpNeeded > 0)     items.push({ label: `${followUpNeeded} replacement${followUpNeeded > 1 ? "s" : ""} need follow-up`, nav: "replacements", color: "text-gray-700" });
   if (overdueActionsCount > 0) items.push({ label: `${overdueActionsCount} overdue action${overdueActionsCount > 1 ? "s" : ""}`, nav: "actions", color: "text-gray-900" });
+  const recentActivity = getOpenMessages(safeInboundMessages)
+    .sort((a, b) => getMessageSortTimestamp(b) - getMessageSortTimestamp(a))
+    .slice(0, 6)
+    .map(message => {
+      const { displayName } = getDisplayInboundMessage(message);
+      const filterKind = isHighPriorityMessage(message) ? "high-priority" : isTikTokRefund(message) ? "refunds" : "open";
+      return {
+        id: message.id,
+        customer: displayName || message.customer_name || message.sender_name || message.sender_email || "Customer",
+        brand: getDisplayBrand(message),
+        issueType: message.issue_type || message.message_type || classifyInboundSource(message),
+        age: getMessageAgeLabel(message),
+        preview: getMessagePreview(message, 88),
+        filterKind,
+      };
+    });
 
   return (
     <div className="relative">
@@ -5457,22 +5561,47 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
               <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Notifications</p>
               <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
             </div>
-            {items.length === 0 ? (
+            {recentActivity.length === 0 && items.length === 0 ? (
               <div className="px-4 py-6 text-center">
                 <p className="text-sm text-gray-400">All clear. Nothing needs attention.</p>
               </div>
             ) : (
-              <div className="divide-y divide-gray-50">
-                {items.map((item, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setActiveView(item.nav); setOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors"
-                  >
-                    <p className={`text-xs font-medium ${item.color}`}>{item.label}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Tap to open {item.nav === "inbox" ? "Command Inbox" : item.nav === "replacements" ? "Replacements" : "Action Queue"}</p>
-                  </button>
-                ))}
+              <div>
+                {recentActivity.length > 0 && (
+                  <div className="divide-y divide-gray-50">
+                    {recentActivity.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => { openCommandInbox({ kind: item.filterKind, messageId: item.id }); setOpen(false); }}
+                        className="w-full px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                      >
+                        <p className="truncate text-xs font-bold text-gray-900">{item.customer}</p>
+                        <p className="mt-0.5 truncate text-[10px] font-semibold text-gray-500">{item.brand} &middot; {item.issueType} &middot; {item.age}</p>
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-500">{item.preview}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {items.length > 0 && (
+                  <div className="border-t border-gray-100 bg-gray-50 px-4 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Summary</p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {items.slice(0, 5).map((item, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            if (item.nav === "inbox") openCommandInbox(item.filter || { kind: "open" });
+                            else setActiveView(item.nav);
+                            setOpen(false);
+                          }}
+                          className={`rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold ${item.color} hover:bg-gray-50`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -5504,15 +5633,63 @@ const getRefundMessages = (messages) => getOpenMessages(messages).filter(message
   String(message?.channel || "").toLowerCase().includes("refund") ||
   String(message?.channel || "").toLowerCase().includes("return")
 );
-const getHighPriorityMessages = (messages) => getOpenMessages(messages).filter(message =>
-  message?.priority === "High" || message?.risk_level === "High" || message?.triage_status === "High Priority"
-);
+const isHighPriorityMessage = (message) => {
+  const text = [
+    message?.issue_type,
+    message?.message_type,
+    message?.customer_intent,
+    message?.triage_status,
+    message?.risk_level,
+    message?.priority,
+    message?.subject,
+    message?.message_body,
+    message?.message,
+    message?.triage_summary,
+    message?.next_action,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return (
+    message?.priority === "High" ||
+    message?.risk_level === "High" ||
+    message?.triage_status === "High Priority" ||
+    isTikTokRefund(message) ||
+    /\b(refund|return|missing item|wrong item|damaged item|delivered not received|delivered-not-received|no movement|escalation|high value|high-value)\b/i.test(text)
+  );
+};
+const getHighPriorityMessages = (messages) => getOpenMessages(messages).filter(isHighPriorityMessage);
 const getOverdueMessages = (messages) => {
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   return getOpenMessages(messages).filter(message => {
     const ts = getMessageSortTimestamp(message);
     return ts > 0 && ts < dayAgo;
   });
+};
+const getMessagePreview = (message, max = 96) => {
+  const { displayBody } = getDisplayInboundMessage(message || {});
+  const raw = displayBody || message?.message_body || message?.message || message?.subject || "";
+  const preview = String(raw).replace(/\s+/g, " ").trim();
+  if (!preview) return "No preview available.";
+  return preview.length > max ? `${preview.slice(0, max - 1).trim()}...` : preview;
+};
+const getMessageAgeLabel = (message) => {
+  const ts = getMessageSortTimestamp(message);
+  if (!ts) return "No timestamp";
+  const diffMs = Math.max(0, Date.now() - ts);
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 60) return `${Math.max(1, minutes)}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+};
+const matchesCommandInboxFilter = (message, filter = {}) => {
+  if (!message) return false;
+  if (filter.messageId && message.id !== filter.messageId) return false;
+  if (filter.brand && getDisplayBrand(message) !== filter.brand) return false;
+  const kind = filter.kind || filter.filter || "all";
+  if (kind === "open") return getOpenMessages([message]).length > 0;
+  if (kind === "overdue") return getOverdueMessages([message]).length > 0;
+  if (kind === "refunds") return getRefundMessages([message]).length > 0;
+  if (kind === "high-priority") return getHighPriorityMessages([message]).length > 0;
+  return true;
 };
 const getBrandCounts = (messages) => {
   const brands = ["Vaulted Rarities", "CardKing47", "PokeSpins", "PokieMart"];
@@ -5546,7 +5723,7 @@ const buildRecommendedNextAction = (messages) => {
   return { action: "No urgent action. Keep monitoring.", reason: "The open queue is clear enough to stay in watch mode." };
 };
 
-const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSets, raiseScores, inboundMessages, opsActions, setActiveView, newMessageNoticeCount = 0 }) => {
+const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSets, raiseScores, inboundMessages, opsActions, openCommandInbox, newMessageNoticeCount = 0 }) => {
   const [showForm, setShowForm] = useState(false);
   const emptyF = { brand: "", channel: "", issueType: "", priority: "Medium", slaRisk: "No", status: "New", notes: "", nextAction: "" };
   const [form, setForm] = useState(emptyF);
@@ -5647,7 +5824,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
         <Card className="flex flex-col gap-3 border-black p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm font-semibold text-gray-900">Assistant reminder: {overdueMessages.length} open message{overdueMessages.length !== 1 ? "s are" : " is"} older than 24 hours.</p>
           <button
-            onClick={() => setActiveView("inbox")}
+            onClick={() => openCommandInbox({ kind: "overdue" })}
             className="inline-flex items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
           >
             Review overdue
@@ -5667,9 +5844,9 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
             <p className="mt-1 text-sm leading-relaxed text-gray-700">{opsAgentBrief}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setActiveView("inbox")} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">View Refunds</button>
-            <button onClick={() => setActiveView("inbox")} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">View High Priority</button>
-            <button onClick={() => setActiveView("inbox")} className="rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">Open Command Inbox</button>
+            <button onClick={() => openCommandInbox({ kind: "refunds" })} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">View Refunds</button>
+            <button onClick={() => openCommandInbox({ kind: "high-priority" })} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">View High Priority</button>
+            <button onClick={() => openCommandInbox({ kind: "open" })} className="rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">Open Command Inbox</button>
           </div>
         </div>
 
@@ -5717,13 +5894,42 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
           </div>
           <div className="grid grid-cols-2 gap-2 pt-3 md:grid-cols-4">
             {brandCounts.map(row => (
-              <div key={row.brand} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+              <div
+                role="button"
+                tabIndex={0}
+                key={row.brand}
+                onClick={() => openCommandInbox({ kind: "open", brand: row.brand })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openCommandInbox({ kind: "open", brand: row.brand });
+                  }
+                }}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              >
                 <div className="flex items-center gap-2">
                   <BrandPip brand={row.brand} />
                   <p className="truncate text-xs font-semibold text-gray-800">{row.brand}</p>
                 </div>
                 <p className="mt-2 text-2xl font-bold text-gray-900">{row.open}</p>
-                <p className="text-[10px] text-gray-400">{row.refunds} refund or return</p>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openCommandInbox({ kind: "refunds", brand: row.brand });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openCommandInbox({ kind: "refunds", brand: row.brand });
+                    }
+                  }}
+                  className="mt-1 inline-flex rounded border border-transparent text-[10px] font-semibold text-gray-500 hover:border-orange-200 hover:bg-orange-50 hover:px-1 hover:text-orange-700"
+                >
+                  {row.refunds} refund or return
+                </span>
               </div>
             ))}
           </div>
@@ -8901,10 +9107,11 @@ export default function JonnyOpsCommandCenter() {
   });
   const [appLocked, setAppLocked] = useState(() => {
     try {
+      if (localStorage.getItem(SHELL_UNLOCK_STORAGE_KEY) === "yes") return false;
       const saved = localStorage.getItem("ops_command_hub_locked");
       if (saved != null) return saved === "true";
     } catch {}
-    return true;
+    return false;
   });
   const [sidekickToast, setSidekickToast] = useState(false);
 
@@ -8918,6 +9125,8 @@ export default function JonnyOpsCommandCenter() {
   const [confirmConfig, setConfirmConfig] = useState(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [recentNewMessageCount, setRecentNewMessageCount] = useState(0);
+  const [lastInboxSyncAt, setLastInboxSyncAt] = useState("");
+  const [inboxFilter, setInboxFilter] = useState(null);
 
   const refreshInbox = async () => {
     setInboundLoading(true);
@@ -8926,6 +9135,7 @@ export default function JonnyOpsCommandCenter() {
     setInboundLoading(false);
     if (error) { setInboundError(`Inbox fetch failed: ${error.message}`); return; }
     setInboundMessages(data);
+    setLastInboxSyncAt(nowISO());
   };
 
   // ── Next Actions state ────────────────────────────────────────────────────────
@@ -9119,6 +9329,11 @@ export default function JonnyOpsCommandCenter() {
   const safeTickets = Array.isArray(tickets) ? tickets : [];
   const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
 
+  const openCommandInbox = (filter = { kind: "open" }) => {
+    setInboxFilter({ ...filter, requestedAt: Date.now() });
+    setActiveView("inbox");
+  };
+
   const openCount = safeTickets.filter(t => t.status !== "Resolved").length;
   const criticalSlaCount = safeTickets.filter(isActiveSlaRisk).length;
   const inboxNeedsReplyCount = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
@@ -9135,8 +9350,8 @@ export default function JonnyOpsCommandCenter() {
   const renderView = () => {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores, setInboundMessages };
     switch (activeView) {
-      case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} newMessageNoticeCount={recentNewMessageCount} />;
-      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} replacements={replacements} setReplacements={setReplacements} setActiveView={setActiveView} setReplacementFocus={setReplacementFocus} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
+      case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} openCommandInbox={openCommandInbox} newMessageNoticeCount={recentNewMessageCount} />;
+      case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} replacements={replacements} setReplacements={setReplacements} setActiveView={setActiveView} setReplacementFocus={setReplacementFocus} inboxFilter={inboxFilter} onClearInboxFilter={() => setInboxFilter(null)} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
       case "actions": return <NextActionQueueView opsActions={opsActions} setOpsActions={setOpsActions} opsLoading={opsLoading} opsError={opsError} onRefresh={refreshOpsActions} setActiveView={setActiveView} />;
       case "daily": return <DailyCommandView tickets={tickets} />;
       case "tickets": return <TicketQueueView tickets={tickets} setTickets={setTickets} />;
@@ -9147,7 +9362,7 @@ export default function JonnyOpsCommandCenter() {
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
       case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} inboundMessages={inboundMessages} />;
       case "data": return <DataManagementView {...common} />;
-      default: return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} setActiveView={setActiveView} newMessageNoticeCount={recentNewMessageCount} />;
+      default: return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} openCommandInbox={openCommandInbox} newMessageNoticeCount={recentNewMessageCount} />;
     }
   };
 
@@ -9167,11 +9382,26 @@ export default function JonnyOpsCommandCenter() {
     setMobileNavOpen(false);
   };
 
-  const toggleAppLock = () => {
-    setAppLocked(prev => {
-      const next = !prev;
-      try { localStorage.setItem("ops_command_hub_locked", String(next)); } catch {}
-      return next;
+  const lockWorkspace = () => {
+    try {
+      localStorage.removeItem(SHELL_UNLOCK_STORAGE_KEY);
+      localStorage.setItem("ops_command_hub_locked", "true");
+    } catch {}
+    setAppLocked(true);
+    const root = document.getElementById("root");
+    const passwordScreen = document.getElementById("password-screen");
+    if (root) root.style.display = "none";
+    if (passwordScreen) passwordScreen.style.display = "flex";
+    window.location.reload();
+  };
+
+  const requestWorkspaceLock = () => {
+    showOpsConfirm({
+      title: "Lock Ops Command Hub?",
+      body: "This will return the app to the password screen. You will need to unlock it again before continuing.",
+      confirmLabel: "Lock Workspace",
+      variant: "lock",
+      onConfirm: lockWorkspace,
     });
   };
 
@@ -9303,7 +9533,7 @@ export default function JonnyOpsCommandCenter() {
               </button>
             )}
             <button
-              onClick={() => handleNavClick("inbox")}
+              onClick={() => openCommandInbox({ kind: "open" })}
               className="relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800"
               aria-label="Open notifications"
               title="Notifications"
@@ -9315,14 +9545,14 @@ export default function JonnyOpsCommandCenter() {
             </button>
             <button
               type="button"
-              onClick={toggleAppLock}
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${appLocked ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-white" : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-white"}`}
-              aria-label={appLocked ? "Unlock Ops Command Hub" : "Lock Ops Command Hub"}
-              title={appLocked ? "Locked" : "Unlocked"}
+              onClick={requestWorkspaceLock}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-gray-50 hover:text-slate-900"
+              aria-label="Lock Workspace"
+              title="Lock Workspace"
             >
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <rect x="3.25" y="6.25" width="8.5" height="6" rx="1.4" stroke="currentColor" strokeWidth="1.4"/>
-                <path d={appLocked ? "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.5 0v1.5" : "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.08-1.31"} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M5.25 6.25V4.75a2.25 2.25 0 0 1 4.5 0v1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
               </svg>
             </button>
             <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-[10px] font-bold text-gray-700">
@@ -9340,18 +9570,25 @@ export default function JonnyOpsCommandCenter() {
               opsActions={safeOpsActions}
               replacements={safeReplacements}
               setActiveView={setActiveView}
+              openCommandInbox={openCommandInbox}
               agentAlertCount={agentAlertCount}
+            />
+            <SystemStatusPanel
+              inboundMessages={safeInboundMessages}
+              inboundLoading={inboundLoading}
+              inboundError={inboundError}
+              lastSyncAt={lastInboxSyncAt}
             />
             <button
               type="button"
-              onClick={toggleAppLock}
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${appLocked ? "border-slate-300 bg-slate-100 text-slate-700 hover:bg-white" : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-white"}`}
-              aria-label={appLocked ? "Unlock Ops Command Hub" : "Lock Ops Command Hub"}
-              title={appLocked ? "Locked" : "Unlocked"}
+              onClick={requestWorkspaceLock}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-gray-50 hover:text-slate-900"
+              aria-label="Lock Workspace"
+              title="Lock Workspace"
             >
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <rect x="3.25" y="6.25" width="8.5" height="6" rx="1.4" stroke="currentColor" strokeWidth="1.4"/>
-                <path d={appLocked ? "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.5 0v1.5" : "M5.25 6.25V4.75a2.25 2.25 0 0 1 4.08-1.31"} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M5.25 6.25V4.75a2.25 2.25 0 0 1 4.5 0v1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
               </svg>
             </button>
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xs font-bold text-gray-700">
