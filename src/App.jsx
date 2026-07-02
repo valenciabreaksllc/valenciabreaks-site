@@ -2946,6 +2946,16 @@ const archiveInboundInSupabase = async (id) => {
 
 // ─── REPLACEMENTS SUPABASE HELPERS ───────────────────────────────────────────
 
+const closeAndArchiveInboundInSupabase = async (id) => {
+  if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
+  const { error } = await supabase
+    .from(INBOUND_MESSAGES_TABLE)
+    .update({ status: "Closed", archived_at: nowISO(), updated_at: nowISO() })
+    .eq("id", id);
+  if (error) console.error("Supabase inbound close/archive error:", error);
+  return { error };
+};
+
 const fetchReplacementsFromSupabase = async () => {
   if (!supabase) return { data: [], error: { message: "No Supabase client." } };
   const { data, error } = await supabase
@@ -4012,6 +4022,25 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     });
   };
 
+  const runCloseAndArchiveMessage = async (id) => {
+    setBusyId(id);
+    const { error } = await closeAndArchiveInboundInSupabase(id);
+    setBusyId(null);
+    if (error) { showOpsToast(`Close and archive failed: ${error.message}`, { type: "error" }); return; }
+    setInboundMessages(prev => prev.filter(m => m.id !== id));
+    showOpsToast("Message closed and archived.");
+  };
+
+  const handleCloseAndArchive = (id) => {
+    showOpsConfirm({
+      title: "Close and archive this message?",
+      body: "This will mark the message as closed and remove it from the active inbox queue.",
+      confirmLabel: "Close + Archive",
+      variant: "archive",
+      onConfirm: () => runCloseAndArchiveMessage(id),
+    });
+  };
+
   const handleStatus = async (id, status) => {
     setBusyId(id);
     const { error } = await updateInboundStatusInSupabase(id, status);
@@ -4437,33 +4466,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           >
             + Manual Message
           </button>
-          {/* Check Gmail Now */}
-          <div className="flex flex-1 flex-col gap-0.5 sm:flex-none">
-            <button
-              onClick={handleCheckGmailNow}
-              disabled={isCheckingGmail || gmailCooldownSeconds > 0 || queueRunning || inboundLoading}
-              className="inline-flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 font-medium rounded-lg border border-gray-300 transition-colors cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap"
-            >
-              {isCheckingGmail ? (
-                <>
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin flex-shrink-0">
-                    <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                    <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Checking...
-                </>
-              ) : gmailCooldownSeconds > 0 ? `Available in ${gmailCooldownSeconds}s` : "Check Gmail Now"}
-            </button>
-            {lastGmailCheckAt && (
-              <span className="text-[10px] text-gray-400 text-center">
-                Last checked at {lastGmailCheckAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-              </span>
-            )}
-            {gmailCheckError && (
-              <span className="text-[10px] text-red-500 text-center">{gmailCheckError}</span>
-            )}
-          </div>
-          {/* Refresh */}
+          {/* Reload Queue */}
           <button
             onClick={onRefresh}
             disabled={inboundLoading || queueRunning}
@@ -4473,7 +4476,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               <path d="M8 4h2V2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            {inboundLoading ? "Refreshing..." : "Refresh"}
+            {inboundLoading ? "Reloading..." : "Reload Queue"}
           </button>
         </div>
       </div>
@@ -4804,29 +4807,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             )}
 
             {/* Message body */}
-            {displayBody && (
-              <div className="mb-2">
-                <button
-                  type="button"
-                  onClick={() => toggleMessageExpanded(msg.id)}
-                  aria-expanded={isMessageExpanded}
-                  className={`text-[10px] font-semibold rounded border px-2 py-1 transition-colors cursor-pointer ${
-                    isRefund
-                      ? "bg-black text-white border-black hover:bg-slate-800"
-                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:text-gray-700"
-                  }`}
-                >
-                  {isMessageExpanded ? "Hide Message" : "View Message"}
-                </button>
-                {isMessageExpanded && (
-                  <div className={`border rounded-lg px-3 py-2.5 mt-2 ${
-                    isRefund ? "bg-slate-50 border-slate-200" : "bg-gray-50 border-gray-100"
-                  }`}>
-                    <p className={`text-xs leading-relaxed whitespace-pre-wrap ${
-                      isRefund ? "text-gray-800" : "text-gray-700"
-                    }`}>{displayBody}</p>
-                  </div>
-                )}
+            {displayBody && isMessageExpanded && (
+              <div className={`mb-2 rounded-lg border px-3 py-2.5 ${
+                isRefund ? "bg-slate-50 border-slate-200" : "bg-gray-50 border-gray-100"
+              }`}>
+                <p className={`text-xs leading-relaxed whitespace-pre-wrap ${
+                  isRefund ? "text-gray-800" : "text-gray-700"
+                }`}>{displayBody}</p>
               </div>
             )}
 
@@ -4948,7 +4935,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </div>
             )}
 
-            {msg.ai_draft && (() => {
+            {isAssistantOpen && msg.ai_draft && (() => {
               const isDraftCollapsed = collapsedDrafts[msg.id] === true;
               const toggleCollapse = () => setCollapsedDrafts(prev => ({ ...prev, [msg.id]: !prev[msg.id] }));
               return (
@@ -4997,43 +4984,27 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             })()}
 
             {/* Action buttons */}
-            <div className="flex flex-wrap items-center gap-2">
-              {hasReplyText && (!msg.ai_draft || collapsedDrafts[msg.id] === true) && (
-                <button disabled={!hasReplyText} onClick={() => handleCopyReply(msg)}
-                  title={hasReplyText ? "Copy the approved reply or AI draft" : "Generate or approve a draft first"}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors whitespace-nowrap">
-                  {copiedDraftId === msg.id ? "Copied" : "Copy Reply"}
-                </button>
-              )}
-              {msg.status !== "Closed" && (
-                <button disabled={isBusy} onClick={() => handleStatus(msg.id, "Closed")}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                  Mark Closed
-                </button>
-              )}
-              <button disabled={isBusy} onClick={() => handleRunTriage(msg.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isBusy ? "Triaging..." : "Run Triage"}
-              </button>
-              <button disabled={isDraftBusy || isBusy} onClick={() => handleGenerateDraft(msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isDraftBusy ? "Drafting..." : msg.ai_draft ? "Regenerate Draft" : "Generate Draft"}
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+              <button
+                type="button"
+                disabled={!displayBody}
+                onClick={() => setExpandedMessages(prev => ({ ...prev, [msg.id]: true }))}
+                aria-expanded={isMessageExpanded}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors whitespace-nowrap"
+              >
+                View Message
               </button>
               <button disabled={isBusy || isAssistantLoading} onClick={() => handleAskAssistant(msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isAssistantLoading ? "Reviewing..." : isAssistantOpen ? "Hide Assistant" : "Ask Assistant"}
               </button>
               <button disabled={isBusy} onClick={() => handleSendToReplacementLog(msg)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isBusy ? "Sending..." : replacementButtonLabel}
               </button>
-              <button disabled={isBusy} onClick={() => handleArchive(msg.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
-                <svg width="11" height="11" viewBox="0 0 13 13" fill="none">
-                  <path d="M1.5 3.5h10M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M2.5 3.5l.5 7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1l.5-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M5 6v3M8 6v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                </svg>
-                Archive
+              <button disabled={isBusy} onClick={() => handleCloseAndArchive(msg.id)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
+                {isBusy ? "Closing..." : "Mark Closed + Archive"}
               </button>
             </div>
           </Card>
