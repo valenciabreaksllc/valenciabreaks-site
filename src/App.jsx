@@ -2525,6 +2525,7 @@ const ICONS = {
   replacements: <><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></>,
   studio: <><rect x="1" y="5" width="6" height="9" rx="1" stroke="currentColor" strokeWidth="1.3" fill="none"/><rect x="9" y="2" width="6" height="12" rx="1" stroke="currentColor" strokeWidth="1.3" fill="none"/></>,
   sets: <path d="M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5L8 1z" stroke="currentColor" strokeWidth="1.2" fill="none"/>,
+  pricecheck: <><path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 6h6M5 9h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11 9.5c0 .83-.67 1.5-1.5 1.5S8 10.33 8 9.5 8.67 8 9.5 8 11 8.67 11 9.5z" stroke="currentColor" strokeWidth="1.1" fill="none"/></>,
   weekly: <path d="M2 12l3-5 3 2 3-6 3 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
   data: <><ellipse cx="8" cy="4" rx="5" ry="2" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M3 4v4c0 1.1 2.24 2 5 2s5-.9 5-2V4" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M3 8v4c0 1.1 2.24 2 5 2s5-.9 5-2V8" stroke="currentColor" strokeWidth="1.3" fill="none"/></>,
   inbox: <><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M1 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></>,
@@ -2545,7 +2546,7 @@ const NavItem = ({ id, label, active, onClick, badge, showLabel = true }) => (
 
 const NAV = [
   { section: null, items: [{ id: "dashboard", label: "Dashboard" }, { id: "inbox", label: "Command Inbox" }] },
-  { section: "Operations", items: [{ id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }, { id: "sets", label: "Surprise Sets" }] },
+  { section: "Operations", items: [{ id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }, { id: "pricecheck", label: "Price Check" }, { id: "sets", label: "Surprise Sets" }] },
   { section: "Reporting", items: [{ id: "weekly", label: "Reports" }, { id: "data", label: "Settings" }] },
 ];
 
@@ -8800,6 +8801,330 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
 };
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────────────────────────
+const parsePriceCheckCsv = (text) => {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  const input = String(text || "");
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    if (char === '"') {
+      if (quoted && input[i + 1] === '"') { cell += '"'; i += 1; }
+      else quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && input[i + 1] === "\n") i += 1;
+      row.push(cell);
+      if (row.some(value => String(value || "").trim() !== "")) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell);
+  if (row.some(value => String(value || "").trim() !== "")) rows.push(row);
+  if (rows.length === 0) return { headers: [], rows: [] };
+  const headers = rows[0].map(header => String(header || "").trim());
+  return { headers, rows: rows.slice(1).map(cells => headers.map((_, index) => cells[index] ?? "")) };
+};
+
+const priceCheckHeaderKey = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+const findPriceCheckHeader = (headers, ...names) => {
+  const keys = headers.map(priceCheckHeaderKey);
+  return names.map(name => keys.indexOf(priceCheckHeaderKey(name))).find(index => index >= 0) ?? -1;
+};
+const csvEscape = (value) => {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+const buildCsvText = (headers, rows) => [headers, ...rows].map(row => row.map(csvEscape).join(",")).join("\r\n");
+const downloadTextFile = (content, fileName, type = "text/csv;charset=utf-8") => {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+const parsePriceNumber = (value) => {
+  const number = Number(String(value ?? "").replace(/[$,]/g, "").trim());
+  return Number.isFinite(number) ? number : null;
+};
+const formatPrice = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "";
+};
+const roundPriceUpToFiveCents = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "";
+  return Math.ceil((number - 0.000001) * 20) / 20;
+};
+const getPriceCheckTitleFlags = (title) => {
+  const lower = String(title || "").toLowerCase();
+  return [
+    lower.includes("combo") ? "Title contains combo" : null,
+    lower.includes("premium pack") ? "Title contains premium pack" : null,
+    lower.includes("rippiez") ? "Title contains Rippiez" : null,
+    lower.includes("auction") ? "Title contains auction" : null,
+    lower.includes("mystery") ? "Title contains mystery" : null,
+    lower.includes("vaulted rarities") ? "Title contains Vaulted Rarities" : null,
+  ].filter(Boolean);
+};
+const getPriceCheckComputed = (row) => {
+  const tcg = parsePriceNumber(row.tcgAverage);
+  const current = parsePriceNumber(row.currentPrice);
+  const override = parsePriceNumber(row.overrideFinalPrice);
+  const suggested = tcg == null ? "" : tcg * 1.15;
+  const rounded = override != null ? override : (suggested === "" ? "" : roundPriceUpToFiveCents(suggested));
+  const diff = rounded !== "" && current != null ? rounded - current : "";
+  const changePct = diff !== "" && current > 0 ? Math.abs(diff / current) : 0;
+  const flags = [
+    ...getPriceCheckTitleFlags(row.title),
+    Number(row.inventoryQty || 0) === 0 ? "Inventory quantity is 0" : null,
+    tcg == null ? "No TCG average entered" : null,
+    changePct > 0.3 ? "Suggested price changes more than 30%" : null,
+  ].filter(Boolean);
+  const status =
+    row.status === "Approved" ? "Approved" :
+    row.status === "Skipped" ? "Skipped" :
+    row.status === "Do Not Price" ? "Do Not Price" :
+    tcg == null ? "Needs TCG Check" :
+    flags.length > 0 ? "Needs Review" :
+    "TCG Price Entered";
+  return { tcg, current, suggested, rounded, diff, changePct, flags, status };
+};
+
+const PriceCheckView = () => {
+  const [sourceName, setSourceName] = useState("");
+  const [headers, setHeaders] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [message, setMessage] = useState("");
+  const titleIndex = findPriceCheckHeader(headers, "Title", "Product Title");
+  const handleIndex = findPriceCheckHeader(headers, "Handle");
+  const skuIndex = findPriceCheckHeader(headers, "Variant SKU", "SKU");
+  const priceIndex = findPriceCheckHeader(headers, "Variant Price", "Price");
+  const qtyIndex = findPriceCheckHeader(headers, "Variant Inventory Qty", "Variant Inventory Quantity", "Inventory Quantity");
+  const hasRequiredHeaders = headers.length > 0 && titleIndex >= 0 && handleIndex >= 0 && skuIndex >= 0 && priceIndex >= 0;
+
+  const reviewRows = rows.map(row => ({ ...row, computed: getPriceCheckComputed(row) }));
+  const uploadedCount = rows.length;
+  const needsTcg = reviewRows.filter(row => row.computed.status === "Needs TCG Check").length;
+  const approvedCount = reviewRows.filter(row => row.computed.status === "Approved").length;
+  const skippedCount = reviewRows.filter(row => row.computed.status === "Skipped" || row.computed.status === "Do Not Price").length;
+
+  const handleFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parsePriceCheckCsv(reader.result);
+      if (!parsed.headers.length) {
+        setMessage("No rows found in that CSV.");
+        setHeaders([]);
+        setRows([]);
+        return;
+      }
+      const nextTitleIndex = findPriceCheckHeader(parsed.headers, "Title", "Product Title");
+      const nextHandleIndex = findPriceCheckHeader(parsed.headers, "Handle");
+      const nextSkuIndex = findPriceCheckHeader(parsed.headers, "Variant SKU", "SKU");
+      const nextPriceIndex = findPriceCheckHeader(parsed.headers, "Variant Price", "Price");
+      const nextQtyIndex = findPriceCheckHeader(parsed.headers, "Variant Inventory Qty", "Variant Inventory Quantity", "Inventory Quantity");
+      const normalized = parsed.rows.map((cells, index) => ({
+        id: `price-${Date.now()}-${index}`,
+        originalCells: cells,
+        title: cells[nextTitleIndex] || "",
+        handle: cells[nextHandleIndex] || "",
+        sku: cells[nextSkuIndex] || "",
+        currentPrice: cells[nextPriceIndex] || "",
+        inventoryQty: nextQtyIndex >= 0 ? cells[nextQtyIndex] || "0" : "0",
+        tcgAverage: "",
+        overrideFinalPrice: "",
+        status: "Needs TCG Check",
+        notes: "",
+      }));
+      setSourceName(file.name);
+      setHeaders(parsed.headers);
+      setRows(normalized);
+      setMessage(`Loaded ${normalized.length} Shopify row${normalized.length === 1 ? "" : "s"} from ${file.name}.`);
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  };
+
+  const updateRow = (id, patch) => setRows(prev => prev.map(row => row.id === id ? { ...row, ...patch } : row));
+  const markTcgEntered = (row) => {
+    const computed = getPriceCheckComputed(row);
+    updateRow(row.id, { status: computed.tcg == null ? "Needs TCG Check" : "TCG Price Entered" });
+  };
+  const approveRow = (row) => {
+    const computed = getPriceCheckComputed(row);
+    if (computed.tcg == null || computed.rounded === "") {
+      updateRow(row.id, { status: "Needs TCG Check", notes: "Enter a TCG verified average before approving." });
+      return;
+    }
+    updateRow(row.id, { status: "Approved", notes: computed.flags.length ? `Approved with review flags: ${computed.flags.join("; ")}` : row.notes });
+  };
+  const exportApprovedShopifyCsv = () => {
+    if (!hasRequiredHeaders || priceIndex < 0) {
+      setMessage("Upload a Shopify CSV with Title, Handle, Variant SKU, and Variant Price columns first.");
+      return;
+    }
+    const outputRows = rows.map(row => {
+      const computed = getPriceCheckComputed(row);
+      const nextCells = [...row.originalCells];
+      if (computed.status === "Approved" && computed.rounded !== "") nextCells[priceIndex] = formatPrice(computed.rounded);
+      return headers.map((_, index) => nextCells[index] ?? "");
+    });
+    downloadTextFile(buildCsvText(headers, outputRows), `shopify-approved-price-update-${todayDate()}.csv`);
+  };
+  const exportAuditCsv = () => {
+    const auditHeaders = ["Product title", "SKU", "Old price", "New price", "TCG average", "Status", "Notes"];
+    const auditRows = reviewRows.map(row => [
+      row.title,
+      row.sku,
+      row.currentPrice,
+      row.computed.status === "Approved" && row.computed.rounded !== "" ? formatPrice(row.computed.rounded) : row.currentPrice,
+      row.tcgAverage,
+      row.computed.status,
+      [row.notes, ...row.computed.flags].filter(Boolean).join("; "),
+    ]);
+    downloadTextFile(buildCsvText(auditHeaders, auditRows), `price-review-audit-${todayDate()}.csv`);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Shopify Price Review</h2>
+        <p className="mt-0.5 text-xs text-gray-400">Manual TCGplayer average review. Export-only. No Shopify or TCGplayer connection.</p>
+      </div>
+
+      {message && <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700">{message}</div>}
+
+      <Card className="p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-gray-900">Review Setup</p>
+            <p className="mt-1 text-xs text-gray-400">{sourceName ? `Source file: ${sourceName}` : "Upload a Shopify product CSV to begin."}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">
+                Upload Shopify CSV
+                <input type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+              </label>
+              <BtnPrimary onClick={exportApprovedShopifyCsv} disabled={!rows.length || !approvedCount}>Export Approved Shopify CSV</BtnPrimary>
+              <BtnSecondary onClick={exportAuditCsv} disabled={!rows.length}>Export Review Audit CSV</BtnSecondary>
+            </div>
+            {!hasRequiredHeaders && headers.length > 0 && (
+              <p className="mt-2 text-xs font-medium text-amber-700">This CSV is missing one or more required Shopify columns: Title, Handle, Variant SKU, Variant Price.</p>
+            )}
+          </div>
+          <div className="w-full rounded-lg border border-gray-100 bg-gray-50 p-3 xl:w-[420px]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Pricing Rules</p>
+            <div className="mt-2 grid grid-cols-1 gap-1.5 text-xs text-gray-600 sm:grid-cols-2">
+              {[
+                ["Source", "TCGplayer manual verified average"],
+                ["Seller sales minimum", "10,000+"],
+                ["Preferred seller tier", "50,000+"],
+                ["Minimum listing quantity", "6"],
+                ["Multiplier", "1.15"],
+                ["Rounding", "Up to nearest 0 or 5"],
+                ["Approval", "Manual approval required"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded border border-gray-100 bg-white px-2 py-1.5">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
+                  <span className="font-semibold text-gray-700">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[
+          ["Products Uploaded", uploadedCount],
+          ["Needs TCG Check", needsTcg],
+          ["Approved", approvedCount],
+          ["Skipped / Do Not Price", skippedCount],
+        ].map(([label, value]) => (
+          <Card key={label} className="p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
+            <p className="mt-1 text-3xl font-bold text-gray-900">{value}</p>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Review Table</p>
+            <p className="text-xs text-gray-400">Only approved rows export with changed Variant Price.</p>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[1680px] w-full text-left text-xs">
+            <thead className="border-y border-gray-100 bg-gray-50 text-gray-500">
+              <tr>
+                {["Product title", "Handle", "Variant SKU", "Current Variant Price", "Variant Inventory Qty", "TCG verified average", "Suggested price", "Final rounded price", "Difference", "Status", "Actions"].map(label => (
+                  <th key={label} className="px-3 py-2 font-bold">{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {reviewRows.length ? reviewRows.map(row => {
+                const c = row.computed;
+                const statusClass =
+                  c.status === "Approved" ? "border-slate-200 bg-slate-50 text-slate-700" :
+                  c.status === "Needs Review" ? "border-amber-200 bg-amber-50 text-amber-800" :
+                  c.status === "Do Not Price" ? "border-gray-300 bg-gray-100 text-gray-600" :
+                  c.status === "Skipped" ? "border-gray-200 bg-gray-50 text-gray-500" :
+                  "border-gray-200 bg-white text-gray-600";
+                return (
+                  <tr key={row.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-semibold text-gray-800">{row.title || "-"}</td>
+                    <td className="px-3 py-2 text-gray-500">{row.handle || "-"}</td>
+                    <td className="px-3 py-2 font-mono text-gray-600">{row.sku || "-"}</td>
+                    <td className="px-3 py-2 font-mono text-gray-700">{formatPrice(c.current)}</td>
+                    <td className="px-3 py-2 font-mono text-gray-700">{row.inventoryQty || "0"}</td>
+                    <td className="px-3 py-2"><Inp type="number" value={row.tcgAverage} onChange={value => updateRow(row.id, { tcgAverage: value, status: value ? "TCG Price Entered" : "Needs TCG Check" })} placeholder="0.00" className="w-28" /></td>
+                    <td className="px-3 py-2 font-mono text-gray-700">{c.suggested === "" ? "-" : formatPrice(c.suggested)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-16 font-mono text-gray-800">{c.rounded === "" ? "-" : formatPrice(c.rounded)}</span>
+                        <Inp type="number" value={row.overrideFinalPrice} onChange={value => updateRow(row.id, { overrideFinalPrice: value, status: value ? "Needs Review" : row.status })} placeholder="Override" className="w-28" />
+                      </div>
+                    </td>
+                    <td className={`px-3 py-2 font-mono ${Number(c.diff) > 0 ? "text-emerald-700" : Number(c.diff) < 0 ? "text-red-700" : "text-gray-500"}`}>{c.diff === "" ? "-" : `${Number(c.diff) >= 0 ? "+" : ""}${formatPrice(c.diff)}`}</td>
+                    <td className="px-3 py-2">
+                      <Badge label={c.status} className={statusClass} />
+                      {c.flags.length > 0 && <p className="mt-1 max-w-[220px] text-[10px] leading-relaxed text-amber-700">{c.flags.join("; ")}</p>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        <button onClick={() => markTcgEntered(row)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Enter TCG Price</button>
+                        <button onClick={() => approveRow(row)} className="rounded border border-slate-800 bg-slate-700 px-2 py-1 text-[10px] font-semibold text-white hover:bg-slate-800">Approve Price</button>
+                        <button onClick={() => updateRow(row.id, { status: "Skipped" })} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Skip</button>
+                        <button onClick={() => updateRow(row.id, { status: "Needs Review", notes: "Override final price before approving." })} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Override Final Price</button>
+                        <button onClick={() => updateRow(row.id, { status: "Do Not Price" })} className="rounded border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700 hover:bg-orange-100">Mark Do Not Price</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr><td colSpan={11} className="px-3 py-10 text-center text-sm font-medium text-gray-300">Upload a Shopify CSV to start reviewing prices.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
 const DataManagementView = ({ tickets, replacements, studios, surpriseSets, setTickets, setReplacements, setStudios, setSurpriseSets, raiseScores, setInboundMessages }) => {
 const [importErr, setImportErr] = useState("");
 const [clearErr, setClearErr] = useState("");
@@ -9047,7 +9372,7 @@ const getSidekickTicketFromHash = () => {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function JonnyOpsCommandCenter() {
   const [activeView, setActiveViewRaw] = useState(() => {
-    const VALID_VIEWS = new Set(["dashboard","inbox","replacements","studio","sets","weekly","data"]);
+    const VALID_VIEWS = new Set(["dashboard","inbox","replacements","studio","pricecheck","sets","weekly","data"]);
     try {
       const saved = localStorage.getItem("ops_active_view");
       if (saved && VALID_VIEWS.has(saved)) return saved;
@@ -9330,6 +9655,7 @@ export default function JonnyOpsCommandCenter() {
       case "cs": return <CSTemplateView setTickets={setTickets} />;
       case "replacements": return <ReplacementLogView replacements={replacements} setReplacements={setReplacements} replacementsLoading={replacementsLoading} replacementsError={replacementsError} onRefresh={refreshReplacements} replacementFocus={replacementFocus} />;
       case "studio": return <StudioReadinessView studios={studios} setStudios={setStudios} />;
+      case "pricecheck": return <PriceCheckView />;
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
       case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} inboundMessages={inboundMessages} />;
       case "data": return <DataManagementView {...common} />;
@@ -9343,7 +9669,7 @@ export default function JonnyOpsCommandCenter() {
   const PAGE_LABELS = {
     dashboard: "Dashboard", inbox: "Command Inbox", actions: "Action Queue",
     daily: "Daily Command Board", tickets: "Tickets", replacements: "Replacements",
-    studio: "Inventory", sets: "Surprise Sets", browser: "Browser Profiles",
+    studio: "Inventory", pricecheck: "Price Check", sets: "Surprise Sets", browser: "Browser Profiles",
     cs: "CS Templates", weekly: "Reports", data: "Settings",
   };
 
