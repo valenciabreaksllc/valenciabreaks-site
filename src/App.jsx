@@ -8870,11 +8870,20 @@ const getPriceCheckTitleFlags = (title) => {
     lower.includes("combo") ? "Title contains combo" : null,
     lower.includes("premium pack") ? "Title contains premium pack" : null,
     lower.includes("rippiez") ? "Title contains Rippiez" : null,
+    lower.includes("electric vault") ? "Title contains Electric Vault" : null,
+    lower.includes("heart of gold") ? "Title contains Heart of Gold" : null,
+    lower.includes("ultra vault") ? "Title contains Ultra Vault" : null,
     lower.includes("auction") ? "Title contains auction" : null,
     lower.includes("mystery") ? "Title contains mystery" : null,
+    lower.includes("secret series") ? "Title contains Secret Series" : null,
+    lower.includes("poke premium pack") ? "Title contains Poke Premium Pack" : null,
+    lower.includes("raw pkmn single") ? "Title contains Raw PKMN Single" : null,
+    lower.includes("mtg single card") ? "Title contains MTG Single Card" : null,
     lower.includes("vaulted rarities") ? "Title contains Vaulted Rarities" : null,
   ].filter(Boolean);
 };
+const isPriceCheckCustomProduct = (title) => getPriceCheckTitleFlags(title).length > 0;
+const stripPriceCheckHtml = (value) => String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 const getPriceCheckComputed = (row) => {
   const tcg = parsePriceNumber(row.tcgAverage);
   const current = parsePriceNumber(row.currentPrice);
@@ -8904,63 +8913,97 @@ const PriceCheckView = () => {
   const [headers, setHeaders] = useState([]);
   const [rows, setRows] = useState([]);
   const [message, setMessage] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [viewMode, setViewMode] = useState("Card Review");
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [manualRowId, setManualRowId] = useState(null);
+  const [manualPrice, setManualPrice] = useState("");
+  const [manualNote, setManualNote] = useState("");
   const titleIndex = findPriceCheckHeader(headers, "Title", "Product Title");
   const handleIndex = findPriceCheckHeader(headers, "Handle");
   const skuIndex = findPriceCheckHeader(headers, "Variant SKU", "SKU");
   const priceIndex = findPriceCheckHeader(headers, "Variant Price", "Price");
-  const qtyIndex = findPriceCheckHeader(headers, "Variant Inventory Qty", "Variant Inventory Quantity", "Inventory Quantity");
   const hasRequiredHeaders = headers.length > 0 && titleIndex >= 0 && handleIndex >= 0 && skuIndex >= 0 && priceIndex >= 0;
-
   const reviewRows = rows.map(row => ({ ...row, computed: getPriceCheckComputed(row) }));
-  const uploadedCount = rows.length;
-  const needsTcg = reviewRows.filter(row => row.computed.status === "Needs TCG Check").length;
+  const filteredRows = reviewRows.filter(row => {
+    if (activeFilter === "Ready to Approve") return row.computed.status === "TCG Price Entered";
+    if (activeFilter === "Needs Review") return row.computed.status === "Needs Review" || row.computed.status === "Needs TCG Check";
+    if (activeFilter === "Approved") return row.computed.status === "Approved";
+    if (activeFilter === "Skipped") return row.computed.status === "Skipped";
+    if (activeFilter === "Do Not Price") return row.computed.status === "Do Not Price";
+    return true;
+  });
+  const activeRow = filteredRows[Math.min(currentIndex, Math.max(0, filteredRows.length - 1))] || null;
   const approvedCount = reviewRows.filter(row => row.computed.status === "Approved").length;
-  const skippedCount = reviewRows.filter(row => row.computed.status === "Skipped" || row.computed.status === "Do Not Price").length;
+  const needsReviewCount = reviewRows.filter(row => row.computed.status === "Needs Review" || row.computed.status === "Needs TCG Check").length;
+  const readyCount = reviewRows.filter(row => row.computed.status === "TCG Price Entered").length;
+  const skippedCount = reviewRows.filter(row => row.computed.status === "Skipped").length;
+  const doNotPriceCount = reviewRows.filter(row => row.computed.status === "Do Not Price").length;
+
+  const updateRow = (id, patch) => setRows(prev => prev.map(row => row.id === id ? { ...row, ...patch } : row));
+  const moveCard = (delta) => setCurrentIndex(prev => {
+    const max = Math.max(0, filteredRows.length - 1);
+    return Math.min(max, Math.max(0, prev + delta));
+  });
+  const moveNextAfterAction = () => setTimeout(() => moveCard(1), 0);
 
   const handleFile = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setProcessing(true);
+    setMessage("");
     const reader = new FileReader();
     reader.onload = () => {
-      const parsed = parsePriceCheckCsv(reader.result);
-      if (!parsed.headers.length) {
-        setMessage("No rows found in that CSV.");
-        setHeaders([]);
-        setRows([]);
-        return;
-      }
-      const nextTitleIndex = findPriceCheckHeader(parsed.headers, "Title", "Product Title");
-      const nextHandleIndex = findPriceCheckHeader(parsed.headers, "Handle");
-      const nextSkuIndex = findPriceCheckHeader(parsed.headers, "Variant SKU", "SKU");
-      const nextPriceIndex = findPriceCheckHeader(parsed.headers, "Variant Price", "Price");
-      const nextQtyIndex = findPriceCheckHeader(parsed.headers, "Variant Inventory Qty", "Variant Inventory Quantity", "Inventory Quantity");
-      const normalized = parsed.rows.map((cells, index) => ({
-        id: `price-${Date.now()}-${index}`,
-        originalCells: cells,
-        title: cells[nextTitleIndex] || "",
-        handle: cells[nextHandleIndex] || "",
-        sku: cells[nextSkuIndex] || "",
-        currentPrice: cells[nextPriceIndex] || "",
-        inventoryQty: nextQtyIndex >= 0 ? cells[nextQtyIndex] || "0" : "0",
-        tcgAverage: "",
-        overrideFinalPrice: "",
-        status: "Needs TCG Check",
-        notes: "",
-      }));
-      setSourceName(file.name);
-      setHeaders(parsed.headers);
-      setRows(normalized);
-      setMessage(`Loaded ${normalized.length} Shopify row${normalized.length === 1 ? "" : "s"} from ${file.name}.`);
+      setTimeout(() => {
+        const parsed = parsePriceCheckCsv(reader.result);
+        if (!parsed.headers.length) {
+          setMessage("No rows found in that CSV.");
+          setHeaders([]);
+          setRows([]);
+          setProcessing(false);
+          return;
+        }
+        const nextTitleIndex = findPriceCheckHeader(parsed.headers, "Title", "Product Title");
+        const nextHandleIndex = findPriceCheckHeader(parsed.headers, "Handle");
+        const nextSkuIndex = findPriceCheckHeader(parsed.headers, "Variant SKU", "SKU");
+        const nextPriceIndex = findPriceCheckHeader(parsed.headers, "Variant Price", "Price");
+        const nextQtyIndex = findPriceCheckHeader(parsed.headers, "Variant Inventory Qty", "Variant Inventory Quantity", "Inventory Quantity");
+        const nextImageIndex = findPriceCheckHeader(parsed.headers, "Image Src", "Image URL", "Variant Image", "Image");
+        const nextBodyIndex = findPriceCheckHeader(parsed.headers, "Body (HTML)", "Body HTML", "Description", "Short Description");
+        const normalized = parsed.rows.map((cells, index) => {
+          const title = cells[nextTitleIndex] || "";
+          const customFlags = getPriceCheckTitleFlags(title);
+          return {
+            id: `price-${Date.now()}-${index}`,
+            originalCells: cells,
+            title,
+            handle: cells[nextHandleIndex] || "",
+            sku: cells[nextSkuIndex] || "",
+            currentPrice: cells[nextPriceIndex] || "",
+            inventoryQty: nextQtyIndex >= 0 ? cells[nextQtyIndex] || "0" : "0",
+            imageSrc: nextImageIndex >= 0 ? cells[nextImageIndex] || "" : "",
+            description: nextBodyIndex >= 0 ? stripPriceCheckHtml(cells[nextBodyIndex]) : "",
+            tcgAverage: "",
+            overrideFinalPrice: "",
+            status: customFlags.length ? "Do Not Price" : "Needs TCG Check",
+            notes: customFlags.length ? `Auto Do Not Price: ${customFlags.join("; ")}` : "",
+          };
+        });
+        setSourceName(file.name);
+        setHeaders(parsed.headers);
+        setRows(normalized);
+        setCurrentIndex(0);
+        setActiveFilter("All");
+        setViewMode("Card Review");
+        setMessage(`Loaded ${normalized.length} Shopify row${normalized.length === 1 ? "" : "s"} from ${file.name}.`);
+        setProcessing(false);
+      }, 650);
     };
     reader.readAsText(file);
     event.target.value = "";
   };
 
-  const updateRow = (id, patch) => setRows(prev => prev.map(row => row.id === id ? { ...row, ...patch } : row));
-  const markTcgEntered = (row) => {
-    const computed = getPriceCheckComputed(row);
-    updateRow(row.id, { status: computed.tcg == null ? "Needs TCG Check" : "TCG Price Entered" });
-  };
   const approveRow = (row) => {
     const computed = getPriceCheckComputed(row);
     if (computed.tcg == null || computed.rounded === "") {
@@ -8968,6 +9011,38 @@ const PriceCheckView = () => {
       return;
     }
     updateRow(row.id, { status: "Approved", notes: computed.flags.length ? `Approved with review flags: ${computed.flags.join("; ")}` : row.notes });
+    moveNextAfterAction();
+  };
+  const openManualPrice = (row) => {
+    const rowIndex = rows.findIndex(item => item.id === row.id);
+    if (rowIndex >= 0) {
+      setActiveFilter("All");
+      setCurrentIndex(rowIndex);
+      setViewMode("Card Review");
+    }
+    setManualRowId(row.id);
+    setManualPrice(row.computed.rounded === "" ? "" : formatPrice(row.computed.rounded));
+    setManualNote(row.notes || "");
+  };
+  const saveManualPrice = () => {
+    const price = parsePriceNumber(manualPrice);
+    if (price == null) {
+      setMessage("Enter a valid manual final price.");
+      return;
+    }
+    updateRow(manualRowId, { overrideFinalPrice: formatPrice(price), status: "Approved", notes: manualNote || "Manual final price override approved." });
+    setManualRowId(null);
+    setManualPrice("");
+    setManualNote("");
+    moveNextAfterAction();
+  };
+  const skipRow = (row) => {
+    updateRow(row.id, { status: "Skipped" });
+    moveNextAfterAction();
+  };
+  const doNotPriceRow = (row) => {
+    updateRow(row.id, { status: "Do Not Price" });
+    moveNextAfterAction();
   };
   const exportApprovedShopifyCsv = () => {
     if (!hasRequiredHeaders || priceIndex < 0) {
@@ -8996,131 +9071,206 @@ const PriceCheckView = () => {
     downloadTextFile(buildCsvText(auditHeaders, auditRows), `price-review-audit-${todayDate()}.csv`);
   };
 
+  if (!rows.length && !processing) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Card className="w-full max-w-xl p-8 text-center">
+          <h2 className="text-2xl font-bold text-gray-900">Shopify Price Review</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500">Import your Shopify product export to begin reviewing prices.</p>
+          <label className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800">
+            Import Product Sheet
+            <input type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+          </label>
+        </Card>
+      </div>
+    );
+  }
+
+  if (processing) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Card className="w-full max-w-xl p-8">
+          <p className="text-xl font-bold text-gray-900">Loading products...</p>
+          <div className="mt-5 space-y-3">
+            {["Reading Shopify CSV", "Finding Variant Price", "Detecting custom products", "Building review queue"].map((item, index) => (
+              <div key={item} className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <span className={`h-2 w-2 rounded-full ${index === 3 ? "bg-slate-700" : "bg-slate-300"}`} />
+                <span className="text-sm font-semibold text-gray-700">{item}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const statusClass = (status) =>
+    status === "Approved" ? "border-slate-200 bg-slate-50 text-slate-700" :
+    status === "Needs Review" || status === "Needs TCG Check" ? "border-amber-200 bg-amber-50 text-amber-800" :
+    status === "Do Not Price" ? "border-gray-300 bg-gray-100 text-gray-600" :
+    status === "Skipped" ? "border-gray-200 bg-gray-50 text-gray-500" :
+    "border-gray-200 bg-white text-gray-600";
+
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Shopify Price Review</h2>
-        <p className="mt-0.5 text-xs text-gray-400">Manual TCGplayer average review. Export-only. No Shopify or TCGplayer connection.</p>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Shopify Price Review</h2>
+          <p className="mt-0.5 text-xs text-gray-400">{sourceName ? `Source file: ${sourceName}` : "Manual TCGplayer average review. Export-only."}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">
+            Import Product Sheet
+            <input type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
+          </label>
+          <BtnPrimary onClick={exportApprovedShopifyCsv} disabled={!rows.length || !approvedCount}>Export Approved Shopify CSV</BtnPrimary>
+          <BtnSecondary onClick={exportAuditCsv} disabled={!rows.length}>Export Review Audit CSV</BtnSecondary>
+        </div>
       </div>
 
       {message && <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700">{message}</div>}
+      {!hasRequiredHeaders && headers.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800">This CSV is missing one or more required Shopify columns: Title, Handle, Variant SKU, Variant Price.</div>}
 
       <Card className="p-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-gray-900">Review Setup</p>
-            <p className="mt-1 text-xs text-gray-400">{sourceName ? `Source file: ${sourceName}` : "Upload a Shopify product CSV to begin."}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50">
-                Upload Shopify CSV
-                <input type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
-              </label>
-              <BtnPrimary onClick={exportApprovedShopifyCsv} disabled={!rows.length || !approvedCount}>Export Approved Shopify CSV</BtnPrimary>
-              <BtnSecondary onClick={exportAuditCsv} disabled={!rows.length}>Export Review Audit CSV</BtnSecondary>
-            </div>
-            {!hasRequiredHeaders && headers.length > 0 && (
-              <p className="mt-2 text-xs font-medium text-amber-700">This CSV is missing one or more required Shopify columns: Title, Handle, Variant SKU, Variant Price.</p>
-            )}
-          </div>
-          <div className="w-full rounded-lg border border-gray-100 bg-gray-50 p-3 xl:w-[420px]">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Pricing Rules</p>
-            <div className="mt-2 grid grid-cols-1 gap-1.5 text-xs text-gray-600 sm:grid-cols-2">
-              {[
-                ["Source", "TCGplayer manual verified average"],
-                ["Seller sales minimum", "10,000+"],
-                ["Preferred seller tier", "50,000+"],
-                ["Minimum listing quantity", "6"],
-                ["Multiplier", "1.15"],
-                ["Rounding", "Up to nearest 0 or 5"],
-                ["Approval", "Manual approval required"],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded border border-gray-100 bg-white px-2 py-1.5">
-                  <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
-                  <span className="font-semibold text-gray-700">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {[
-          ["Products Uploaded", uploadedCount],
-          ["Needs TCG Check", needsTcg],
-          ["Approved", approvedCount],
-          ["Skipped / Do Not Price", skippedCount],
-        ].map(([label, value]) => (
-          <Card key={label} className="p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
-            <p className="mt-1 text-3xl font-bold text-gray-900">{value}</p>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-sm font-bold text-gray-900">Review Table</p>
-            <p className="text-xs text-gray-400">Only approved rows export with changed Variant Price.</p>
+            <p className="text-sm font-bold text-gray-900">Product {filteredRows.length ? Math.min(currentIndex + 1, filteredRows.length) : 0} of {filteredRows.length}</p>
+            <p className="text-xs text-gray-400">{rows.length} uploaded products in this review queue.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {[["Approved", approvedCount], ["Needs Review", needsReviewCount], ["Ready to Approve", readyCount], ["Skipped", skippedCount], ["Do Not Price", doNotPriceCount]].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                <p className="text-lg font-bold text-gray-900">{value}</p>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-[1680px] w-full text-left text-xs">
-            <thead className="border-y border-gray-100 bg-gray-50 text-gray-500">
-              <tr>
-                {["Product title", "Handle", "Variant SKU", "Current Variant Price", "Variant Inventory Qty", "TCG verified average", "Suggested price", "Final rounded price", "Difference", "Status", "Actions"].map(label => (
-                  <th key={label} className="px-3 py-2 font-bold">{label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {reviewRows.length ? reviewRows.map(row => {
-                const c = row.computed;
-                const statusClass =
-                  c.status === "Approved" ? "border-slate-200 bg-slate-50 text-slate-700" :
-                  c.status === "Needs Review" ? "border-amber-200 bg-amber-50 text-amber-800" :
-                  c.status === "Do Not Price" ? "border-gray-300 bg-gray-100 text-gray-600" :
-                  c.status === "Skipped" ? "border-gray-200 bg-gray-50 text-gray-500" :
-                  "border-gray-200 bg-white text-gray-600";
-                return (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-semibold text-gray-800">{row.title || "-"}</td>
-                    <td className="px-3 py-2 text-gray-500">{row.handle || "-"}</td>
-                    <td className="px-3 py-2 font-mono text-gray-600">{row.sku || "-"}</td>
-                    <td className="px-3 py-2 font-mono text-gray-700">{formatPrice(c.current)}</td>
-                    <td className="px-3 py-2 font-mono text-gray-700">{row.inventoryQty || "0"}</td>
-                    <td className="px-3 py-2"><Inp type="number" value={row.tcgAverage} onChange={value => updateRow(row.id, { tcgAverage: value, status: value ? "TCG Price Entered" : "Needs TCG Check" })} placeholder="0.00" className="w-28" /></td>
-                    <td className="px-3 py-2 font-mono text-gray-700">{c.suggested === "" ? "-" : formatPrice(c.suggested)}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-16 font-mono text-gray-800">{c.rounded === "" ? "-" : formatPrice(c.rounded)}</span>
-                        <Inp type="number" value={row.overrideFinalPrice} onChange={value => updateRow(row.id, { overrideFinalPrice: value, status: value ? "Needs Review" : row.status })} placeholder="Override" className="w-28" />
-                      </div>
-                    </td>
-                    <td className={`px-3 py-2 font-mono ${Number(c.diff) > 0 ? "text-emerald-700" : Number(c.diff) < 0 ? "text-red-700" : "text-gray-500"}`}>{c.diff === "" ? "-" : `${Number(c.diff) >= 0 ? "+" : ""}${formatPrice(c.diff)}`}</td>
-                    <td className="px-3 py-2">
-                      <Badge label={c.status} className={statusClass} />
-                      {c.flags.length > 0 && <p className="mt-1 max-w-[220px] text-[10px] leading-relaxed text-amber-700">{c.flags.join("; ")}</p>}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        <button onClick={() => markTcgEntered(row)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Enter TCG Price</button>
-                        <button onClick={() => approveRow(row)} className="rounded border border-slate-800 bg-slate-700 px-2 py-1 text-[10px] font-semibold text-white hover:bg-slate-800">Approve Price</button>
-                        <button onClick={() => updateRow(row.id, { status: "Skipped" })} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Skip</button>
-                        <button onClick={() => updateRow(row.id, { status: "Needs Review", notes: "Override final price before approving." })} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Override Final Price</button>
-                        <button onClick={() => updateRow(row.id, { status: "Do Not Price" })} className="rounded border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700 hover:bg-orange-100">Mark Do Not Price</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              }) : (
-                <tr><td colSpan={11} className="px-3 py-10 text-center text-sm font-medium text-gray-300">Upload a Shopify CSV to start reviewing prices.</td></tr>
-              )}
-            </tbody>
-          </table>
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+          {["All", "Ready to Approve", "Needs Review", "Approved", "Skipped", "Do Not Price"].map(filter => (
+            <button key={filter} onClick={() => { setActiveFilter(filter); setCurrentIndex(0); }} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${activeFilter === filter ? "border-slate-800 bg-slate-700 text-white" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>{filter}</button>
+          ))}
+          <div className="ml-auto flex rounded-lg border border-gray-300 bg-white p-0.5">
+            {["Card Review", "Table View"].map(mode => (
+              <button key={mode} onClick={() => setViewMode(mode)} className={`rounded-md px-3 py-1 text-xs font-semibold ${viewMode === mode ? "bg-slate-700 text-white" : "text-gray-600 hover:bg-gray-50"}`}>{mode}</button>
+            ))}
+          </div>
         </div>
       </Card>
+
+      {viewMode === "Card Review" && activeRow && (
+        <Card className="overflow-hidden">
+          <div className="grid gap-0 lg:grid-cols-[340px_1fr]">
+            <div className="border-b border-gray-100 bg-gray-50 p-4 lg:border-b-0 lg:border-r">
+              {activeRow.imageSrc ? (
+                <img src={activeRow.imageSrc} alt={activeRow.title} className="aspect-square w-full rounded-lg border border-gray-200 bg-white object-contain" />
+              ) : (
+                <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-300">No product image</div>
+              )}
+              {activeRow.description && <p className="mt-3 line-clamp-6 text-xs leading-relaxed text-gray-500">{activeRow.description}</p>}
+            </div>
+            <div className="p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{activeRow.title || "Untitled product"}</h3>
+                  <p className="mt-1 text-xs text-gray-400">{activeRow.handle || "No handle"} · SKU {activeRow.sku || "-"}</p>
+                </div>
+                <Badge label={activeRow.computed.status} className={statusClass(activeRow.computed.status)} />
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[["Current Variant Price", formatPrice(activeRow.computed.current) || "-"], ["Variant Inventory Qty", activeRow.inventoryQty || "0"], ["Suggested price", activeRow.computed.suggested === "" ? "-" : formatPrice(activeRow.computed.suggested)], ["Final rounded price", activeRow.computed.rounded === "" ? "-" : formatPrice(activeRow.computed.rounded)]].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                    <p className="mt-1 text-lg font-bold text-gray-900">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-[220px_1fr]">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">TCG average / baseline</span>
+                  <Inp type="number" value={activeRow.tcgAverage} onChange={value => updateRow(activeRow.id, { tcgAverage: value, status: value ? "TCG Price Entered" : "Needs TCG Check" })} placeholder="0.00" />
+                </label>
+                <div className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Difference from current price</p>
+                  <p className={`mt-1 text-lg font-bold ${Number(activeRow.computed.diff) > 0 ? "text-emerald-700" : Number(activeRow.computed.diff) < 0 ? "text-red-700" : "text-gray-700"}`}>{activeRow.computed.diff === "" ? "-" : `${Number(activeRow.computed.diff) >= 0 ? "+" : ""}${formatPrice(activeRow.computed.diff)}`}</p>
+                </div>
+              </div>
+              {activeRow.computed.flags.length > 0 && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Safety flags</p>
+                  <p className="mt-1 text-xs leading-relaxed text-amber-800">{activeRow.computed.flags.join("; ")}</p>
+                </div>
+              )}
+              {activeRow.notes && <p className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-500">{activeRow.notes}</p>}
+
+              {manualRowId === activeRow.id && (
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold text-gray-900">Manual Price</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-[180px_1fr_auto]">
+                    <Inp type="number" value={manualPrice} onChange={setManualPrice} placeholder="Final price" />
+                    <Inp value={manualNote} onChange={setManualNote} placeholder="Optional approval note" />
+                    <BtnPrimary onClick={saveManualPrice}>Save Manual Price</BtnPrimary>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+                <BtnPrimary onClick={() => approveRow(activeRow)} disabled={activeRow.computed.rounded === ""}>Approve Price</BtnPrimary>
+                <BtnSecondary onClick={() => openManualPrice(activeRow)}>Manual Price</BtnSecondary>
+                <BtnSecondary onClick={() => skipRow(activeRow)}>Skip</BtnSecondary>
+                <button onClick={() => doNotPriceRow(activeRow)} className="inline-flex items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 transition-colors hover:bg-orange-100">Do Not Price</button>
+                <div className="ml-auto flex gap-2">
+                  <BtnSecondary onClick={() => moveCard(-1)} disabled={currentIndex <= 0}>Previous</BtnSecondary>
+                  <BtnSecondary onClick={() => moveCard(1)} disabled={currentIndex >= filteredRows.length - 1}>Next</BtnSecondary>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {viewMode === "Card Review" && !activeRow && (
+        <Card className="p-10 text-center text-sm font-medium text-gray-300">No products match this filter.</Card>
+      )}
+
+      {viewMode === "Table View" && (
+        <Card className="p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Review Table</p>
+              <p className="text-xs text-gray-400">Only approved rows export with changed Variant Price.</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[1680px] w-full text-left text-xs">
+              <thead className="border-y border-gray-100 bg-gray-50 text-gray-500">
+                <tr>{["Product title", "Handle", "Variant SKU", "Current Variant Price", "Variant Inventory Qty", "TCG verified average", "Suggested price", "Final rounded price", "Difference", "Status", "Actions"].map(label => <th key={label} className="px-3 py-2 font-bold">{label}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filteredRows.map(row => {
+                  const c = row.computed;
+                  return (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-semibold text-gray-800">{row.title || "-"}</td>
+                      <td className="px-3 py-2 text-gray-500">{row.handle || "-"}</td>
+                      <td className="px-3 py-2 font-mono text-gray-600">{row.sku || "-"}</td>
+                      <td className="px-3 py-2 font-mono text-gray-700">{formatPrice(c.current)}</td>
+                      <td className="px-3 py-2 font-mono text-gray-700">{row.inventoryQty || "0"}</td>
+                      <td className="px-3 py-2"><Inp type="number" value={row.tcgAverage} onChange={value => updateRow(row.id, { tcgAverage: value, status: value ? "TCG Price Entered" : "Needs TCG Check" })} placeholder="0.00" className="w-28" /></td>
+                      <td className="px-3 py-2 font-mono text-gray-700">{c.suggested === "" ? "-" : formatPrice(c.suggested)}</td>
+                      <td className="px-3 py-2"><Inp type="number" value={row.overrideFinalPrice} onChange={value => updateRow(row.id, { overrideFinalPrice: value, status: value ? "Needs Review" : row.status })} placeholder={c.rounded === "" ? "Override" : formatPrice(c.rounded)} className="w-28" /></td>
+                      <td className={`px-3 py-2 font-mono ${Number(c.diff) > 0 ? "text-emerald-700" : Number(c.diff) < 0 ? "text-red-700" : "text-gray-500"}`}>{c.diff === "" ? "-" : `${Number(c.diff) >= 0 ? "+" : ""}${formatPrice(c.diff)}`}</td>
+                      <td className="px-3 py-2"><Badge label={c.status} className={statusClass(c.status)} />{c.flags.length > 0 && <p className="mt-1 max-w-[220px] text-[10px] leading-relaxed text-amber-700">{c.flags.join("; ")}</p>}</td>
+                      <td className="px-3 py-2"><div className="flex flex-wrap gap-1.5"><button onClick={() => approveRow(row)} className="rounded border border-slate-800 bg-slate-700 px-2 py-1 text-[10px] font-semibold text-white hover:bg-slate-800">Approve Price</button><button onClick={() => openManualPrice(row)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Manual Price</button><button onClick={() => skipRow(row)} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">Skip</button><button onClick={() => doNotPriceRow(row)} className="rounded border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700 hover:bg-orange-100">Do Not Price</button></div></td>
+                    </tr>
+                  );
+                })}
+                {!filteredRows.length && <tr><td colSpan={11} className="px-3 py-10 text-center text-sm font-medium text-gray-300">No products match this filter.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 };
