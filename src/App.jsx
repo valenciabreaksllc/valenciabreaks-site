@@ -39,6 +39,32 @@ const BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "Pokiemart"];
 const BRAND_SHORT = { "Vaulted Rarities": "VR", "CardKing47": "CK47", "PokeSpins": "PS", "Pokiemart": "PM" };
 // Exact brand colors per spec
 const BRAND_DOT = { "Vaulted Rarities": "#FACC15", "Vaulted": "#FACC15", "VR": "#FACC15", "CardKing47": "#2563EB", "CardKing": "#2563EB", "CK47": "#2563EB", "CK": "#2563EB", "PokeSpins": "#DC2626", "PS": "#DC2626", "Pokiemart": "#16A34A", "PokieMart": "#16A34A", "PM": "#16A34A", "Unassigned": "#CBD5E1" };
+const brandChannelConfig = {
+  vaultedRarities: {
+    label: "Vaulted Rarities",
+    aliases: ["Vaulted Rarities", "VR", "Vaulted", "VaultedSupport"],
+    tiktokShopChatUrl: "https://seller-us.tiktok.com/chat/inbox/current?from=customer_enter_from_order_list&lang=en&oec_seller_id=7496129140166986165&shop_region=US&version=v2",
+    windowTarget: "tiktok_shop_chat_vaulted_rarities",
+  },
+  pokeSpins: {
+    label: "PokeSpins",
+    aliases: ["PokeSpins", "PS", "Poke Spins"],
+    tiktokShopChatUrl: "https://seller-us.tiktok.com/chat/inbox/current?oec_seller_id=7494390620994242403&shop_region=US&lang=en&from=seller_center_navigation_im",
+    windowTarget: "tiktok_shop_chat_pokespins",
+  },
+  cardKing47: {
+    label: "CardKing47",
+    aliases: ["CardKing47", "CK", "CardKing", "Card King"],
+    tiktokShopChatUrl: "https://seller-us.tiktok.com/chat/inbox/current?oec_seller_id=7496169249187334473&shop_region=US&lang=en&from=seller_center_navigation_im",
+    windowTarget: "tiktok_shop_chat_cardking47",
+  },
+  pokieMart: {
+    label: "PokieMart",
+    aliases: ["PokieMart", "Pokiemart", "PM", "Pokie Mart", "PokeMart"],
+    tiktokShopChatUrl: "https://seller-us.tiktok.com/chat/inbox/current?from=seller_center_navigation_im&oec_seller_id=7494572492552308160&shop_region=US&lang=en",
+    windowTarget: "tiktok_shop_chat_pokiemart",
+  },
+};
 const replacementBrandLabel = (brand) => {
   if (brand === "CardKing47" || brand === "CardKing") return "CardKing";
   if (brand === "PokeSpins" || brand === "PS") return "PokeSpins";
@@ -3633,13 +3659,40 @@ const getInboundUrlCandidate = (msg, keys = []) => {
   return "";
 };
 
-const getDraftChannelDestination = (msg) => {
+const normalizeBrandAlias = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+const getBrandChannelConfigForMessage = (msg) => {
+  const metadata = getInboundMetadata(msg);
+  const candidates = [
+    msg?.brand,
+    msg?.account,
+    msg?.shop,
+    msg?.source,
+    msg?.source_label,
+    metadata?.brand,
+    metadata?.account,
+    metadata?.shop,
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeBrandAlias(candidate);
+    const found = Object.values(brandChannelConfig).find(config =>
+      config.aliases.some(alias => {
+        const normalizedAlias = normalizeBrandAlias(alias);
+        return normalizedCandidate === normalizedAlias || normalizedCandidate.includes(normalizedAlias);
+      })
+    );
+    if (found) return found;
+  }
+  return null;
+};
+
+const getChannelDestinationForMessage = (msg) => {
   const sourceType = classifyInboundSource(msg);
-  const channelText = [msg?.source, msg?.channel, msg?.message_type, msg?.label].filter(Boolean).join(" ").toLowerCase();
+  const channelText = [msg?.source, msg?.channel, msg?.message_type, msg?.label, msg?.source_label].filter(Boolean).join(" ").toLowerCase();
+  const brandConfig = getBrandChannelConfigForMessage(msg);
   const explicitUrl = getInboundUrlCandidate(msg, [
     "chat_url", "chatUrl", "source_url", "sourceUrl", "customer_url", "customerUrl",
     "order_url", "orderUrl", "conversation_url", "conversationUrl", "thread_url",
-    "threadUrl", "message_url", "messageUrl", "url", "permalink",
+    "threadUrl", "message_url", "messageUrl",
   ]);
   const isTikTokShopChat = sourceType === "TikTok Shop Chat" || channelText.includes("tiktok shop chat") || channelText.includes("shop chat");
   const isOtherSupportedChannel =
@@ -3653,8 +3706,11 @@ const getDraftChannelDestination = (msg) => {
   if (explicitUrl) {
     return {
       url: explicitUrl,
-      target: isTikTokShopChat ? "tiktok_shop_chat" : "customer_service_channel",
+      target: brandConfig?.windowTarget || (isTikTokShopChat ? "tiktok_shop_chat" : "customer_service_channel"),
     };
+  }
+  if (isTikTokShopChat && brandConfig?.tiktokShopChatUrl) {
+    return { url: brandConfig.tiktokShopChatUrl, target: brandConfig.windowTarget };
   }
   if (isTikTokShopChat) return { url: "https://seller-us.tiktok.com/chat/inbox", target: "tiktok_shop_chat" };
   if (isOtherSupportedChannel) return { url: "", target: "customer_service_channel" };
@@ -3983,11 +4039,15 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       return false;
     }
 
-    const destination = getDraftChannelDestination(msg);
+    const destination = getChannelDestinationForMessage(msg);
     let openedChannel = false;
     if (destination.url) {
-      window.open(destination.url, destination.target || "customer_service_channel", "noopener,noreferrer");
-      openedChannel = true;
+      try {
+        window.open(destination.url, destination.target || "customer_service_channel", "noopener,noreferrer");
+        openedChannel = true;
+      } catch (err) {
+        console.warn("Could not open customer service channel:", err);
+      }
       showOpsToast("Draft copied.");
     } else {
       showOpsToast("Draft copied. No channel URL found.");
