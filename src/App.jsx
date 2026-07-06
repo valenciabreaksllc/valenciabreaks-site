@@ -3624,6 +3624,43 @@ const getInboundMetadata = (msg) => {
   return {};
 };
 
+const getInboundUrlCandidate = (msg, keys = []) => {
+  const metadata = getInboundMetadata(msg);
+  for (const key of keys) {
+    const value = msg?.[key] ?? metadata?.[key];
+    if (typeof value === "string" && /^https?:\/\//i.test(value.trim())) return value.trim();
+  }
+  return "";
+};
+
+const getDraftChannelDestination = (msg) => {
+  const sourceType = classifyInboundSource(msg);
+  const channelText = [msg?.source, msg?.channel, msg?.message_type, msg?.label].filter(Boolean).join(" ").toLowerCase();
+  const explicitUrl = getInboundUrlCandidate(msg, [
+    "chat_url", "chatUrl", "source_url", "sourceUrl", "customer_url", "customerUrl",
+    "order_url", "orderUrl", "conversation_url", "conversationUrl", "thread_url",
+    "threadUrl", "message_url", "messageUrl", "url", "permalink",
+  ]);
+  const isTikTokShopChat = sourceType === "TikTok Shop Chat" || channelText.includes("tiktok shop chat") || channelText.includes("shop chat");
+  const isOtherSupportedChannel =
+    sourceType === "Outlook" ||
+    channelText.includes("outlook") ||
+    channelText.includes("gmail") ||
+    channelText.includes("instagram") ||
+    channelText.includes("business suite") ||
+    channelText.includes("meta business");
+
+  if (explicitUrl) {
+    return {
+      url: explicitUrl,
+      target: isTikTokShopChat ? "tiktok_shop_chat" : "customer_service_channel",
+    };
+  }
+  if (isTikTokShopChat) return { url: "https://seller-us.tiktok.com/chat/inbox", target: "tiktok_shop_chat" };
+  if (isOtherSupportedChannel) return { url: "", target: "customer_service_channel" };
+  return { url: "", target: "customer_service_channel" };
+};
+
 const getInboundTags = (msg) => {
   const raw = msg?.tags;
   if (Array.isArray(raw)) return raw.map(tag => String(tag || "").trim()).filter(Boolean);
@@ -3920,15 +3957,51 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
   };
 
-  const handleCopyAssistantDraft = async (msg, draftReply) => {
-    try {
-      await navigator.clipboard.writeText(draftReply || "");
-      setCopiedAssistantDraftId(msg.id);
-      setTimeout(() => setCopiedAssistantDraftId(null), 2000);
-    } catch (_) {
-      setCopiedAssistantDraftId(`failed-${msg.id}`);
-      setTimeout(() => setCopiedAssistantDraftId(null), 2400);
+  const markDraftCopiedLocally = (msgId, openedChannel) => {
+    const now = nowISO();
+    setInboundMessages(prev => prev.map(m => m.id === msgId ? {
+      ...m,
+      draft_copied_at: now,
+      channel_opened_at: openedChannel ? now : m.channel_opened_at,
+    } : m));
+  };
+
+  const copyDraftAndOpenChannel = async (msg, draftText, copiedStateSetter) => {
+    const text = draftText || "";
+    if (!text) {
+      showOpsToast("Generate a draft first.", { type: "error" });
+      return false;
     }
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      if (copiedStateSetter) {
+        copiedStateSetter(`failed-${msg.id}`);
+        setTimeout(() => copiedStateSetter(null), 2400);
+      }
+      showOpsToast("Could not copy draft. Please copy it manually.", { type: "error" });
+      return false;
+    }
+
+    const destination = getDraftChannelDestination(msg);
+    let openedChannel = false;
+    if (destination.url) {
+      window.open(destination.url, destination.target || "customer_service_channel", "noopener,noreferrer");
+      openedChannel = true;
+      showOpsToast("Draft copied.");
+    } else {
+      showOpsToast("Draft copied. No channel URL found.");
+    }
+    markDraftCopiedLocally(msg.id, openedChannel);
+    if (copiedStateSetter) {
+      copiedStateSetter(msg.id);
+      setTimeout(() => copiedStateSetter(null), 2000);
+    }
+    return true;
+  };
+
+  const handleCopyAssistantDraft = async (msg, draftReply) => {
+    await copyDraftAndOpenChannel(msg, draftReply, setCopiedAssistantDraftId);
   };
 
   const updateManualMessageForm = (field, value) => {
@@ -4199,15 +4272,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [copiedDraftId, setCopiedDraftId] = useState(null);
 
   const handleCopyDraft = async (msg) => {
-    try {
-      await navigator.clipboard.writeText(msg.ai_draft || "");
-      setCopiedDraftId(msg.id);
-      setTimeout(() => setCopiedDraftId(null), 2000);
-      return true;
-    } catch (_) {
-      showOpsToast("Could not copy draft. Please copy it manually.", { type: "error" });
-      return false;
-    }
+    return copyDraftAndOpenChannel(msg, msg.ai_draft || "", setCopiedDraftId);
   };
 
   const handleCopyReply = async (msg) => {
@@ -4217,13 +4282,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(replyText);
-      setCopiedDraftId(msg.id);
-      setTimeout(() => setCopiedDraftId(null), 2000);
-    } catch (_) {
-      showOpsToast("Could not copy draft. Please copy it manually.", { type: "error" });
-    }
+    await copyDraftAndOpenChannel(msg, replyText, setCopiedDraftId);
   };
 
   const handleGenerateDraft = async (msg, instruction = null) => {
@@ -4918,9 +4977,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                         <button
                           type="button"
                           onClick={() => handleCopyAssistantDraft(msg, assistantAnalysis.draftReply)}
+                          title="Copies reply and opens the source channel."
                           className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
                         >
-                          {copiedAssistantDraftId === msg.id ? "Copied draft." : copiedAssistantDraftId === `failed-${msg.id}` ? "Copy failed. Try again." : "Copy Draft"}
+                          Copy Draft
                         </button>
                       </div>
                       <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-800">{assistantAnalysis.draftReply}</p>
@@ -4957,13 +5017,14 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                     <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
                     <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-slate-200">
                       <button onClick={() => handleCopyDraft(msg)}
+                        title="Copies reply and opens the source channel."
                         className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors whitespace-nowrap">
-                        {copiedDraftId === msg.id ? "Copied" : "Copy Draft"}
+                        Copy Draft
                       </button>
                       <button disabled={!hasReplyText} onClick={() => handleCopyReply(msg)}
                         title={hasReplyText ? "Copy the approved reply or AI draft" : "Generate or approve a draft first"}
                         className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors whitespace-nowrap">
-                        {copiedDraftId === msg.id ? "Copied" : "Copy Reply"}
+                        Copy Draft
                       </button>
                       {msg.draft_status !== "Approved" && (
                         <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
