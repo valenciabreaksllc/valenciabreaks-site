@@ -8842,6 +8842,7 @@ const csvEscape = (value) => {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 const buildCsvText = (headers, rows) => [headers, ...rows].map(row => row.map(csvEscape).join(",")).join("\r\n");
+const PRICE_CHECK_MATCH_STORAGE_KEY = "ops_price_check_tcg_mappings_v1";
 const downloadTextFile = (content, fileName, type = "text/csv;charset=utf-8") => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -8883,7 +8884,51 @@ const getPriceCheckTitleFlags = (title) => {
   ].filter(Boolean);
 };
 const isPriceCheckCustomProduct = (title) => getPriceCheckTitleFlags(title).length > 0;
+const getPriceCheckAutoStatus = (title) => {
+  const lower = String(title || "").toLowerCase();
+  if (lower.includes("raw pkmn single") || lower.includes("mtg single card")) return "Needs Manual Price";
+  return isPriceCheckCustomProduct(title) ? "Do Not Price" : "Needs TCG Check";
+};
 const stripPriceCheckHtml = (value) => String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+const normalizePriceCheckMappingPart = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+const getPriceCheckMappingKey = (row = {}) => [
+  normalizePriceCheckMappingPart(row.handle),
+  normalizePriceCheckMappingPart(row.sku),
+  normalizePriceCheckMappingPart(row.title),
+].join("|");
+const loadPriceCheckMappings = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PRICE_CHECK_MATCH_STORAGE_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+const savePriceCheckMappings = (mappings) => {
+  try { localStorage.setItem(PRICE_CHECK_MATCH_STORAGE_KEY, JSON.stringify(mappings || {})); } catch {}
+};
+const extractTcgProductId = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const patterns = [
+    /\/product\/(\d+)/i,
+    /[?&](?:productId|productid|ProductID)=(\d+)/,
+    /\bproduct(?:id)?[=/:-](\d+)\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return /^\d+$/.test(raw) ? raw : "";
+};
+const cleanTcgSearchQuery = (title) => String(title || "")
+  .replace(/\bMagic:\s*The\s*Gathering\s*-\s*/ig, "")
+  .replace(/\bMTG\s*-\s*/ig, "")
+  .replace(/\bPok[eé]mon\s*-\s*/ig, "")
+  .replace(/\bPok[eé]mon\b/ig, "")
+  .replace(/^\s*\d+\s*x\s+/i, "")
+  .replace(/\s+/g, " ")
+  .trim();
 const getPriceCheckComputed = (row) => {
   const tcg = parsePriceNumber(row.tcgAverage);
   const current = parsePriceNumber(row.currentPrice);
@@ -8902,6 +8947,7 @@ const getPriceCheckComputed = (row) => {
     row.status === "Approved" ? "Approved" :
     row.status === "Skipped" ? "Skipped" :
     row.status === "Do Not Price" ? "Do Not Price" :
+    row.status === "Needs Manual Price" ? "Needs Manual Price" :
     tcg == null ? "Needs TCG Check" :
     flags.length > 0 ? "Needs Review" :
     "TCG Price Entered";
@@ -8928,10 +8974,14 @@ const PriceCheckView = () => {
   const reviewRows = rows.map(row => ({ ...row, computed: getPriceCheckComputed(row) }));
   const filteredRows = reviewRows.filter(row => {
     if (activeFilter === "Ready to Approve") return row.computed.status === "TCG Price Entered";
+    if (activeFilter === "Needs Match") return !row.tcgProductUrl && !row.tcgProductId && row.computed.status !== "Do Not Price";
+    if (activeFilter === "Already Matched") return Boolean(row.tcgProductUrl || row.tcgProductId);
     if (activeFilter === "Needs Review") return row.computed.status === "Needs Review" || row.computed.status === "Needs TCG Check";
     if (activeFilter === "Approved") return row.computed.status === "Approved";
     if (activeFilter === "Skipped") return row.computed.status === "Skipped";
     if (activeFilter === "Do Not Price") return row.computed.status === "Do Not Price";
+    if (activeFilter === "Needs Manual Price") return row.computed.status === "Needs Manual Price";
+    if (activeFilter === "Ready for Live Check") return Boolean(row.tcgProductUrl || row.tcgProductId) && row.computed.status === "TCG Price Entered";
     return true;
   });
   const activeRow = filteredRows[Math.min(currentIndex, Math.max(0, filteredRows.length - 1))] || null;
@@ -8971,10 +9021,12 @@ const PriceCheckView = () => {
         const nextQtyIndex = findPriceCheckHeader(parsed.headers, "Variant Inventory Qty", "Variant Inventory Quantity", "Inventory Quantity");
         const nextImageIndex = findPriceCheckHeader(parsed.headers, "Image Src", "Image URL", "Variant Image", "Image");
         const nextBodyIndex = findPriceCheckHeader(parsed.headers, "Body (HTML)", "Body HTML", "Description", "Short Description");
+        const savedMappings = loadPriceCheckMappings();
         const normalized = parsed.rows.map((cells, index) => {
           const title = cells[nextTitleIndex] || "";
           const customFlags = getPriceCheckTitleFlags(title);
-          return {
+          const autoStatus = getPriceCheckAutoStatus(title);
+          const baseRow = {
             id: `price-${Date.now()}-${index}`,
             originalCells: cells,
             title,
@@ -8985,10 +9037,20 @@ const PriceCheckView = () => {
             imageSrc: nextImageIndex >= 0 ? cells[nextImageIndex] || "" : "",
             description: nextBodyIndex >= 0 ? stripPriceCheckHtml(cells[nextBodyIndex]) : "",
             tcgAverage: "",
+            tcgProductUrl: "",
+            tcgProductId: "",
+            matchSavedAt: "",
             overrideFinalPrice: "",
-            status: customFlags.length ? "Do Not Price" : "Needs TCG Check",
-            notes: customFlags.length ? `Auto Do Not Price: ${customFlags.join("; ")}` : "",
+            status: autoStatus,
+            notes: customFlags.length ? `Auto ${autoStatus}: ${customFlags.join("; ")}` : "",
           };
+          const saved = savedMappings[getPriceCheckMappingKey(baseRow)];
+          return saved ? {
+            ...baseRow,
+            tcgProductUrl: saved.tcgProductUrl || "",
+            tcgProductId: saved.tcgProductId || "",
+            matchSavedAt: saved.saved_at || "",
+          } : baseRow;
         });
         setSourceName(file.name);
         setHeaders(parsed.headers);
@@ -9043,6 +9105,39 @@ const PriceCheckView = () => {
   const doNotPriceRow = (row) => {
     updateRow(row.id, { status: "Do Not Price" });
     moveNextAfterAction();
+  };
+  const updateTcgUrl = (row, value) => {
+    const productId = extractTcgProductId(value);
+    updateRow(row.id, { tcgProductUrl: value, tcgProductId: productId || row.tcgProductId });
+  };
+  const updateTcgProductId = (row, value) => updateRow(row.id, { tcgProductId: extractTcgProductId(value) || value });
+  const findOnTcgplayer = (row) => {
+    const query = cleanTcgSearchQuery(row.title);
+    if (!query) return;
+    window.open(`https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+  };
+  const saveTcgMatch = (row) => {
+    const productId = row.tcgProductId || extractTcgProductId(row.tcgProductUrl);
+    if (!row.tcgProductUrl && !productId) {
+      setMessage("Add a TCGplayer Product URL or Product ID before saving the match.");
+      return;
+    }
+    const saved_at = nowISO();
+    const mappings = loadPriceCheckMappings();
+    mappings[getPriceCheckMappingKey(row)] = {
+      tcgProductUrl: row.tcgProductUrl || "",
+      tcgProductId: productId || "",
+      saved_at,
+    };
+    savePriceCheckMappings(mappings);
+    updateRow(row.id, { tcgProductId: productId || "", matchSavedAt: saved_at });
+    setMessage("TCGplayer match saved locally.");
+  };
+  const clearTcgMatch = (row) => {
+    const mappings = loadPriceCheckMappings();
+    delete mappings[getPriceCheckMappingKey(row)];
+    savePriceCheckMappings(mappings);
+    updateRow(row.id, { tcgProductUrl: "", tcgProductId: "", matchSavedAt: "" });
   };
   const exportApprovedShopifyCsv = () => {
     if (!hasRequiredHeaders || priceIndex < 0) {
@@ -9107,6 +9202,7 @@ const PriceCheckView = () => {
   const statusClass = (status) =>
     status === "Approved" ? "border-slate-200 bg-slate-50 text-slate-700" :
     status === "Needs Review" || status === "Needs TCG Check" ? "border-amber-200 bg-amber-50 text-amber-800" :
+    status === "Needs Manual Price" ? "border-orange-200 bg-orange-50 text-orange-800" :
     status === "Do Not Price" ? "border-gray-300 bg-gray-100 text-gray-600" :
     status === "Skipped" ? "border-gray-200 bg-gray-50 text-gray-500" :
     "border-gray-200 bg-white text-gray-600";
@@ -9147,7 +9243,7 @@ const PriceCheckView = () => {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-          {["All", "Ready to Approve", "Needs Review", "Approved", "Skipped", "Do Not Price"].map(filter => (
+          {["All", "Needs Match", "Already Matched", "Ready to Approve", "Needs Review", "Needs Manual Price", "Ready for Live Check", "Approved", "Skipped", "Do Not Price"].map(filter => (
             <button key={filter} onClick={() => { setActiveFilter(filter); setCurrentIndex(0); }} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${activeFilter === filter ? "border-slate-800 bg-slate-700 text-white" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>{filter}</button>
           ))}
           <div className="ml-auto flex rounded-lg border border-gray-300 bg-white p-0.5">
@@ -9194,6 +9290,23 @@ const PriceCheckView = () => {
                   <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Difference from current price</p>
                   <p className={`mt-1 text-lg font-bold ${Number(activeRow.computed.diff) > 0 ? "text-emerald-700" : Number(activeRow.computed.diff) < 0 ? "text-red-700" : "text-gray-700"}`}>{activeRow.computed.diff === "" ? "-" : `${Number(activeRow.computed.diff) >= 0 ? "+" : ""}${formatPrice(activeRow.computed.diff)}`}</p>
                 </div>
+              </div>
+              <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-gray-900">TCGplayer Match</p>
+                  <Badge
+                    label={activeRow.matchSavedAt ? "Match Saved" : activeRow.tcgProductUrl || activeRow.tcgProductId ? "Unsaved Match" : "Needs Match"}
+                    className={activeRow.matchSavedAt ? "border-slate-200 bg-slate-50 text-slate-700" : activeRow.tcgProductUrl || activeRow.tcgProductId ? "border-amber-200 bg-amber-50 text-amber-800" : "border-gray-200 bg-white text-gray-500"}
+                  />
+                </div>
+                <div className="grid gap-2 lg:grid-cols-[1fr_180px_auto_auto_auto]">
+                  <Inp value={activeRow.tcgProductUrl || ""} onChange={value => updateTcgUrl(activeRow, value)} placeholder="TCGplayer Product URL" />
+                  <Inp value={activeRow.tcgProductId || ""} onChange={value => updateTcgProductId(activeRow, value)} placeholder="Product ID" />
+                  <BtnSecondary onClick={() => findOnTcgplayer(activeRow)}>Find on TCGplayer</BtnSecondary>
+                  <BtnPrimary onClick={() => saveTcgMatch(activeRow)}>Save Match</BtnPrimary>
+                  <button onClick={() => clearTcgMatch(activeRow)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50">Clear Match</button>
+                </div>
+                {activeRow.matchSavedAt && <p className="mt-2 text-[10px] font-medium text-gray-400">Saved {fmtDate(activeRow.matchSavedAt)}</p>}
               </div>
               {activeRow.computed.flags.length > 0 && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
