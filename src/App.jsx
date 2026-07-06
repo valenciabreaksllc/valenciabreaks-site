@@ -4013,16 +4013,15 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
   };
 
-  const markDraftCopiedLocally = (msgId, openedChannel) => {
+  const markDraftCopiedLocally = (msgId) => {
     const now = nowISO();
     setInboundMessages(prev => prev.map(m => m.id === msgId ? {
       ...m,
       draft_copied_at: now,
-      channel_opened_at: openedChannel ? now : m.channel_opened_at,
     } : m));
   };
 
-  const copyDraftAndOpenChannel = async (msg, draftText, copiedStateSetter) => {
+  const copyDraftOnly = async (msg, draftText, copiedStateSetter) => {
     const text = draftText || "";
     if (!text) {
       showOpsToast("Generate a draft first.", { type: "error" });
@@ -4039,20 +4038,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       return false;
     }
 
-    const destination = getChannelDestinationForMessage(msg);
-    let openedChannel = false;
-    if (destination.url) {
-      try {
-        window.open(destination.url, destination.target || "customer_service_channel", "noopener,noreferrer");
-        openedChannel = true;
-      } catch (err) {
-        console.warn("Could not open customer service channel:", err);
-      }
-      showOpsToast("Draft copied.");
-    } else {
-      showOpsToast("Draft copied. No channel URL found.");
-    }
-    markDraftCopiedLocally(msg.id, openedChannel);
+    showOpsToast("Draft copied.");
+    markDraftCopiedLocally(msg.id);
     if (copiedStateSetter) {
       copiedStateSetter(msg.id);
       setTimeout(() => copiedStateSetter(null), 2000);
@@ -4060,8 +4047,24 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     return true;
   };
 
+  const handleCopyChannelUrl = async (msg) => {
+    const destination = getChannelDestinationForMessage(msg);
+    if (!destination.url) {
+      showOpsToast("No channel URL found.", { type: "error" });
+      return false;
+    }
+    try {
+      await navigator.clipboard.writeText(destination.url);
+      showOpsToast("Channel URL copied.");
+      return true;
+    } catch (_) {
+      showOpsToast("Could not copy channel URL.", { type: "error" });
+      return false;
+    }
+  };
+
   const handleCopyAssistantDraft = async (msg, draftReply) => {
-    await copyDraftAndOpenChannel(msg, draftReply, setCopiedAssistantDraftId);
+    await copyDraftOnly(msg, draftReply, setCopiedAssistantDraftId);
   };
 
   const updateManualMessageForm = (field, value) => {
@@ -4332,7 +4335,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const [copiedDraftId, setCopiedDraftId] = useState(null);
 
   const handleCopyDraft = async (msg) => {
-    return copyDraftAndOpenChannel(msg, msg.ai_draft || "", setCopiedDraftId);
+    return copyDraftOnly(msg, msg.ai_draft || "", setCopiedDraftId);
   };
 
   const handleCopyReply = async (msg) => {
@@ -4342,7 +4345,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       return;
     }
 
-    await copyDraftAndOpenChannel(msg, replyText, setCopiedDraftId);
+    await copyDraftOnly(msg, replyText, setCopiedDraftId);
   };
 
   const handleGenerateDraft = async (msg, instruction = null) => {
@@ -5037,13 +5040,24 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                         <button
                           type="button"
                           onClick={() => handleCopyAssistantDraft(msg, assistantAnalysis.draftReply)}
-                          title="Copies reply and opens the source channel."
+                          title="Copies reply text only."
                           className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
                         >
                           Copy Draft
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyChannelUrl(msg)}
+                          title="Copies the source channel URL. Does not open it."
+                          className="rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-50"
+                        >
+                          Copy Channel URL
+                        </button>
                       </div>
                       <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-800">{assistantAnalysis.draftReply}</p>
+                      {copiedAssistantDraftId === msg.id && (
+                        <p className="mt-2 text-[10px] font-medium text-slate-500">Draft copied. Use Stream Deck to open the correct Shop Chat window.</p>
+                      )}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-2">
                       {assistantAnalysis.reasoningTags.map(tag => (
@@ -5077,15 +5091,23 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                     <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.ai_draft}</p>
                     <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-slate-200">
                       <button onClick={() => handleCopyDraft(msg)}
-                        title="Copies reply and opens the source channel."
+                        title="Copies reply text only."
                         className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors whitespace-nowrap">
                         Copy Draft
+                      </button>
+                      <button onClick={() => handleCopyChannelUrl(msg)}
+                        title="Copies the source channel URL. Does not open it."
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors whitespace-nowrap">
+                        Copy Channel URL
                       </button>
                       <button disabled={!hasReplyText} onClick={() => handleCopyReply(msg)}
                         title={hasReplyText ? "Copy the approved reply or AI draft" : "Generate or approve a draft first"}
                         className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors whitespace-nowrap">
                         Copy Draft
                       </button>
+                      {copiedDraftId === msg.id && (
+                        <span className="text-[10px] font-medium text-slate-500">Draft copied. Use Stream Deck to open the correct Shop Chat window.</span>
+                      )}
                       {msg.draft_status !== "Approved" && (
                         <button disabled={isDraftBusy || isBusy} onClick={() => handleApproveDraft(msg)}
                           className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-slate-700 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
