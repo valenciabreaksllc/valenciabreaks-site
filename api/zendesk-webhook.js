@@ -1,7 +1,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
 
-const INBOUND_TABLE = "work_queue";
+const INBOUND_TABLE = "inbound_messages";
 const ZENDESK_URL_PREFIX = (subdomain, ticketId) => `https://${subdomain}.zendesk.com/agent/tickets/${ticketId}`;
 
 const BRAND_ALIASES = [
@@ -58,38 +58,6 @@ function toArray(value) {
       .filter(Boolean);
   }
   return [value].filter(Boolean);
-}
-
-function deepFindStrings(value, keyHints = []) {
-  const out = [];
-  const seen = new Set();
-  const visit = (node, parentKey = "") => {
-    if (!node) return;
-    if (typeof node === "string") {
-      const trimmed = node.trim();
-      if (trimmed) out.push(trimmed);
-      return;
-    }
-    if (Array.isArray(node)) {
-      node.forEach(item => visit(item, parentKey));
-      return;
-    }
-    if (typeof node === "object") {
-      for (const [key, val] of Object.entries(node)) {
-        const lowered = key.toLowerCase();
-        if (keyHints.some(hint => lowered.includes(hint)) && typeof val === "string") {
-          const trimmed = val.trim();
-          if (trimmed && !seen.has(trimmed)) {
-            seen.add(trimmed);
-            out.push(trimmed);
-          }
-        }
-        visit(val, key);
-      }
-    }
-  };
-  visit(value);
-  return out;
 }
 
 function firstValue(payload, paths) {
@@ -221,19 +189,8 @@ function extractRequester(payload, ticket) {
   };
 }
 
-function extractChannel(ticket, payload) {
-  return normalizeText(
-    ticket?.via?.channel ||
-    ticket?.channel ||
-    payload?.channel ||
-    payload?.source ||
-    payload?.via?.channel ||
-    "zendesk"
-  );
-}
-
 function extractStatus(ticket, payload) {
-  return normalizeText(ticket?.status || payload?.status || "new");
+  return normalizeText(ticket?.status || payload?.status || "new").toLowerCase();
 }
 
 function extractPriority(ticket, payload) {
@@ -242,19 +199,6 @@ function extractPriority(ticket, payload) {
 
 function extractSubject(ticket, payload) {
   return normalizeText(ticket?.subject || payload?.subject || payload?.title || "");
-}
-
-function extractBody(ticket, payload) {
-  return normalizeText(
-    ticket?.description ||
-    ticket?.latest_comment ||
-    ticket?.comment ||
-    payload?.description ||
-    payload?.body ||
-    payload?.latest_comment ||
-    payload?.comment ||
-    ""
-  );
 }
 
 function extractTimestamps(ticket, payload) {
@@ -288,16 +232,6 @@ function extractTicketUrl(ticket, payload, subdomain, ticketId) {
   );
 }
 
-function extractMetadata(payload, ticket) {
-  const meta = {
-    zendesk: {
-      ticket: ticket || null,
-      payload: payload || null,
-    },
-  };
-  return meta;
-}
-
 function buildQueueRow(payload, config) {
   const { ticket, requester, comment } = flattenPayload(payload);
   const ticketId = extractTicketId(payload);
@@ -307,48 +241,63 @@ function buildQueueRow(payload, config) {
 
   const tags = extractTags(payload, ticket);
   const subject = extractSubject(ticket, payload);
-  const body = extractBody(ticket, payload);
+  const body = normalizeText(
+    ticket?.description ||
+    ticket?.latest_comment ||
+    ticket?.comment ||
+    payload?.description ||
+    payload?.body ||
+    payload?.latest_comment ||
+    payload?.comment ||
+    ""
+  );
   const brand = extractBrand(payload, ticket, requester);
   const issueType = extractIssueType(ticket, tags, subject, body);
   const { createdAt, updatedAt } = extractTimestamps(ticket, payload);
-  const supportAddress = extractSupportAddress(ticket, payload);
   const ticketUrl = extractTicketUrl(ticket, payload, config.subdomain, ticketId);
-  const externalId = `zendesk:${ticketId}`;
-  const source = "zendesk";
-  const channel = extractChannel(ticket, payload);
+  const customer = requester.name || requester.email || normalizeText(firstValue(payload, [["ticket", "requester"], ["requester"], ["ticket", "customer"]]) || "");
   const status = extractStatus(ticket, payload);
   const priority = extractPriority(ticket, payload);
-  const requesterDetails = extractRequester(payload, ticket);
-
-  const metadata = {
-    ...extractMetadata(payload, ticket),
-    zendesk_ticket_id: ticketId,
-    zendesk_ticket_url: ticketUrl,
-    support_address: supportAddress || null,
-  };
+  const resolvedStatus = status === "solved" || status === "closed" ? "resolved" : null;
+  const mappedStatus =
+    ["new", "open"].includes(status) ? "open" :
+    ["pending", "hold"].includes(status) ? "pending" :
+    ["solved", "closed"].includes(status) ? "resolved" :
+    "open";
+  const mappedPriority = priority || "normal";
+  const nextAction =
+    issueType === "refund" || issueType === "return" ? "Review in Zendesk" :
+    issueType === "missing item" || issueType === "wrong item" || issueType === "damaged item" ? "Ask for evidence / review" :
+    issueType === "delivered not received" || issueType === "tracking/no movement" ? "Check tracking" :
+    issueType === "replacement" ? "Review replacement" :
+    "Review message";
 
   return {
     row: {
-      external_id: externalId,
-      source,
-      source_url: ticketUrl,
-      brand,
-      channel,
-      subject,
-      message_body: body || normalizeText(comment),
-      status,
-      priority,
+      source: "zendesk",
+      account: brand,
+      customer,
+      order_number: `ZD-${ticketId}`,
       issue_type: issueType,
-      customer_name: requesterDetails.name || null,
-      sender_name: requesterDetails.name || null,
-      sender_email: requesterDetails.email || null,
-      tags,
-      metadata,
-      created_at: createdAt,
-      updated_at: updatedAt,
+      priority: mappedPriority,
+      status: mappedStatus,
+      next_action: nextAction,
+      send_to: "zendesk",
+      notes: [
+        `Zendesk Ticket ID: ${ticketId}`,
+        `Zendesk URL: ${ticketUrl}`,
+        `Subject: ${subject || "(none)"}`,
+        `Latest message/description preview: ${(body || normalizeText(comment) || "(none)").slice(0, 500)}`,
+        `Requester email: ${extractRequester(payload, ticket).email || "n/a"}`,
+        `Tags: ${tags.length ? tags.join(", ") : "n/a"}`,
+      ].join("\n"),
+      received_time: updatedAt || createdAt || new Date().toISOString(),
+      archived: false,
+      archived_at: null,
+      resolved_at: resolvedStatus ? (updatedAt || createdAt || new Date().toISOString()) : null,
     },
     ticketId,
-    externalId,
+    externalId: `zendesk:${ticketId}`,
     ticketUrl,
   };
 }
@@ -398,10 +347,10 @@ async function readJsonBody(req) {
   }
 }
 
-async function upsertWorkQueue(client, row) {
+async function insertWorkQueue(client, row) {
   const result = await client
     .from(INBOUND_TABLE)
-    .upsert([row], { onConflict: "external_id" })
+    .insert([row])
     .select("*")
     .single();
   return result;
@@ -453,7 +402,7 @@ async function handler(req, res) {
   });
 
   try {
-    const { data, error } = await upsertWorkQueue(supabase, built.row);
+    const { data, error } = await insertWorkQueue(supabase, built.row);
 
     if (error) {
       return sendJson(res, 500, {
