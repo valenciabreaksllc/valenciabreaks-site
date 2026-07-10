@@ -274,7 +274,7 @@ function buildQueueRow(payload, config) {
 
   return {
     row: {
-      source: "zendesk",
+      source: "outlook",
       account: brand,
       customer,
       order_number: `ZD-${ticketId}`,
