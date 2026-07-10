@@ -2572,7 +2572,7 @@ const NavItem = ({ id, label, active, onClick, badge, showLabel = true }) => (
 
 const NAV = [
   { section: null, items: [{ id: "dashboard", label: "Dashboard" }, { id: "inbox", label: "Command Inbox" }] },
-  { section: "Operations", items: [{ id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }, { id: "pricecheck", label: "Price Check" }, { id: "sets", label: "Surprise Sets" }] },
+  { section: "Operations", items: [{ id: "replacements", label: "Replacements" }, { id: "studio", label: "Inventory" }, { id: "pricecheck", label: "Price Check" }, { id: "shipping-scanner", label: "Shipping Scanner" }, { id: "sets", label: "Surprise Sets" }] },
   { section: "Reporting", items: [{ id: "weekly", label: "Reports" }, { id: "data", label: "Settings" }] },
 ];
 
@@ -2653,6 +2653,224 @@ const deriveActionTitle = (msg) => {
 };
 
 // ─── ACTION PRIORITY / STATUS STYLES ─────────────────────────────────────────
+const ShippingScannerView = () => {
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrier, setCarrier] = useState("USPS");
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [recentScans, setRecentScans] = useState([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+
+  const loadRecentScans = async () => {
+    setLoadingRecent(true);
+    const { data, error: loadError } = await fetchRecentPackageScansFromSupabase();
+    setLoadingRecent(false);
+    if (loadError) {
+      setError(`Recent scans could not be loaded: ${loadError.message}`);
+      return;
+    }
+    setRecentScans(data || []);
+  };
+
+  useEffect(() => {
+    loadRecentScans();
+  }, []);
+
+  const handleSaveScan = async () => {
+    const normalizedTracking = String(trackingNumber || "").trim();
+    if (!normalizedTracking) {
+      setError("Enter a USPS tracking number.");
+      setResult(null);
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setResult(null);
+
+    const { data: shipment, error: lookupError } = await lookupShipmentByTrackingNumber(normalizedTracking);
+    if (lookupError) {
+      setSaving(false);
+      setError(`Shipment lookup failed: ${lookupError.message}`);
+      return;
+    }
+
+    const matched = Boolean(shipment);
+    const fields = matched ? {
+      brand: shipment.brand || shipment.account || "",
+      platform: shipment.platform || shipment.channel || "",
+      orderNumber: shipment.order_number || "",
+      customerName: shipment.customer_name || "",
+      customerUsername: shipment.customer_username || "",
+      shipmentStatus: shipment.shipment_status || shipment.status || "",
+    } : {
+      brand: "",
+      platform: "",
+      orderNumber: "",
+      customerName: "",
+      customerUsername: "",
+      shipmentStatus: "",
+    };
+
+    const currentStatus = matched ? (fields.shipmentStatus || "Matched") : "No Match Found";
+    const actionNeeded = matched ? "Matched" : "Needs Review";
+    const notes = matched
+      ? `Matched shipment for ${normalizedTracking}.`
+      : `No shipment match found for ${normalizedTracking}.`;
+
+    const scanRow = {
+      tracking_number: normalizedTracking,
+      carrier,
+      scan_type: "manual",
+      brand: fields.brand || null,
+      platform: fields.platform || null,
+      order_number: fields.orderNumber || null,
+      customer_name: fields.customerName || null,
+      customer_username: fields.customerUsername || null,
+      shipment_status: fields.shipmentStatus || null,
+      current_status: currentStatus,
+      action_needed: actionNeeded,
+      notes,
+      created_at: nowISO(),
+    };
+
+    const { error: insertError } = await insertPackageScanToSupabase(scanRow);
+    setSaving(false);
+    if (insertError) {
+      setError(`Scan save failed: ${insertError.message}`);
+      return;
+    }
+
+    setResult({
+      matched,
+      trackingNumber: normalizedTracking,
+      ...fields,
+      currentStatus,
+      actionNeeded,
+      notes,
+      url: shipment?.shipment_url || shipment?.tracking_url || shipment?.url || "",
+    });
+    setTrackingNumber("");
+    await loadRecentScans();
+  };
+
+  const renderValue = (value) => value ? value : "—";
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Shipping Scanner</p>
+            <p className="mt-0.5 text-xs text-gray-400">Manual USPS scans with shipment lookup and log capture.</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[1.5fr_0.7fr_auto]">
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">USPS tracking number</label>
+            <input
+              value={trackingNumber}
+              onChange={e => setTrackingNumber(e.target.value)}
+              placeholder="Enter tracking number"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-slate-500"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Carrier</label>
+            <select
+              value={carrier}
+              onChange={e => setCarrier(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-slate-500"
+            >
+              {["USPS", "UPS", "FedEx", "DHL", "Other"].map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={handleSaveScan}
+              disabled={saving}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Scan"}
+            </button>
+          </div>
+        </div>
+        {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      </Card>
+
+      {result && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className={`text-sm font-bold ${result.matched ? "text-emerald-700" : "text-amber-700"}`}>{result.matched ? "Matched" : "No Match Found"}</p>
+              <p className="mt-0.5 text-xs text-gray-400">{result.trackingNumber}</p>
+            </div>
+            <Badge label={result.actionNeeded} className={result.matched ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"} />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {[
+              ["Brand", result.brand],
+              ["Platform", result.platform],
+              ["Order Number", result.orderNumber],
+              ["Customer Name", result.customerName],
+              ["Customer Username", result.customerUsername],
+              ["Shipment Status", result.shipmentStatus],
+              ["Current Status", result.currentStatus],
+              ["Action Needed", result.actionNeeded],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                <p className="mt-1 text-sm font-semibold text-gray-800">{renderValue(value)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Notes</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{result.notes}</p>
+          </div>
+          {result.url && (
+            <div className="mt-3">
+              <a href={result.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Open in Zendesk
+              </a>
+            </div>
+          )}
+        </Card>
+      )}
+
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Recent Scans</p>
+            <p className="mt-0.5 text-xs text-gray-400">Newest first from public.package_scans</p>
+          </div>
+          {loadingRecent && <p className="text-xs text-gray-400">Loading...</p>}
+        </div>
+        <div className="mt-3 space-y-2">
+          {(recentScans || []).length ? recentScans.map(scan => (
+            <div key={scan.id || `${scan.tracking_number}-${scan.created_at}`} className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-gray-900">{scan.tracking_number || "Unknown tracking"}</p>
+                <Badge label={scan.current_status || scan.action_needed || "Scan"} className="bg-gray-100 text-gray-600 border-gray-200" />
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500">
+                {scan.carrier || "USPS"} · {scan.scan_type || "manual"} · {scan.order_number || "No order"} · {fmtDate(scan.created_at || nowISO())}
+              </p>
+              <p className="mt-1 text-xs text-gray-600">{scan.notes || "No notes"}</p>
+            </div>
+          )) : (
+            <p className="text-xs text-gray-400">No scans logged yet.</p>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+};
+
 const ACTION_PRIORITY_STYLE = {
   Critical: "bg-black text-white border-black",
   High:     "bg-black text-white border-black",
@@ -3092,6 +3310,49 @@ const insertReplacementToSupabase = async (row = {}) => {
 // ─── TIKTOK SHOP CHAT EMAIL NORMALIZER ───────────────────────────────────────
 // Cleans TikTok Seller Assistant email boilerplate for display only.
 // Raw message_body in Supabase is NEVER modified.
+
+const fetchRecentPackageScansFromSupabase = async () => {
+  if (!supabase) return { data: [], error: { message: "No Supabase client." } };
+  const { data, error } = await supabase
+    .from("package_scans")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(25);
+  if (error) {
+    console.error("Supabase package scans fetch error:", error);
+    return { data: [], error };
+  }
+  return { data: data || [], error: null };
+};
+
+const lookupShipmentByTrackingNumber = async (trackingNumber) => {
+  if (!supabase) return { data: null, error: { message: "No Supabase client." } };
+  const { data, error } = await supabase
+    .from("order_shipments")
+    .select("*")
+    .eq("tracking_number", trackingNumber)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("Supabase order shipment lookup error:", error);
+    return { data: null, error };
+  }
+  return { data, error: null };
+};
+
+const insertPackageScanToSupabase = async (row = {}) => {
+  if (!supabase) return { data: null, error: { message: "No Supabase client." } };
+  const { data, error } = await supabase
+    .from("package_scans")
+    .insert([row])
+    .select("*")
+    .single();
+  if (error) {
+    console.error("Supabase package scan insert error:", error);
+    return { data: null, error };
+  }
+  return { data, error: null };
+};
 
 const isTikTokShopMessage = (msg) =>
   msg.channel === "TikTok Shop" ||
@@ -10120,6 +10381,7 @@ export default function JonnyOpsCommandCenter() {
       case "replacements": return <ReplacementLogView replacements={replacements} setReplacements={setReplacements} replacementsLoading={replacementsLoading} replacementsError={replacementsError} onRefresh={refreshReplacements} replacementFocus={replacementFocus} />;
       case "studio": return <StudioReadinessView studios={studios} setStudios={setStudios} />;
       case "pricecheck": return <PriceCheckView />;
+      case "shipping-scanner": return <ShippingScannerView />;
       case "sets": return <SurpriseSetView surpriseSets={surpriseSets} setSurpriseSets={setSurpriseSets} />;
       case "weekly": return <WeeklyRaiseView tickets={tickets} replacements={replacements} studios={studios} surpriseSets={surpriseSets} raiseScores={raiseScores} setRaiseScores={setRaiseScores} inboundMessages={inboundMessages} />;
       case "data": return <DataManagementView {...common} />;
@@ -10133,7 +10395,7 @@ export default function JonnyOpsCommandCenter() {
   const PAGE_LABELS = {
     dashboard: "Dashboard", inbox: "Command Inbox", actions: "Action Queue",
     daily: "Daily Command Board", tickets: "Tickets", replacements: "Replacements",
-    studio: "Inventory", pricecheck: "Price Check", sets: "Surprise Sets", browser: "Browser Profiles",
+    studio: "Inventory", pricecheck: "Price Check", "shipping-scanner": "Shipping Scanner", sets: "Surprise Sets", browser: "Browser Profiles",
     cs: "CS Templates", weekly: "Reports", data: "Settings",
   };
 
