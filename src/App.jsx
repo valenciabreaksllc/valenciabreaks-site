@@ -2654,13 +2654,44 @@ const deriveActionTitle = (msg) => {
 
 // ─── ACTION PRIORITY / STATUS STYLES ─────────────────────────────────────────
 const ShippingScannerView = () => {
+  const Html5QrcodeRef = useRef(null);
+  const scannerContainerId = "shipping-scanner-preview";
   const [trackingNumber, setTrackingNumber] = useState("");
   const [carrier, setCarrier] = useState("USPS");
+  const [scanType, setScanType] = useState("manual_entry");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [recentScans, setRecentScans] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+
+  const clearCameraPreview = () => {
+    const node = document.getElementById(scannerContainerId);
+    if (node) node.innerHTML = "";
+  };
+
+  const stopCamera = async () => {
+    const scanner = Html5QrcodeRef.current;
+    try {
+      if (scanner) {
+        await scanner.stop();
+      }
+    } catch {}
+    try {
+      if (scanner) {
+        await scanner.clear();
+      }
+    } catch {}
+    Html5QrcodeRef.current = null;
+    setCameraActive(false);
+    setCameraReady(false);
+    setIsScanning(false);
+    clearCameraPreview();
+  };
 
   const loadRecentScans = async () => {
     setLoadingRecent(true);
@@ -2675,12 +2706,38 @@ const ShippingScannerView = () => {
 
   useEffect(() => {
     loadRecentScans();
+    return () => {
+      stopCamera();
+    };
   }, []);
 
-  const handleSaveScan = async () => {
-    const normalizedTracking = String(trackingNumber || "").trim();
+  const buildScanRow = (tracking, matchedShipment, nextScanType, rawScan) => {
+    const matched = Boolean(matchedShipment);
+    const normalizedStatus = matched ? "matched" : "needs_review";
+    return {
+      tracking_number: tracking,
+      carrier,
+      scan_type: nextScanType,
+      matched,
+      matched_order_number: matchedShipment?.order_number || null,
+      matched_platform: matchedShipment?.platform || null,
+      matched_brand: matchedShipment?.brand || matchedShipment?.account || null,
+      matched_customer: matchedShipment?.customer_name || null,
+      matched_username: matchedShipment?.customer_username || null,
+      current_status: normalizedStatus,
+      action_needed: matched ? "none" : "find_order",
+      notes: matched
+        ? `Matched shipment for ${tracking}.`
+        : `No shipment match found for ${tracking}.`,
+      raw_scan: rawScan || tracking,
+      created_at: nowISO(),
+    };
+  };
+
+  const completeScan = async (tracking, nextScanType, rawScan) => {
+    const normalizedTracking = String(tracking || "").trim();
     if (!normalizedTracking) {
-      setError("Enter a USPS tracking number.");
+      setError("Enter or scan a tracking number.");
       setResult(null);
       return;
     }
@@ -2696,63 +2753,82 @@ const ShippingScannerView = () => {
       return;
     }
 
-    const matched = Boolean(shipment);
-    const fields = matched ? {
-      brand: shipment.brand || shipment.account || "",
-      platform: shipment.platform || shipment.channel || "",
-      orderNumber: shipment.order_number || "",
-      customerName: shipment.customer_name || "",
-      customerUsername: shipment.customer_username || "",
-      shipmentStatus: shipment.shipment_status || shipment.status || "",
-    } : {
-      brand: "",
-      platform: "",
-      orderNumber: "",
-      customerName: "",
-      customerUsername: "",
-      shipmentStatus: "",
-    };
-
-    const currentStatus = matched ? (fields.shipmentStatus || "Matched") : "No Match Found";
-    const actionNeeded = matched ? "Matched" : "Needs Review";
-    const notes = matched
-      ? `Matched shipment for ${normalizedTracking}.`
-      : `No shipment match found for ${normalizedTracking}.`;
-
-    const scanRow = {
-      tracking_number: normalizedTracking,
-      carrier,
-      scan_type: "manual",
-      brand: fields.brand || null,
-      platform: fields.platform || null,
-      order_number: fields.orderNumber || null,
-      customer_name: fields.customerName || null,
-      customer_username: fields.customerUsername || null,
-      shipment_status: fields.shipmentStatus || null,
-      current_status: currentStatus,
-      action_needed: actionNeeded,
-      notes,
-      created_at: nowISO(),
-    };
-
+    const scanRow = buildScanRow(normalizedTracking, shipment, nextScanType, rawScan);
     const { error: insertError } = await insertPackageScanToSupabase(scanRow);
     setSaving(false);
+
     if (insertError) {
       setError(`Scan save failed: ${insertError.message}`);
       return;
     }
 
+    const matched = Boolean(shipment);
     setResult({
       matched,
       trackingNumber: normalizedTracking,
-      ...fields,
-      currentStatus,
-      actionNeeded,
-      notes,
+      brand: shipment?.brand || shipment?.account || "",
+      platform: shipment?.platform || shipment?.channel || "",
+      orderNumber: shipment?.order_number || "",
+      customerName: shipment?.customer_name || "",
+      customerUsername: shipment?.customer_username || "",
+      shipmentStatus: shipment?.shipment_status || shipment?.status || "",
+      currentStatus: scanRow.current_status,
+      actionNeeded: scanRow.action_needed,
+      notes: scanRow.notes,
       url: shipment?.shipment_url || shipment?.tracking_url || shipment?.url || "",
     });
     setTrackingNumber("");
+    setScanType("manual_entry");
     await loadRecentScans();
+  };
+
+  const handleSaveScan = async () => {
+    await completeScan(trackingNumber, scanType, trackingNumber);
+  };
+
+  const handleStartCamera = async () => {
+    if (!supabase || cameraActive || isScanning) return;
+    setCameraError("");
+    setError("");
+    setIsScanning(true);
+    try {
+      const { Html5Qrcode } = await import("html5-qrcode");
+      clearCameraPreview();
+      const scanner = new Html5Qrcode(scannerContainerId);
+      Html5QrcodeRef.current = scanner;
+      setCameraActive(true);
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        async (decodedText) => {
+          const scanned = String(decodedText || "").trim();
+          if (!scanned) return;
+          setTrackingNumber(scanned);
+          setScanType("camera_scan");
+          await stopCamera();
+          await completeScan(scanned, "camera_scan", scanned);
+        },
+        () => {}
+      );
+      setCameraReady(true);
+    } catch (err) {
+      await stopCamera();
+      setCameraError(err?.message || "Camera start failed.");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleStopCamera = async () => {
+    await stopCamera();
+  };
+
+  const handleScanAnother = async () => {
+    setResult(null);
+    setError("");
+    setTrackingNumber("");
+    setScanType("manual_entry");
+    await handleStartCamera();
   };
 
   const renderValue = (value) => value ? value : "—";
@@ -2763,17 +2839,24 @@ const ShippingScannerView = () => {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-gray-900">Shipping Scanner</p>
-            <p className="mt-0.5 text-xs text-gray-400">Manual USPS scans with shipment lookup and log capture.</p>
+            <p className="mt-0.5 text-xs text-gray-400">Manual USPS scans plus mobile camera barcode capture.</p>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-[1.5fr_0.7fr_auto]">
+        <div className="mt-4 grid gap-3 md:grid-cols-[1.5fr_0.7fr]">
           <div>
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">USPS tracking number</label>
             <input
               value={trackingNumber}
-              onChange={e => setTrackingNumber(e.target.value)}
+              onChange={e => {
+                setTrackingNumber(e.target.value);
+                setScanType("manual_entry");
+              }}
               placeholder="Enter tracking number"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-slate-500"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-slate-500"
+              inputMode="text"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
             />
           </div>
           <div>
@@ -2781,25 +2864,56 @@ const ShippingScannerView = () => {
             <select
               value={carrier}
               onChange={e => setCarrier(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-slate-500"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-slate-500"
             >
               {["USPS", "UPS", "FedEx", "DHL", "Other"].map(option => (
                 <option key={option} value={option}>{option}</option>
               ))}
             </select>
           </div>
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={handleSaveScan}
-              disabled={saving}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save Scan"}
-            </button>
-          </div>
         </div>
-        {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <button
+            type="button"
+            onClick={handleStartCamera}
+            disabled={cameraActive || isScanning}
+            className="inline-flex h-12 items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+          >
+            Start Camera
+          </button>
+          <button
+            type="button"
+            onClick={handleStopCamera}
+            disabled={!cameraActive}
+            className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Stop Camera
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveScan}
+            disabled={saving}
+            className="inline-flex h-12 items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Scan"}
+          </button>
+          <button
+            type="button"
+            onClick={handleScanAnother}
+            className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            Scan Another
+          </button>
+        </div>
+
+        <div className="mt-4">
+          <div id={scannerContainerId} className="overflow-hidden rounded-lg border border-gray-200 bg-black" />
+          <p className="mt-2 text-[11px] text-gray-400">Use the rear camera on iPhone Safari. Scanning stops automatically when a barcode is detected.</p>
+        </div>
+
+        {cameraError && <p className="mt-3 text-sm text-red-700">{cameraError}</p>}
+        {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
       </Card>
 
       {result && (
