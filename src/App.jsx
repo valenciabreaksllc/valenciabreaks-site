@@ -2945,8 +2945,8 @@ const fetchInboundMessagesFromSupabase = async () => {
     .from(INBOUND_MESSAGES_TABLE)
     .select("*")
     .is("archived_at", null)
-    .order("received_time", { ascending: false })
     .order("created_at", { ascending: false })
+    .order("received_time", { ascending: false })
     .limit(300);
   if (error) { console.error("Supabase inbound fetch error:", error); return { data: [], error }; }
   return { data: data || [], error: null };
@@ -3256,7 +3256,7 @@ const RISK_LEVEL_STYLE = {
   "Medium": "bg-slate-50 text-slate-700 border-slate-200",
   "Low":    "bg-gray-100 text-gray-500 border-gray-200",
 };
-const INBOX_FILTER_OPTIONS = ["All", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority", "Closed", "Archived"];
+const INBOX_FILTER_OPTIONS = ["All", "Zendesk", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority", "Closed", "Archived"];
 
 const INBOX_BRAND_BORDER_CLASS = {
   "Vaulted Rarities": "border-l-yellow-400",
@@ -3896,6 +3896,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const filtered = safeInboundMessages.filter(m => {
     if (inboxFilter && !matchesCommandInboxFilter(m, inboxFilter)) return false;
     if (activeFilter === "All")                 return true;
+    if (activeFilter === "Zendesk")             return classifyInboundSource(m) === "Zendesk";
     if (activeFilter === "TikTok Shop Chat")      return classifyInboundSource(m) === "TikTok Shop Chat";
     if (activeFilter === "Refunds / Returns")   return classifyInboundSource(m) === "TikTok Refund";
     if (activeFilter === "Shopify")             return classifyInboundSource(m) === "Shopify";
@@ -3909,7 +3910,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (activeFilter === "Archived")            return false;
     return true;
   });
-  const getSortTime = (message) => new Date(message.email_received_at || message.created_at || 0).getTime() || 0;
+  const getSortTime = (message) => new Date(message.created_at || message.received_time || message.email_received_at || message.received_at || 0).getTime() || 0;
   const getPriorityRank = (priority) => ({ High: 0, Medium: 1, Low: 2 }[priority] ?? 3);
   const newestFirst = (a, b) => getSortTime(b) - getSortTime(a);
   const sortedFiltered = [...filtered].sort((a, b) => {
