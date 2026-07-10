@@ -2945,8 +2945,9 @@ const fetchInboundMessagesFromSupabase = async () => {
     .from(INBOUND_MESSAGES_TABLE)
     .select("*")
     .is("archived_at", null)
-    .order("received_at", { ascending: false })
-    .limit(200);
+    .order("received_time", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(300);
   if (error) { console.error("Supabase inbound fetch error:", error); return { data: [], error }; }
   return { data: data || [], error: null };
 };
@@ -3170,6 +3171,15 @@ const cleanTikTokBody = (raw, username) => {
 // used to show the optional collapsed note in the card.
 // Non-TikTok messages pass through unchanged.
 const getDisplayInboundMessage = (msg) => {
+  const isZendesk = String(msg?.source || "").toLowerCase() === "zendesk";
+  if (isZendesk) {
+    const notes = String(msg?.notes || "").trim();
+    return {
+      displayName: msg?.customer || msg?.sender_name || msg?.sender_email || msg?.account || null,
+      displayBody: notes,
+      hasHistory: false,
+    };
+  }
   const body = msg?.message || msg?.message_body || msg?.message_text || "";
   if (!isTikTokShopMessage(msg)) {
     return { displayName: null, displayBody: body, hasHistory: false };
@@ -3198,6 +3208,25 @@ const getDisplayInboundMessage = (msg) => {
     nameFromSubject || nameFromBody || msg.customer_name || msg.sender_name || null;
 
   return { displayName, displayBody, hasHistory };
+};
+
+const parseZendeskNotes = (notes) => {
+  const text = String(notes || "");
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const valueFrom = (label) => {
+    const regex = new RegExp(`^${label}:\\s*(.+)$`, "i");
+    for (const line of lines) {
+      const match = line.match(regex);
+      if (match?.[1]) return match[1].trim();
+    }
+    return "";
+  };
+  const preview = valueFrom("Latest message/description preview") || valueFrom("Message preview");
+  const subject = valueFrom("Subject");
+  const requesterEmail = valueFrom("Requester email");
+  const ticketId = valueFrom("Zendesk Ticket ID");
+  const url = valueFrom("Zendesk URL");
+  return { subject, preview, requesterEmail, ticketId, url };
 };
 
 
@@ -3347,6 +3376,7 @@ const isTikTokRefund = (msg) => {
 
 // Returns a source category string for a message.
 const classifyInboundSource = (msg) => {
+  if (String(msg?.source || "").toLowerCase() === "zendesk") return "Zendesk";
   if (isTikTokRefund(msg)) return "TikTok Refund";
   const chan  = (msg.channel || "").toLowerCase();
   const src   = (msg.source  || "").toLowerCase();
@@ -3367,6 +3397,7 @@ const classifyInboundSource = (msg) => {
 
 // Source type badge styles
 const SOURCE_BADGE_STYLE = {
+  "Zendesk":          "bg-slate-800 text-white border-slate-900",
   "TikTok Shop Chat": "bg-black text-white border-black",
   "TikTok Refund":    "bg-black text-white border-black",
   "Shopify":          "bg-slate-700 text-white border-slate-800",
@@ -3377,6 +3408,9 @@ const SOURCE_BADGE_STYLE = {
 
 // Derive the best display title for a card given its source type.
 const getInboundCardTitle = (msg, sourceType, displayName) => {
+  if (sourceType === "Zendesk") {
+    return msg.order_number || msg.orderNumber || msg.subject || msg.issue_type || "Zendesk Ticket";
+  }
   if (sourceType === "TikTok Refund") {
     const orderStr = (msg.order_number || msg.orderNumber || "").trim();
     return orderStr ? `Refund / Return Request - Order ${orderStr}` : "Refund / Return Request";
@@ -4828,13 +4862,20 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const cardTitle      = getInboundCardTitle(msg, sourceType, displayName);
         const ts             = getInboundTimestamp(msg);
         const orderNum       = msg.order_number || msg.orderNumber || null;
+        const isZendesk      = sourceType === "Zendesk";
+        const zendeskNotes   = isZendesk ? parseZendeskNotes(msg.notes) : null;
+        const zendeskSubject = zendeskNotes?.subject || "";
+        const zendeskPreview = zendeskNotes?.preview || "";
+        const zendeskRequester = zendeskNotes?.requesterEmail || "";
+        const zendeskUrl     = zendeskNotes?.url || "";
         const isRefund       = sourceType === "TikTok Refund";
         const isNoise        = sourceType === "Noise";
         const isMessageExpanded = expandedMessages[msg.id] === true;
         const sourceBadgeLabel = isRefund ? "Refund / Return" : sourceType;
         const displayBrand = getDisplayBrand(msg);
         const brandBorderCls = getInboxBrandBorderClass(displayBrand);
-        const showSubjectLine = msg.subject && msg.subject !== cardTitle;
+        const displayCustomer = displayName || msg.sender_name || msg.customer_name || msg.customer || (isZendesk ? zendeskRequester : "");
+        const showSubjectLine = isZendesk ? Boolean(zendeskSubject) : msg.subject && msg.subject !== cardTitle;
         const hasReplyText = Boolean(msg.approved_reply || msg.ai_draft);
         const isAssistantOpen = assistantMessageId === msg.id;
         const assistantState = isAssistantOpen ? assistantResults[msg.id] : null;
@@ -4908,24 +4949,31 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             {isRefund && (
               <div className="flex flex-wrap gap-x-4 gap-y-0.5 mb-2">
                 {orderNum         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Order:</span> {orderNum}</span>}
-                {showName         && <span className="text-[11px] text-gray-600"><span className="font-semibold">Customer:</span> {showName}</span>}
+                {displayCustomer   && <span className="text-[11px] text-gray-600"><span className="font-semibold">Customer:</span> {displayCustomer}</span>}
                 {msg.sender_email && <span className="text-[11px] text-gray-400">{msg.sender_email}</span>}
                 <span className="text-[11px] text-gray-700 font-medium">Review in TikTok Seller Center</span>
               </div>
             )}
 
             {/* Non-refund sender line */}
-            {!isRefund && showName && (
+            {!isRefund && displayCustomer && (
               <p className="text-xs text-gray-600 mb-1.5">
-                <span className="font-semibold text-gray-800">{showName}</span>
+                <span className="font-semibold text-gray-800">{displayCustomer}</span>
                 {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">· {msg.sender_email}</span>}
+                {isZendesk && orderNum && <span className="text-gray-400 ml-1">· Ticket {orderNum}</span>}
+              </p>
+            )}
+
+            {isZendesk && zendeskPreview && (
+              <p className="text-xs text-gray-600 mb-1.5">
+                <span className="font-semibold text-gray-700">Preview:</span> {zendeskPreview}
               </p>
             )}
 
             {/* Subject */}
             {showSubjectLine && (
               <p className="text-xs text-gray-500 italic mb-1.5 truncate">
-                <span className="not-italic font-medium text-gray-500">Subject:</span> {msg.subject}
+                <span className="not-italic font-medium text-gray-500">Subject:</span> {isZendesk ? zendeskSubject : msg.subject}
               </p>
             )}
 
@@ -5129,6 +5177,15 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
             {/* Action buttons */}
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+              {isZendesk && zendeskUrl && (
+                <button
+                  type="button"
+                  onClick={() => window.open(zendeskUrl, "_blank", "noopener,noreferrer")}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap"
+                >
+                  Open in Zendesk
+                </button>
+              )}
               <button
                 type="button"
                 disabled={!displayBody}
@@ -5730,7 +5787,7 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
 const CLOSED_INBOUND_STATUSES = ["Closed", "Archived", "Resolved"];
 const OPEN_INBOUND_STATUSES = ["Needs Reply", "In Progress", "Draft Ready", "Ticket Created", "Manual Review", ""];
 const getMessageSortTimestamp = (message) =>
-  new Date(message?.received_at || message?.email_received_at || message?.received_time || message?.created_at || 0).getTime() || 0;
+  new Date(message?.received_time || message?.received_at || message?.email_received_at || message?.created_at || 0).getTime() || 0;
 const normalizeWorkQueueStatus = (status) =>
   String(status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 const getOpenMessages = (messages) => {
