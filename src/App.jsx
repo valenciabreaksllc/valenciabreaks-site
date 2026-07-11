@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+﻿import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from '@supabase/supabase-js';
 
-// ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
+// â”€â”€â”€ SUPABASE CLIENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const supabaseUrl = "https://hljotjdrgabhmqgorbpo.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhsam90amRyZ2FiaG1xZ29yYnBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NjYzMzAsImV4cCI6MjA5NDE0MjMzMH0.KojT8NA3qias7s-ljAN92LTnpBWvtbJwxvAAUU5FIIw";
 const supabase = supabaseUrl && supabaseAnonKey
@@ -12,7 +12,7 @@ const LAST_SEEN_MESSAGE_STORAGE_KEY = "ops_command_hub_last_seen_message_at";
 const INBOUND_MESSAGES_TABLE = "work_queue";
 const SHELL_UNLOCK_STORAGE_KEY = "jonny_ops_shell_unlocked_v3";
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const uid = () => Math.random().toString(36).slice(2, 9);
 const todayStr = () => new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 const nowStr = () => new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
@@ -34,7 +34,7 @@ const slaDisplay = (createdAt) => {
 };
 const isActiveSlaRisk = (t) => t.slaRisk === "Yes" && t.status !== "Resolved" && t.status !== "Escalated" && slaHoursRemaining(t.createdAt) < 2;
 
-// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ CONSTANTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "Pokiemart"];
 const BRAND_SHORT = { "Vaulted Rarities": "VR", "CardKing47": "CK47", "PokeSpins": "PS", "Pokiemart": "PM" };
 // Exact brand colors per spec
@@ -78,11 +78,11 @@ const KANBAN_COLS = ["New", "In Progress", "Waiting on Customer", "Backend Looku
 const TONES = ["Friendly", "Firm", "Apology", "Investigation", "Final-sale policy"];
 const ROOT_CAUSES = ["Carrier delay", "Lost in transit", "Wrong item packed", "Missing item in pack", "Damaged in shipping", "Customer error", "Warehouse error", "Surprise set dispute", "Other"];
 
-// ─── AUTO-ARCHIVE AGE THRESHOLDS (req 6) ─────────────────────────────────────
+// â”€â”€â”€ AUTO-ARCHIVE AGE THRESHOLDS (req 6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const RESOLVED_MAX_DAYS = 7;
 const ESCALATED_MAX_DAYS = 14;
 
-// ─── SUPABASE DATA HELPERS ───────────────────────────────────────────────────
+// â”€â”€â”€ SUPABASE DATA HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const normalizeBrandForApp = (brand, brandCode) => {
   const value = (brand || brandCode || "").toString().trim();
   const upper = value.toUpperCase();
@@ -162,7 +162,7 @@ const appTicketToDbRow = (ticket = {}) => {
   };
 };
 
-// ─── PATCH 1: fetchTicketsFromSupabase - active-only + auto-archive filter ───
+// â”€â”€â”€ PATCH 1: fetchTicketsFromSupabase - active-only + auto-archive filter â”€â”€â”€
 // Fetches only rows where archived_at IS NULL.
 // Resolved tickets older than 7 days and Escalated tickets older than 14 days
 // are excluded client-side so they silently age out without touching Supabase.
@@ -231,7 +231,7 @@ const updateTicketStatusInSupabase = async (id, status) => {
   return { error };
 };
 
-// ─── PATCH 2: archiveTicketInSupabase helper ──────────────────────────────────
+// â”€â”€â”€ PATCH 2: archiveTicketInSupabase helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const archiveTicketInSupabase = async (id, reason) => {
   if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
   const { error } = await supabase
@@ -260,7 +260,7 @@ const PRIORITY_STYLE = {
   "Low": "bg-gray-100 text-gray-600 border-gray-200",
 };
 
-// ─── SAMPLE DATA ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ SAMPLE DATA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SLA window = 48h from creation. To demo an "urgent" alert, create one ticket ~47.5h ago.
 const DEMO_TICKETS = [
   { id: uid(), brand: "Vaulted Rarities", channel: "Shop Chat", issueType: "Where is my order", priority: "High", slaRisk: "Yes", status: "New", notes: "Customer ordered 5 days ago. Tracking shows label created but carrier has not scanned.", nextAction: "Backend lookup: verify tracking / label status in TikTok Seller Center", createdAt: new Date(Date.now() - 47.6 * 3600000).toISOString() },
@@ -2337,7 +2337,7 @@ const SHIFT_END = [
   "Confirm no overdue actions",
 ];
 
-// ─── CS TEMPLATES ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ CS TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const QUICK_TEMPLATES = [
   { label: "Where is my order?", issueType: "Where is my order", tone: "Friendly" },
   { label: "Label created / no scan", issueType: "Label created / no scan", tone: "Investigation" },
@@ -2373,7 +2373,7 @@ const generateTemplate = (brand, issueType, tone, orderNum, customerName) => {
   return templates[issueType] || `${greeting}\n\nThank you for reaching out about ${oNum}. I'm reviewing your case now and will follow up with an update shortly.${sign}`;
 };
 
-// ─── PRIMITIVES ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ PRIMITIVES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Card = ({ children, className = "", ...props }) => (
   <div {...props} className={`bg-white border border-gray-200 rounded-xl shadow-sm ${className}`}>{children}</div>
 );
@@ -2505,7 +2505,7 @@ const OpsToastStack = ({ toasts, onDismiss }) => (
   </div>
 );
 
-// ─── PATCH 3: ArchiveBtn - reusable trash icon button ────────────────────────
+// â”€â”€â”€ PATCH 3: ArchiveBtn - reusable trash icon button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ArchiveBtn = ({ ticketId, setTickets }) => {
   const runArchive = async () => {
     const { error } = await archiveTicketInSupabase(ticketId, "manual archive");
@@ -2541,7 +2541,7 @@ const ArchiveBtn = ({ ticketId, setTickets }) => {
   );
 };
 
-// ─── SIDEBAR NAV ICONS ────────────────────────────────────────────────────────
+// â”€â”€â”€ SIDEBAR NAV ICONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ICONS = {
   dashboard: <path d="M2 2h5v5H2zm7 0h5v5H9zM2 9h5v5H2zm7 0h5v5H9z" fill="currentColor" opacity=".7" />,
   daily: <><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 1v3M11 1v3M2 7h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></>,
@@ -2576,7 +2576,7 @@ const NAV = [
   { section: "Reporting", items: [{ id: "weekly", label: "Reports" }, { id: "data", label: "Settings" }] },
 ];
 
-// ─── OPS ACTIONS SUPABASE HELPERS ────────────────────────────────────────────
+// â”€â”€â”€ OPS ACTIONS SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ACTION_PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
@@ -2652,7 +2652,7 @@ const deriveActionTitle = (msg) => {
   return `${it} - ${name}`.slice(0, 80);
 };
 
-// ─── ACTION PRIORITY / STATUS STYLES ─────────────────────────────────────────
+// â”€â”€â”€ ACTION PRIORITY / STATUS STYLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ShippingScannerView = () => {
   const Html5QrcodeRef = useRef(null);
   const scannerContainerId = "shipping-scanner-preview";
@@ -2668,10 +2668,20 @@ const ShippingScannerView = () => {
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [trackingStatus, setTrackingStatus] = useState(null);
 
   const clearCameraPreview = () => {
     const node = document.getElementById(scannerContainerId);
     if (node) node.innerHTML = "";
+  };
+
+  const cleanScannedTracking = (value) => {
+    const raw = String(value || "").replace(/[\s\r\n]+/g, "");
+    const numericMatches = raw.match(/\d{20,}/g);
+    if (numericMatches && numericMatches.length) {
+      return numericMatches.sort((a, b) => b.length - a.length)[0];
+    }
+    return raw.replace(/[^A-Za-z0-9]/g, "");
   };
 
   const stopCamera = async () => {
@@ -2734,8 +2744,24 @@ const ShippingScannerView = () => {
     };
   };
 
+  const buildTrackingStatus = (shipment, scanRow) => {
+    const labelCreated = shipment?.label_created_at || shipment?.label_created || shipment?.label_created_time || null;
+    const firstCarrierScan = shipment?.first_carrier_scan_at || shipment?.shipped_at || shipment?.first_scan_at || null;
+    const delivered = shipment?.delivered_at || shipment?.delivered_time || null;
+    const returned = shipment?.returned_at || shipment?.return_time || null;
+    const lastTrackingStatus = shipment?.tracking_status || shipment?.shipment_status || shipment?.status || scanRow?.current_status || null;
+    return {
+      labelCreated,
+      firstCarrierScan,
+      delivered,
+      returned,
+      lastTrackingStatus,
+      apiConnected: Boolean(labelCreated || firstCarrierScan || delivered || returned || lastTrackingStatus),
+    };
+  };
+
   const completeScan = async (tracking, nextScanType, rawScan) => {
-    const normalizedTracking = String(tracking || "").trim();
+    const normalizedTracking = cleanScannedTracking(tracking);
     if (!normalizedTracking) {
       setError("Enter or scan a tracking number.");
       setResult(null);
@@ -2777,6 +2803,7 @@ const ShippingScannerView = () => {
       notes: scanRow.notes,
       url: shipment?.shipment_url || shipment?.tracking_url || shipment?.url || "",
     });
+    setTrackingStatus(buildTrackingStatus(shipment, scanRow));
     setTrackingNumber("");
     setScanType("manual_entry");
     await loadRecentScans();
@@ -2797,11 +2824,17 @@ const ShippingScannerView = () => {
       const scanner = new Html5Qrcode(scannerContainerId);
       Html5QrcodeRef.current = scanner;
       setCameraActive(true);
+      let cameraConfig = { facingMode: { ideal: "environment" } };
+      try {
+        const cameras = await Html5Qrcode.getCameras();
+        const preferred = (cameras || []).find(camera => /back|rear|environment/i.test(String(camera.label || ""))) || (cameras || [])[0];
+        if (preferred?.id) cameraConfig = { deviceId: { exact: preferred.id } };
+      } catch {}
       await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
+        cameraConfig,
+        { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
         async (decodedText) => {
-          const scanned = String(decodedText || "").trim();
+          const scanned = cleanScannedTracking(decodedText);
           if (!scanned) return;
           setTrackingNumber(scanned);
           setScanType("camera_scan");
@@ -2828,10 +2861,13 @@ const ShippingScannerView = () => {
     setError("");
     setTrackingNumber("");
     setScanType("manual_entry");
+    setTrackingStatus(null);
     await handleStartCamera();
   };
 
-  const renderValue = (value) => value ? value : "—";
+  const renderValue = (value) => value ? value : "â€”";
+
+  const trackingStatusFields = trackingStatus || {};
 
   return (
     <div className="space-y-4">
@@ -2842,74 +2878,98 @@ const ShippingScannerView = () => {
             <p className="mt-0.5 text-xs text-gray-400">Manual USPS scans plus mobile camera barcode capture.</p>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-[1.5fr_0.7fr]">
-          <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">USPS tracking number</label>
-            <input
-              value={trackingNumber}
-              onChange={e => {
-                setTrackingNumber(e.target.value);
-                setScanType("manual_entry");
-              }}
-              placeholder="Enter tracking number"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-slate-500"
-              inputMode="text"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Carrier</label>
-            <select
-              value={carrier}
-              onChange={e => setCarrier(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-slate-500"
-            >
-              {["USPS", "UPS", "FedEx", "DHL", "Other"].map(option => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 space-y-3">
           <button
             type="button"
             onClick={handleStartCamera}
             disabled={cameraActive || isScanning}
-            className="inline-flex h-12 items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+            className="inline-flex h-14 w-full items-center justify-center rounded-xl border border-slate-800 bg-slate-800 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-900 disabled:opacity-50"
           >
-            Start Camera
+            Start USPS Camera Scan
           </button>
-          <button
-            type="button"
-            onClick={handleStopCamera}
-            disabled={!cameraActive}
-            className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-          >
-            Stop Camera
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveScan}
-            disabled={saving}
-            className="inline-flex h-12 items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Scan"}
-          </button>
-          <button
-            type="button"
-            onClick={handleScanAnother}
-            className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            Scan Another
-          </button>
+          {cameraActive && (
+            <button
+              type="button"
+              onClick={handleStopCamera}
+              className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Stop Camera
+            </button>
+          )}
         </div>
 
         <div className="mt-4">
-          <div id={scannerContainerId} className="overflow-hidden rounded-lg border border-gray-200 bg-black" />
-          <p className="mt-2 text-[11px] text-gray-400">Use the rear camera on iPhone Safari. Scanning stops automatically when a barcode is detected.</p>
+          <div id={scannerContainerId} className="min-h-[280px] overflow-hidden rounded-lg border border-gray-200 bg-black" />
+          <p className="mt-2 text-[11px] text-gray-400">Use the rear camera on iPhone Safari. The scanner stops automatically when a barcode is detected.</p>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cleaned tracking number</p>
+          <p className="mt-1 break-all text-lg font-semibold text-slate-900">{renderValue(trackingNumber)}</p>
+          <p className="mt-1 text-xs text-slate-500">Spaces, line breaks, and extra barcode characters are removed automatically.</p>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Tracking status</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {[
+              ["Label Created", trackingStatusFields.labelCreated],
+              ["First Carrier Scan / Shipped", trackingStatusFields.firstCarrierScan],
+              ["Delivered", trackingStatusFields.delivered],
+              ["Returned", trackingStatusFields.returned],
+              ["Last Tracking Status", trackingStatusFields.lastTrackingStatus],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                <p className="mt-1 text-sm font-semibold text-gray-800">{renderValue(value || "Tracking API not connected yet")}</p>
+              </div>
+            ))}
+          </div>
+          {!trackingStatusFields.apiConnected && <p className="mt-3 text-xs text-gray-500">Tracking API not connected yet</p>}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Manual fallback</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-[1.5fr_0.7fr]">
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Tracking number</label>
+              <input
+                value={trackingNumber}
+                onChange={e => {
+                  setTrackingNumber(e.target.value);
+                  setScanType("manual_entry");
+                }}
+                placeholder="Enter tracking number"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-slate-500"
+                inputMode="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Carrier</label>
+              <select
+                value={carrier}
+                onChange={e => setCarrier(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-slate-500"
+              >
+                {["USPS", "UPS", "FedEx", "DHL", "Other"].map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={handleSaveScan}
+              disabled={saving}
+              className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Scan"}
+            </button>
+          </div>
         </div>
 
         {cameraError && <p className="mt-3 text-sm text-red-700">{cameraError}</p>}
@@ -2953,6 +3013,15 @@ const ShippingScannerView = () => {
               </a>
             </div>
           )}
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={handleScanAnother}
+              className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-4 text-sm font-semibold text-white hover:bg-slate-900"
+            >
+              Scan Another Package
+            </button>
+          </div>
         </Card>
       )}
 
@@ -2972,7 +3041,7 @@ const ShippingScannerView = () => {
                 <Badge label={scan.current_status || scan.action_needed || "Scan"} className="bg-gray-100 text-gray-600 border-gray-200" />
               </div>
               <p className="mt-1 text-[11px] text-gray-500">
-                {scan.carrier || "USPS"} · {scan.scan_type || "manual"} · {scan.order_number || "No order"} · {fmtDate(scan.created_at || nowISO())}
+                {scan.carrier || "USPS"} · {scan.scan_type || "manual"} · {scan.matched_brand || scan.matched_platform || scan.matched_customer || "No match"} · {scan.matched_order_number || scan.order_number || "No order"} · {scan.action_needed || "none"} · {fmtDate(scan.created_at || nowISO())}
               </p>
               <p className="mt-1 text-xs text-gray-600">{scan.notes || "No notes"}</p>
             </div>
@@ -3000,7 +3069,7 @@ const ACTION_STATUS_STYLE = {
 };
 const ACTION_FILTERS = ["All", "Due Today", "Overdue", "High Priority", "Waiting on Customer", "Replacement Needed"];
 
-// ─── NEXT ACTION QUEUE VIEW ───────────────────────────────────────────────────
+// â”€â”€â”€ NEXT ACTION QUEUE VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, onRefresh, setActiveView }) => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [busyId, setBusyId] = useState(null);
@@ -3154,7 +3223,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
               {(action.customer_name || action.customer_email) && (
                 <p className="text-[10px] text-gray-400 mb-2">
                   {action.customer_name && <span className="font-medium text-gray-600">{action.customer_name}</span>}
-                  {action.customer_email && <span className="ml-1">· {action.customer_email}</span>}
+                  {action.customer_email && <span className="ml-1">Â· {action.customer_email}</span>}
                 </p>
               )}
 
@@ -3197,7 +3266,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
   );
 };
 
-// ─── AUTOMATION RULES SUPABASE HELPERS ───────────────────────────────────────
+// â”€â”€â”€ AUTOMATION RULES SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const fetchAutomationRulesFromSupabase = async () => {
   if (!supabase) return { data: [], error: { message: "No Supabase client." } };
@@ -3269,7 +3338,7 @@ const findAutomationRule = (rules, msg) => {
   return found || null;
 };
 
-// ─── INBOUND MESSAGE SUPABASE HELPERS ────────────────────────────────────────
+// â”€â”€â”€ INBOUND MESSAGE SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const fetchInboundMessagesFromSupabase = async () => {
   if (!supabase) return { data: [], error: { message: "No Supabase client." } };
@@ -3304,7 +3373,7 @@ const archiveInboundInSupabase = async (id) => {
   return { error };
 };
 
-// ─── REPLACEMENTS SUPABASE HELPERS ───────────────────────────────────────────
+// â”€â”€â”€ REPLACEMENTS SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const closeAndArchiveInboundInSupabase = async (id) => {
   if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
@@ -3327,7 +3396,7 @@ const fetchReplacementsFromSupabase = async () => {
     console.error("Supabase replacements fetch error:", error);
     return { data: [], error };
   }
-  // Normalise snake_case DB columns → camelCase used by the UI
+  // Normalise snake_case DB columns â†’ camelCase used by the UI
   const rows = (data || []).map(r => ({
     id:                r.id,
     date:              r.date              || r.created_at?.slice(0, 10) || "",
@@ -3421,7 +3490,7 @@ const insertReplacementToSupabase = async (row = {}) => {
   return { data: dbReplacementToApp(data), error: null };
 };
 
-// ─── TIKTOK SHOP CHAT EMAIL NORMALIZER ───────────────────────────────────────
+// â”€â”€â”€ TIKTOK SHOP CHAT EMAIL NORMALIZER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Cleans TikTok Seller Assistant email boilerplate for display only.
 // Raw message_body in Supabase is NEVER modified.
 
@@ -3516,7 +3585,7 @@ const cleanTikTokBody = (raw, username) => {
 
   const allLines = raw.split(/\r?\n/).map(l => l.trim());
 
-  // ── Step 1: find start of new-message section ──────────────────────────────
+  // â”€â”€ Step 1: find start of new-message section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let start = 0;
   for (let i = 0; i < allLines.length; i++) {
     if (TIKTOK_NEW_MSG_START.test(allLines[i])) {
@@ -3525,7 +3594,7 @@ const cleanTikTokBody = (raw, username) => {
     }
   }
 
-  // ── Step 2: find end of new-message section (history boundary) ─────────────
+  // â”€â”€ Step 2: find end of new-message section (history boundary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let end = allLines.length;
   for (let i = start; i < allLines.length; i++) {
     if (TIKTOK_HISTORY_BOUNDARIES.some(re => re.test(allLines[i]))) {
@@ -3534,7 +3603,7 @@ const cleanTikTokBody = (raw, username) => {
     }
   }
 
-  // ── Step 3: slice to new-message window, strip junk ─────────────────────────
+  // â”€â”€ Step 3: slice to new-message window, strip junk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const window = allLines.slice(start, end);
   const kept = window.filter(line => !isTikTokJunkLine(line, username));
 
@@ -3605,7 +3674,7 @@ const parseZendeskNotes = (notes) => {
 };
 
 
-// ─── INBOX PRIORITY / STATUS STYLES ──────────────────────────────────────────
+// â”€â”€â”€ INBOX PRIORITY / STATUS STYLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const INBOX_PRIORITY_STYLE = {
   "High":   "bg-black text-white border-black",
   "Medium": "bg-slate-50 text-slate-700 border-slate-200",
@@ -3694,7 +3763,7 @@ const getDisplayBrand = (message) => {
   return "Unassigned";
 };
 
-// ─── INBOX MESSAGE CLASSIFICATION HELPERS ────────────────────────────────────
+// â”€â”€â”€ INBOX MESSAGE CLASSIFICATION HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Format an ISO timestamp in Pacific time. Gracefully returns "" on bad input.
 const fmtPacific = (iso) => {
@@ -3806,7 +3875,7 @@ const getInboundCardTitle = (msg, sourceType, displayName) => {
 
 
 
-// ─── COMMAND INBOX VIEW ───────────────────────────────────────────────────────
+// â”€â”€â”€ COMMAND INBOX VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const isCommandInboxAssistantOpenStatus = (status) => {
   const normalized = String(status || "").trim();
   return !["Closed", "Archived", "Resolved"].includes(normalized);
@@ -4266,7 +4335,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
   }, [inboxFilterKey]);
 
-  // ── filter logic ─────────────────────────────────────────────────────────────
+  // â”€â”€ filter logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
   const filtered = safeInboundMessages.filter(m => {
     if (inboxFilter && !matchesCommandInboxFilter(m, inboxFilter)) return false;
@@ -4488,7 +4557,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     setManualMessageError("");
   };
 
-  // ── handlers ──────────────────────────────────────────────────────────────────
+  // â”€â”€ handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleManualMessageSubmit = async () => {
     const brand = manualMessageForm.brand.trim();
     const channel = manualMessageForm.channel.trim();
@@ -4806,12 +4875,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     ));
   };
 
-  // ── Process Queue state ───────────────────────────────────────────────────────
+  // â”€â”€ Process Queue state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [queueRunning, setQueueRunning]   = useState(false);
   const [queueProgress, setQueueProgress] = useState("");
   const [queueSummary, setQueueSummary]   = useState(null);
 
-  // ── Check Gmail state ─────────────────────────────────────────────────────────
+  // â”€â”€ Check Gmail state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [isCheckingGmail, setIsCheckingGmail] = useState(false);
   const [lastGmailCheckAt, setLastGmailCheckAt] = useState(null);
   const [gmailCheckError, setGmailCheckError] = useState("");
@@ -4882,7 +4951,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       const msg = candidates[i];
       setQueueProgress(`Processing ${i + 1} of ${candidates.length}...`);
 
-      // ── Step 1: Triage ──────────────────────────────────────────────────────
+      // â”€â”€ Step 1: Triage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       let triaged = msg;
       try {
         const { data: tData, error: tErr } = await supabase.functions.invoke(
@@ -4894,10 +4963,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         }
       } catch (_) { /* non-fatal */ }
 
-      // ── Step 2: Find matching automation rule ───────────────────────────────
+      // â”€â”€ Step 2: Find matching automation rule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const rule = findAutomationRule(automationRules, triaged);
 
-      // ── Step 3: Noise handling ──────────────────────────────────────────────
+      // â”€â”€ Step 3: Noise handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const isNoise = triaged.triage_status === "Noise / Not CS" ||
         triaged.issue_type === "Noise / Not CS";
 
@@ -4918,7 +4987,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         continue;
       }
 
-      // ── Step 4: Draft ───────────────────────────────────────────────────────
+      // â”€â”€ Step 4: Draft â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Rule-driven if rule exists; safe default = draft only low-risk reply work.
       const shouldDraft = !getCommandInboxRiskFlag(triaged) && (
         rule ? rule.auto_draft === true : isCommandInboxAutoDraftEligible(triaged)
@@ -4937,7 +5006,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         } catch (_) { /* non-fatal */ }
       }
 
-      // ── Step 5: Create action ───────────────────────────────────────────────
+      // â”€â”€ Step 5: Create action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Rule-driven if rule exists; safe default = create if next_action is set
       const shouldCreateAction = rule
         ? rule.auto_create_action === true
@@ -5126,7 +5195,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </>
             )}
           </div>
-          <button onClick={() => setQueueSummary(null)} className="text-teal-400 hover:text-teal-700 text-lg leading-none ml-3 flex-shrink-0">×</button>
+          <button onClick={() => setQueueSummary(null)} className="text-teal-400 hover:text-teal-700 text-lg leading-none ml-3 flex-shrink-0">Ã—</button>
         </div>
       )}
 
@@ -5335,8 +5404,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             {!isRefund && displayCustomer && (
               <p className="text-xs text-gray-600 mb-1.5">
                 <span className="font-semibold text-gray-800">{displayCustomer}</span>
-                {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">· {msg.sender_email}</span>}
-                {isZendesk && orderNum && <span className="text-gray-400 ml-1">· Ticket {orderNum}</span>}
+                {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">Â· {msg.sender_email}</span>}
+                {isZendesk && orderNum && <span className="text-gray-400 ml-1">Â· Ticket {orderNum}</span>}
               </p>
             )}
 
@@ -5369,7 +5438,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               <p className="text-[10px] text-gray-400 italic mb-2">Conversation history saved in raw email.</p>
             )}
 
-            {/* ── Triage fields ── */}
+            {/* â”€â”€ Triage fields â”€â”€ */}
             {(msg.issue_type || msg.customer_intent || msg.risk_level || msg.triage_summary || msg.next_action || msg.recommended_reply_type || msg.confidence_score != null) && (
               <div className="border border-gray-100 rounded-lg bg-gray-50 px-3 py-2.5 mb-3 space-y-1.5">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Triage</p>
@@ -5390,7 +5459,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </div>
             )}
 
-            {/* ── AI Draft box ── */}
+            {/* â”€â”€ AI Draft box â”€â”€ */}
             {isAssistantOpen && (
               <div className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
@@ -5653,10 +5722,10 @@ const buildFullReport = ({ tickets, replacements, studios, surpriseSets, raiseSc
   return `JONNY OPS - WEEKLY RAISE TRACKER REPORT
 Week of ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
 Prepared by: Jonny Valencia
-${"─".repeat(52)}
+${"â”€".repeat(52)}
 
 TIKTOK SPS / CUSTOMER SUPPORT
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Reviewed ${safeTickets.length} support tickets across all four brands this week.
 
 By brand:
@@ -5670,7 +5739,7 @@ Summary:
   SLA risks (active, < 2h): ${safeTickets.filter(t => isActiveSlaRisk(t)).length}
 
 INVENTORY & STUDIO READINESS
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ${safeStudios.map(s => `  ${s.id}: ${s.streamReady ? "Stream-ready" : "NOT READY"} - ${s.notes}`).join("\n")}
 
   Overall readiness:     ${studioScore}%
@@ -5678,7 +5747,7 @@ ${safeStudios.map(s => `  ${s.id}: ${s.streamReady ? "Stream-ready" : "NOT READY
   Studios counted:       ${safeStudios.filter(s => s.countCompleted).length}/${safeStudios.length}
 
 SHIPPING LOSS PREVENTION
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Replacement cases logged:   ${safeReplacements.length}
   Estimated loss tracked:     $${totalLoss.toFixed(2)}
   Preventable cases:          ${preventable.length}${preventable.length > 0 ? ` (${preventable.map(r => r.orderNum).join(", ")})` : ""}
@@ -5686,13 +5755,13 @@ SHIPPING LOSS PREVENTION
 ${topCauses.length > 0 ? `\n  Top root causes:\n${topCauses.map(([c, n]) => `  - ${c}: ${n} case${n > 1 ? "s" : ""}`).join("\n")}` : ""}
 
 SURPRISE SET EXECUTION
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Sets tracked:       ${safeSurpriseSets.length}
   Ready for live:     ${setsReady.length}
 ${safeSurpriseSets.map(s => `  - ${s.setName} (${s.brand}) - ${s.readyForLive ? "Ready" : "Not ready"}`).join("\n")}
 
 RAISE PATH - SELF ASSESSMENT
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Consistency:          ${raiseScores.consistency}%
   Accuracy:             ${raiseScores.accuracy}%
   Loss Reduction:       ${raiseScores.lossReduction}%
@@ -5700,23 +5769,23 @@ RAISE PATH - SELF ASSESSMENT
   Process Improvement:  ${raiseScores.processImprovement}%
 
 PROCESS IMPROVEMENTS
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ${improvements || "  No process improvements noted this week."}
 
 RISKS / BLOCKERS
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ${risks || "  No active risks or blockers noted."}
 
 NEXT WEEK FOCUS
-─────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ${nextFocus || "  No focus areas set for next week."}
 
-${"─".repeat(52)}
+${"â”€".repeat(52)}
 Generated by Jonny Ops Command Center v1.1
 ${new Date().toLocaleString()}`.trim();
 };
 
-// ─── DAILY OPS BRIEF ─────────────────────────────────────────────────────────
+// â”€â”€â”€ DAILY OPS BRIEF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Pure computation - reads already-fetched state, no new Supabase calls.
 
 const buildBriefSummary = ({ msgsNeedingReply, draftsReady, overdueActions, highActions, dueTodayActions, waitingActions }) => {
@@ -5762,7 +5831,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   const isTicketNew = (t) => t.status === "New" || t.status === "In Progress";
   const createdToday = (iso) => { const d = new Date(iso); return d >= todayStart && d <= todayEnd; };
 
-  // ── Metric counts ─────────────────────────────────────────────────────────────
+  // â”€â”€ Metric counts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const msgsNeedingReply  = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
   const draftsReady       = safeInboundMessages.filter(m => m.draft_status === "Draft Ready").length;
   const openActions       = safeOpsActions.length;
@@ -5772,7 +5841,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   const waitingActions    = safeOpsActions.filter(a => a.status === "Waiting on Customer").length;
   const ticketsToday      = safeTickets.filter(t => t.createdAt && createdToday(t.createdAt)).length;
 
-  // ── Build Start Here list (max 5, priority-ordered) ───────────────────────────
+  // â”€â”€ Build Start Here list (max 5, priority-ordered) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startHere = [];
 
   // 1. Overdue ops_actions
@@ -5964,7 +6033,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   );
 };
 
-// ─── NOTIFICATION DROPDOWN ────────────────────────────────────────────────────
+// â”€â”€â”€ NOTIFICATION DROPDOWN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const SystemStatusPanel = ({ inboundMessages, inboundLoading, inboundError, lastSyncAt }) => {
   const [open, setOpen] = useState(false);
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
@@ -6107,7 +6176,7 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
           <div className="absolute right-0 top-8 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
               <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Notifications</p>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">Ã—</button>
             </div>
             {recentActivity.length === 0 && items.length === 0 ? (
               <div className="px-4 py-6 text-center">
@@ -6159,7 +6228,7 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
   );
 };
 
-// ─── DASHBOARD VIEW ───────────────────────────────────────────────────────────
+// â”€â”€â”€ DASHBOARD VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CLOSED_INBOUND_STATUSES = ["Closed", "Archived", "Resolved"];
 const OPEN_INBOUND_STATUSES = ["Needs Reply", "In Progress", "Draft Ready", "Ticket Created", "Manual Review", ""];
 const getMessageSortTimestamp = (message) =>
@@ -6572,7 +6641,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   );
 };
 
-// ─── DAILY COMMAND BOARD ──────────────────────────────────────────────────────
+// â”€â”€â”€ DAILY COMMAND BOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DailyCommandView = ({ tickets }) => {
   const [startC, setStartC] = useState(SHIFT_START.map(() => false));
   const [endC, setEndC] = useState(SHIFT_END.map(() => false));
@@ -6598,7 +6667,7 @@ const DailyCommandView = ({ tickets }) => {
 
   return (
     <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold text-gray-900">Daily Command Board</h2><p className="text-xs text-gray-400 mt-0.5">{todayStr()} · {nowStr()}</p></div>
+      <div><h2 className="text-2xl font-bold text-gray-900">Daily Command Board</h2><p className="text-xs text-gray-400 mt-0.5">{todayStr()} Â· {nowStr()}</p></div>
       {crit.length > 0 && (
         <div className="bg-red-600 rounded-lg px-5 py-3">
           <p className="text-white text-xs font-bold uppercase tracking-widest mb-1">Critical SLA Alert Zone - Action Required Now</p>
@@ -6629,7 +6698,7 @@ const DailyCommandView = ({ tickets }) => {
   );
 };
 
-// ─── TICKET QUEUE (KANBAN) ────────────────────────────────────────────────────
+// â”€â”€â”€ TICKET QUEUE (KANBAN) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const TicketQueueView = ({ tickets, setTickets }) => {
   const emptyF = { brand: "", channel: "", issueType: "", priority: "Medium", slaRisk: "No", status: "New", notes: "", nextAction: "" };
   const [form, setForm] = useState(emptyF);
@@ -6655,7 +6724,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   };
   const filtered = tickets.filter(t => (!filter.brand || t.brand === filter.brand) && (!filter.status || t.status === filter.status) && (!filter.priority || t.priority === filter.priority));
 
-  // ── PATCH 4b: TCard gets archive button in top-right corner ──────────────
+  // â”€â”€ PATCH 4b: TCard gets archive button in top-right corner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const TCard = ({ ticket: t }) => {
     const cd = slaDisplay(t.createdAt);
     const showSla = t.slaRisk === "Yes" && t.status !== "Resolved";
@@ -6671,7 +6740,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
           <ArchiveBtn ticketId={t.id} setTickets={setTickets} />
         </div>
         <p className="text-xs font-semibold text-gray-900 mb-1">{t.issueType}</p>
-        <p className="text-[10px] text-gray-400 mb-1">{t.channel} · {fmtDate(t.createdAt)}</p>
+        <p className="text-[10px] text-gray-400 mb-1">{t.channel} Â· {fmtDate(t.createdAt)}</p>
         {showSla && <p className={`text-[10px] font-mono font-bold mb-1 ${cd.urgent ? "text-red-600" : cd.warning ? "text-amber-500" : "text-gray-500"}`}>SLA: {cd.display} remaining</p>}
         {t.notes && <p className="text-[10px] text-gray-500 mb-2 line-clamp-2">{t.notes}</p>}
         {t.nextAction && <p className="text-[10px] text-slate-600">{t.nextAction}</p>}
@@ -6723,7 +6792,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   );
 };
 
-// ─── BROWSER PROFILE MAP ──────────────────────────────────────────────────────
+// â”€â”€â”€ BROWSER PROFILE MAP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const BrowserProfileView = () => {
   const profiles = [
     { brand: "Vaulted Rarities", tools: ["TikTok Seller Center", "TikTok Shop Chat", "TikTok DMs", "Instagram DMs", "Outlook Email", "TikTok Streamer Desktop"] },
@@ -6755,7 +6824,7 @@ const BrowserProfileView = () => {
   );
 };
 
-// ─── CS TEMPLATES ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ CS TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CSTemplateView = ({ setTickets }) => {
   const [brand, setBrand] = useState("");
   const [issue, setIssue] = useState("");
@@ -6865,7 +6934,7 @@ const CSTemplateView = ({ setTickets }) => {
   );
 };
 
-// ─── REPLACEMENT LOG ──────────────────────────────────────────────────────────
+// â”€â”€â”€ REPLACEMENT LOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const REPLACEMENT_STATUS_OPTIONS = ["Open", "Reshipped", "Refunded", "Resolved", "Pending"];
 const REPLACEMENT_FILTERS = ["Active", "All", "Archived", "CardKing47", "Vaulted Rarities", "PokeSpins", "Pokiemart", "Follow-Up Needed"];
 const DANTE_DEPT_FAULT_OPTIONS = ["James", "JB", "Jojo", "Gio", "Gurt", "Bernardo", "Sarah", "Streamer"];
@@ -6987,7 +7056,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     return () => clearTimeout(timer);
   }, [replacementFocus, safeReplacements.length]);
 
-  // ── Add new row (local-only until Supabase migration of replacements table) ──
+  // â”€â”€ Add new row (local-only until Supabase migration of replacements table) â”€â”€
   const add = () => {
     if (!form.brand || !form.orderNum) return;
     setReplacements(p => [{
@@ -6997,7 +7066,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     setForm(emptyF); setShow(false);
   };
 
-  // ── Archive row (soft-delete via Supabase, fall back to local remove) ──────
+  // â”€â”€ Archive row (soft-delete via Supabase, fall back to local remove) â”€â”€â”€â”€â”€â”€
   const runArchiveReplacement = async (row) => {
     if (supabase && row.id && !/^[a-z0-9]{7}$/.test(row.id)) {
       // Only call Supabase for UUID-format ids (real rows); skip local uid() rows
@@ -7021,7 +7090,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     });
   };
 
-  // ── Save inline edit ────────────────────────────────────────────────────────
+  // â”€â”€ Save inline edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSaveEdit = async () => {
     const updated = {
       ...editForm,
@@ -7054,7 +7123,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     setSavingId(null);
   };
 
-  // ── Filter + derived stats ──────────────────────────────────────────────────
+  // â”€â”€ Filter + derived stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const displayRows = safeReplacements.filter(r => {
     if (activeFilter === "All")              return true;
     if (activeFilter === "Active")           return !r.archived_at;
@@ -7218,7 +7287,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                     className={`border-b border-gray-50 ${isFocused ? "bg-slate-100 ring-1 ring-inset ring-slate-300" : isEditing ? "bg-slate-50" : isArchived ? "bg-gray-50 text-gray-500" : "hover:bg-gray-50"}`}
                   >
                     {isEditing ? (
-                      /* ── Inline edit row ── */
+                      /* â”€â”€ Inline edit row â”€â”€ */
                       <>
                         <td className="px-3 py-2"><Inp type="date" value={editForm.date || ""} onChange={ef("date")} className="w-32" /></td>
                         <td className="px-3 py-2"><Inp value={editForm.orderNum || editForm.order_number || ""} onChange={ef("orderNum")} placeholder="Order #" className="w-24" /></td>
@@ -7248,7 +7317,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                         </td>
                       </>
                     ) : (
-                      /* ── Read row ── */
+                      /* â”€â”€ Read row â”€â”€ */
                       <>
                         <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{dante.date || "-"}</td>
                         <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{dante.order || "-"}</td>
@@ -7307,7 +7376,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   );
 };
 
-// ─── STUDIO READINESS ─────────────────────────────────────────────────────────
+// â”€â”€â”€ STUDIO READINESS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const LegacyStudioReadinessView = ({ studios, setStudios }) => {
   const safeStudios = Array.isArray(studios) ? studios : [];
   const upd = (id, field, val) => setStudios(p => p.map(s => s.id === id ? { ...s, [field]: val } : s));
@@ -7315,7 +7384,7 @@ const LegacyStudioReadinessView = ({ studios, setStudios }) => {
   const overall = safeStudios.length ? Math.round(safeStudios.reduce((a, s) => a + score(s), 0) / safeStudios.length) : 0;
   return (
     <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness · <span className="font-medium text-gray-500">{getWeekOfLabel()}</span></p></div>
+      <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness Â· <span className="font-medium text-gray-500">{getWeekOfLabel()}</span></p></div>
       <Card className="p-4 flex items-center gap-6">
         <div className="text-center"><p className="text-xs text-gray-400 mb-1">Overall Readiness</p><p className="text-5xl font-bold text-gray-900">{overall}%</p></div>
         <div className="flex-1"><ProgressBar pct={overall} color="bg-slate-500" /><p className="text-xs text-gray-400 mt-1.5">{safeStudios.filter(s => s.streamReady).length}/{safeStudios.length} stations stream-ready</p></div>
@@ -7361,7 +7430,7 @@ const LegacyStudioReadinessView = ({ studios, setStudios }) => {
   );
 };
 
-// ─── SURPRISE SET TRACKER ─────────────────────────────────────────────────────
+// â”€â”€â”€ SURPRISE SET TRACKER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const INVENTORY_CONTROL_SAMPLE_ROWS = [
   { id: "inv-vr-lorwyn-play", studio: "VR", zone: "Row 3C", internalName: "Lorwyn Play", shopifyTitle: "Lorwyn Eclipsed Play Booster Pack", sku: "VR-LORWYN-PLAY", countUnit: "Pack", conversion: "1 pack = 1 unit", shopifyQty: 42, physicalQty: "", notes: "" },
   { id: "inv-ps-chaos-etb", studio: "PS", zone: "PS3A", internalName: "Chaos Rising ETB", shopifyTitle: "Chaos Rising Elite Trainer Box", sku: "PS-CHAOS-ETB", countUnit: "Box", conversion: "1 box = 1 unit", shopifyQty: 18, physicalQty: "", notes: "" },
@@ -8111,8 +8180,8 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   );
 };
 
-// ─── WEEKLY RAISE TRACKER ─────────────────────────────────────────────────────
-// ─── OPERATIONS IMPACT REPORT ────────────────────────────────────────────────
+// â”€â”€â”€ WEEKLY RAISE TRACKER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ OPERATIONS IMPACT REPORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Week range helpers
 const getWeekRange = () => {
@@ -9153,17 +9222,17 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
 };
 
 const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseScores, setRaiseScores, inboundMessages }) => {
-  // ── Safe arrays ─────────────────────────────────────────────────────────────
+  // â”€â”€ Safe arrays â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const safeInbound      = Array.isArray(inboundMessages) ? inboundMessages : [];
   const safeReplacements = Array.isArray(replacements)    ? replacements    : [];
   const activeReplacements = safeReplacements.filter(r => !r.archived_at);
   const safeStudios      = Array.isArray(studios)         ? studios         : [];
   const safeSets         = Array.isArray(surpriseSets)    ? surpriseSets    : [];
 
-  // ── Week range ───────────────────────────────────────────────────────────────
+  // â”€â”€ Week range â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const week = getWeekRange();
 
-  // ── localStorage-persisted notes (all hooks at top level) ───────────────────
+  // â”€â”€ localStorage-persisted notes (all hooks at top level) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [wins,      setWins]      = useState(() => { try { return localStorage.getItem("ops_report_wins_v1")  || ""; } catch { return ""; } });
   const [risks,     setRisks]     = useState(() => { try { return localStorage.getItem("ops_report_risks_v1") || ""; } catch { return ""; } });
   const [nextFocus, setNextFocus] = useState(() => { try { return localStorage.getItem("ops_report_focus_v1") || ""; } catch { return ""; } });
@@ -9173,7 +9242,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   const saveRisks     = (v) => { setRisks(v);     try { localStorage.setItem("ops_report_risks_v1", v); } catch {} };
   const saveNextFocus = (v) => { setNextFocus(v); try { localStorage.setItem("ops_report_focus_v1", v); } catch {} };
 
-  // ── Core metric counts ───────────────────────────────────────────────────────
+  // â”€â”€ Core metric counts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const msgsImported    = safeInbound.filter(m => isThisWeek(m.received_at || m.email_received_at || m.received_time || m.created_at, week.start, week.end)).length || safeInbound.length;
   const needsReply      = getNeedsReplyMessages(safeInbound).length;
   const closedMsgs      = safeInbound.filter(m => m.status === "Closed").length;
@@ -9185,7 +9254,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   const setsReady       = safeSets.filter(s => s.readyForLive).length;
   const draftsGenerated = safeInbound.filter(m => m.ai_draft).length;
 
-  // ── Brand breakdown ──────────────────────────────────────────────────────────
+  // â”€â”€ Brand breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const brandRows = REPORT_BRANDS.map(brand => ({
     brand,
     open:        getOpenMessages(safeInbound).filter(m => getDisplayBrand(m) === brand).length,
@@ -9194,13 +9263,13 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
     replacements: activeReplacements.filter(r => r.brand === brand).length,
   }));
 
-  // ── Estimated time saved ─────────────────────────────────────────────────────
+  // â”€â”€ Estimated time saved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const timeMins = (msgsImported * 2) + (draftsGenerated * 5) + (activeReplacements.length * 3) + (setsReady * 5);
   const timeHours = (timeMins / 60).toFixed(1);
 
-  // ── Plain-text summary builder ───────────────────────────────────────────────
+  // â”€â”€ Plain-text summary builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const buildSummary = () => {
-    const sep = "─".repeat(52);
+    const sep = "â”€".repeat(52);
     const brandTable = brandRows.map(b =>
       `  ${b.brand.padEnd(18)} open: ${b.open}  closed: ${b.closed}  refunds: ${b.refunds}  replacements: ${b.replacements}`
     ).join("\n");
@@ -9267,7 +9336,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Operations Impact Report</h2>
           <p className="text-xs text-gray-400 mt-0.5">Weekly summary of workload, follow-ups, replacements, readiness, and system impact.</p>
-          <p className="text-xs text-gray-500 font-medium mt-1">{week.label} <span className="text-gray-400 font-normal">· {week.range}</span></p>
+          <p className="text-xs text-gray-500 font-medium mt-1">{week.label} <span className="text-gray-400 font-normal">Â· {week.range}</span></p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleCopy}
@@ -9376,7 +9445,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   );
 };
 
-// ─── DATA MANAGEMENT ──────────────────────────────────────────────────────────
+// â”€â”€â”€ DATA MANAGEMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const parsePriceCheckCsv = (text) => {
   const rows = [];
   let row = [];
@@ -9500,8 +9569,8 @@ const extractTcgProductId = (value) => {
 const cleanTcgSearchQuery = (title) => String(title || "")
   .replace(/\bMagic:\s*The\s*Gathering\s*-\s*/ig, "")
   .replace(/\bMTG\s*-\s*/ig, "")
-  .replace(/\bPok[eé]mon\s*-\s*/ig, "")
-  .replace(/\bPok[eé]mon\b/ig, "")
+  .replace(/\bPok[eÃ©]mon\s*-\s*/ig, "")
+  .replace(/\bPok[eÃ©]mon\b/ig, "")
   .replace(/^\s*\d+\s*x\s+/i, "")
   .replace(/\s+/g, " ")
   .trim();
@@ -9845,7 +9914,7 @@ const PriceCheckView = () => {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">{activeRow.title || "Untitled product"}</h3>
-                  <p className="mt-1 text-xs text-gray-400">{activeRow.handle || "No handle"} · SKU {activeRow.sku || "-"}</p>
+                  <p className="mt-1 text-xs text-gray-400">{activeRow.handle || "No handle"} Â· SKU {activeRow.sku || "-"}</p>
                 </div>
                 <Badge label={activeRow.computed.status} className={statusClass(activeRow.computed.status)} />
               </div>
@@ -10017,7 +10086,7 @@ const safeTickets = Array.isArray(tickets) ? tickets : [];
     e.target.value = "";
   };
 
-// ── req 7: Clear All deletes every ticket from Supabase (hard delete) ──
+// â”€â”€ req 7: Clear All deletes every ticket from Supabase (hard delete) â”€â”€
 const clearAll = async () => {
   setClearErr("");
   try {
@@ -10125,7 +10194,7 @@ const clearAll = async () => {
   );
 };
 
-// ─── OP SIDEKICK HASH BRIDGE ─────────────────────────────────────────────────
+// â”€â”€â”€ OP SIDEKICK HASH BRIDGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const normalizeSidekickBrand = (brand, brandCode) => {
   const value = (brand || brandCode || "").toString().trim();
   const upper = value.toUpperCase();
@@ -10208,7 +10277,7 @@ const getSidekickTicketFromHash = () => {
   };
 };
 
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ MAIN APP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function JonnyOpsCommandCenter() {
   const [activeView, setActiveViewRaw] = useState(() => {
     const VALID_VIEWS = new Set(["dashboard","inbox","replacements","studio","pricecheck","sets","weekly","data"]);
@@ -10250,7 +10319,7 @@ export default function JonnyOpsCommandCenter() {
   });
   const [sidekickToast, setSidekickToast] = useState(false);
 
-  // ── Inbox state ──────────────────────────────────────────────────────────────
+  // â”€â”€ Inbox state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [inboundMessages, setInboundMessages] = useState([]);
   const [inboundLoading, setInboundLoading] = useState(false);
   const [inboundError, setInboundError] = useState("");
@@ -10273,7 +10342,7 @@ export default function JonnyOpsCommandCenter() {
     setLastInboxSyncAt(nowISO());
   };
 
-  // ── Next Actions state ────────────────────────────────────────────────────────
+  // â”€â”€ Next Actions state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [opsActions, setOpsActions] = useState([]);
   const [opsLoading, setOpsLoading] = useState(false);
   const [opsError, setOpsError]     = useState("");
@@ -10287,12 +10356,12 @@ export default function JonnyOpsCommandCenter() {
     setOpsActions(data);
   };
 
-  // ── Automation Rules state ────────────────────────────────────────────────────
+  // â”€â”€ Automation Rules state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [automationRules, setAutomationRules]           = useState([]);
   const [automationRulesLoading, setAutomationRulesLoading] = useState(false);
   const [automationRulesError, setAutomationRulesError]     = useState("");
 
-  // ── Replacements state ────────────────────────────────────────────────────────
+  // â”€â”€ Replacements state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [replacementsLoading, setReplacementsLoading] = useState(false);
   const [replacementsError,   setReplacementsError]   = useState("");
   const [replacementFocus, setReplacementFocus] = useState(null);
@@ -10591,7 +10660,7 @@ export default function JonnyOpsCommandCenter() {
         </div>
       )}
 
-      {/* ── MOBILE DRAWER BACKDROP ── */}
+      {/* â”€â”€ MOBILE DRAWER BACKDROP â”€â”€ */}
       {mobileNavOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 md:hidden"
@@ -10599,7 +10668,7 @@ export default function JonnyOpsCommandCenter() {
         />
       )}
 
-      {/* ── MOBILE SLIDE-OUT DRAWER ── */}
+      {/* â”€â”€ MOBILE SLIDE-OUT DRAWER â”€â”€ */}
       <div className={`fixed inset-y-0 left-0 z-50 w-72 bg-white flex flex-col shadow-xl transition-transform duration-200 md:hidden ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}>
         {/* Drawer header */}
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
@@ -10612,7 +10681,7 @@ export default function JonnyOpsCommandCenter() {
         <NavContent showLabels={true} />
       </div>
 
-      {/* ── DESKTOP SIDEBAR (hidden on mobile) ── */}
+      {/* â”€â”€ DESKTOP SIDEBAR (hidden on mobile) â”€â”€ */}
       <aside
         style={{ width: sidebar ? 224 : 56, transition: "width .2s" }}
         className="hidden md:flex flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden"
@@ -10641,10 +10710,10 @@ export default function JonnyOpsCommandCenter() {
         </nav>
       </aside>
 
-      {/* ── MAIN CONTENT ── */}
+      {/* â”€â”€ MAIN CONTENT â”€â”€ */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-        {/* ── MOBILE TOP BAR (hidden on desktop) ── */}
+        {/* â”€â”€ MOBILE TOP BAR (hidden on desktop) â”€â”€ */}
         <div className="flex md:hidden items-center justify-between bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             {/* Hamburger */}
@@ -10698,7 +10767,7 @@ export default function JonnyOpsCommandCenter() {
           </div>
         </div>
 
-        {/* ── DESKTOP TOP BAR (hidden on mobile) ── */}
+        {/* â”€â”€ DESKTOP TOP BAR (hidden on mobile) â”€â”€ */}
         <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
           <p className="text-sm font-bold text-gray-900">Ops Command Hub v3.0</p>
           <div className="flex items-center gap-3">
@@ -10734,12 +10803,12 @@ export default function JonnyOpsCommandCenter() {
           </div>
         </header>
 
-        {/* ── PAGE CONTENT ── */}
+        {/* â”€â”€ PAGE CONTENT â”€â”€ */}
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0" style={{ background: "#f3f4f6" }}>
           <div className="mx-auto max-w-[1440px] px-3 py-4 md:px-6 md:py-6">{renderView()}</div>
         </main>
 
-        {/* ── MOBILE BOTTOM QUICK NAV ── */}
+        {/* â”€â”€ MOBILE BOTTOM QUICK NAV â”€â”€ */}
         <nav className="flex md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 safe-area-inset-bottom">
           {[
             { id: "dashboard",    label: "Home",         badge: 0,
@@ -10777,6 +10846,7 @@ export default function JonnyOpsCommandCenter() {
     </div>
   );
 }
+
 
 
 
