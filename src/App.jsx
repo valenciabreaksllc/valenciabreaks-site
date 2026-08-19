@@ -1,7 +1,54 @@
-﻿import { useState, useEffect, useCallback, useRef } from "react";
+﻿import { Component, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from '@supabase/supabase-js';
+import { resolveCaseContext } from './lib/resolveCaseContext.js';
+import { setCaseContext, clearActiveContext } from './lib/activeContext.js';
+import { classifyShippingSignal } from './lib/classifyShippingSignal.js';
 
-// â”€â”€â”€ SUPABASE CLIENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+class OPWorkspaceErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, retryKey: 0 };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("OP Software workspace crash:", error, info);
+  }
+
+  retryWorkspace = () => {
+    this.setState((state) => ({ error: null, retryKey: state.retryKey + 1 }));
+  };
+
+  returnToDashboard = () => {
+    try { localStorage.setItem("ops_active_view", "dashboard"); } catch {}
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="grid min-h-screen place-items-center bg-slate-100 p-6 text-slate-900">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">OP Software Recovery</div>
+            <h1 className="mt-2 text-xl font-bold">This workspace hit an error.</h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">Your data was not intentionally changed. Retry the workspace first, or return to Dashboard and reopen the view.</p>
+            <div className="mt-4 rounded-xl bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-500">{String(this.state.error?.message || this.state.error || "Unknown workspace error")}</div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button type="button" onClick={this.retryWorkspace} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white">Retry Workspace</button>
+              <button type="button" onClick={this.returnToDashboard} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700">Return to Dashboard</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return <div key={this.state.retryKey}>{this.props.children}</div>;
+  }
+}
+
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SUPABASE CLIENT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const supabaseUrl = "https://hljotjdrgabhmqgorbpo.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhsam90amRyZ2FiaG1xZ29yYnBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NjYzMzAsImV4cCI6MjA5NDE0MjMzMH0.KojT8NA3qias7s-ljAN92LTnpBWvtbJwxvAAUU5FIIw";
 const supabase = supabaseUrl && supabaseAnonKey
@@ -12,7 +59,7 @@ const LAST_SEEN_MESSAGE_STORAGE_KEY = "ops_command_hub_last_seen_message_at";
 const INBOUND_MESSAGES_TABLE = "work_queue";
 const SHELL_UNLOCK_STORAGE_KEY = "jonny_ops_shell_unlocked_v3";
 
-// â”€â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ HELPERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const uid = () => Math.random().toString(36).slice(2, 9);
 const todayStr = () => new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 const nowStr = () => new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
@@ -34,7 +81,7 @@ const slaDisplay = (createdAt) => {
 };
 const isActiveSlaRisk = (t) => t.slaRisk === "Yes" && t.status !== "Resolved" && t.status !== "Escalated" && slaHoursRemaining(t.createdAt) < 2;
 
-// â”€â”€â”€ CONSTANTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CONSTANTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const BRANDS = ["Vaulted Rarities", "CardKing47", "PokeSpins", "Pokiemart"];
 const BRAND_SHORT = { "Vaulted Rarities": "VR", "CardKing47": "CK47", "PokeSpins": "PS", "Pokiemart": "PM" };
 // Exact brand colors per spec
@@ -78,11 +125,11 @@ const KANBAN_COLS = ["New", "In Progress", "Waiting on Customer", "Backend Looku
 const TONES = ["Friendly", "Firm", "Apology", "Investigation", "Final-sale policy"];
 const ROOT_CAUSES = ["Carrier delay", "Lost in transit", "Wrong item packed", "Missing item in pack", "Damaged in shipping", "Customer error", "Warehouse error", "Surprise set dispute", "Other"];
 
-// â”€â”€â”€ AUTO-ARCHIVE AGE THRESHOLDS (req 6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUTO-ARCHIVE AGE THRESHOLDS (req 6) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const RESOLVED_MAX_DAYS = 7;
 const ESCALATED_MAX_DAYS = 14;
 
-// â”€â”€â”€ SUPABASE DATA HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SUPABASE DATA HELPERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const normalizeBrandForApp = (brand, brandCode) => {
   const value = (brand || brandCode || "").toString().trim();
   const upper = value.toUpperCase();
@@ -162,7 +209,7 @@ const appTicketToDbRow = (ticket = {}) => {
   };
 };
 
-// â”€â”€â”€ PATCH 1: fetchTicketsFromSupabase - active-only + auto-archive filter â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PATCH 1: fetchTicketsFromSupabase - active-only + auto-archive filter Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Fetches only rows where archived_at IS NULL.
 // Resolved tickets older than 7 days and Escalated tickets older than 14 days
 // are excluded client-side so they silently age out without touching Supabase.
@@ -231,7 +278,7 @@ const updateTicketStatusInSupabase = async (id, status) => {
   return { error };
 };
 
-// â”€â”€â”€ PATCH 2: archiveTicketInSupabase helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PATCH 2: archiveTicketInSupabase helper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const archiveTicketInSupabase = async (id, reason) => {
   if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
   const { error } = await supabase
@@ -260,7 +307,7 @@ const PRIORITY_STYLE = {
   "Low": "bg-gray-100 text-gray-600 border-gray-200",
 };
 
-// â”€â”€â”€ SAMPLE DATA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SAMPLE DATA Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // SLA window = 48h from creation. To demo an "urgent" alert, create one ticket ~47.5h ago.
 const DEMO_TICKETS = [
   { id: uid(), brand: "Vaulted Rarities", channel: "Shop Chat", issueType: "Where is my order", priority: "High", slaRisk: "Yes", status: "New", notes: "Customer ordered 5 days ago. Tracking shows label created but carrier has not scanned.", nextAction: "Backend lookup: verify tracking / label status in TikTok Seller Center", createdAt: new Date(Date.now() - 47.6 * 3600000).toISOString() },
@@ -338,6 +385,84 @@ const SURPRISE_SET_STREAMS = [
 ];
 const SURPRISE_SET_BOARD_STATUS_OPTIONS = ["Draft", "Parsed", "Needs Review", "Converted", "Downloaded", "Uploaded", "Live Ready"];
 const SURPRISE_SET_BOARD_FOCUS_OPTIONS = ["All", "VR", "PS", "CK", "PM"];
+
+// SetSheet UX simplification: translates the existing, unmodified board
+// status enum (SURPRISE_SET_BOARD_STATUS_OPTIONS above) into the simpler
+// display vocabulary used by the new compact Today/Tomorrow/Pick Date row
+// list. Purely additive and read-only — never writes back to entry.status,
+// never touches normalizeSurpriseSetBoardStatus or any automation logic.
+// "Uploaded" and "Live Ready" are deliberately kept distinct (Live Ready is
+// the highest-completion state, not a synonym for Uploaded).
+const deriveSetSheetDisplayStatus = (entry) => {
+  if (entry?.needsReview) return "Needs Attention";
+  const status = entry?.status;
+  if (status === "Live Ready") return "Live Ready";
+  if (status === "Uploaded") return "Uploaded";
+  if (status === "Downloaded") return "Downloaded";
+  if (status === "Converted") return "Ready";
+  return "Needs Attention"; // Draft, Parsed, Needs Review, or anything unrecognized
+};
+
+// SetSheet background architecture, Phase A: keyed prepared-set cache.
+// Replaces the single-slot pokeSpinsDetected state with a map keyed by
+// brand+date, so more than one date's result can be held at once (needed
+// for Tomorrow-preload and instant date-switching in later phases).
+// Brand is included in the key now, even though only "PS" is ever
+// populated in this phase, so extending to other brands later is a key
+// addition, not a shape change.
+const buildDetectedSetsCacheKey = (brandCode, dateISO) => `${brandCode}|${dateISO}`;
+
+const EMPTY_DETECTED_SET_ENTRY = Object.freeze({
+  status: "loading",
+  shifts: [],
+  date: "",
+  brandCode: "",
+  fetchedAt: null,
+  lastError: null,
+  refreshing: false,
+});
+
+// The cache-write contract (approved explicitly before implementation):
+//   - success -> always overwrite status/shifts/date/brandCode/fetchedAt,
+//     clear lastError, refreshing:false. This applies even when the
+//     result is legitimately empty ("none" — a successful fetch that
+//     found nothing is still a successful fetch, distinct from "error").
+//   - failure, no prior successful data for this key (prev.status is
+//     still "loading", i.e. never resolved) -> status becomes "error",
+//     lastError set, shifts stays empty.
+//   - failure, prior successful data exists (prev.status was "ready" or
+//     "none") -> shifts/date/brandCode/fetchedAt/status are preserved
+//     byte-for-byte from the prior entry; only lastError and
+//     refreshing:false are updated. Good cached data is never erased or
+//     downgraded by a failed refresh.
+const mergeDetectedSetResult = (prevEntry, result) => {
+  const prev = prevEntry || EMPTY_DETECTED_SET_ENTRY;
+  if (result.ok) {
+    return {
+      status: result.status,
+      shifts: result.shifts,
+      date: result.date,
+      brandCode: result.brandCode,
+      fetchedAt: nowISO(),
+      lastError: null,
+      refreshing: false,
+    };
+  }
+  const hasPriorSuccess = prev.status === "ready" || prev.status === "none";
+  if (hasPriorSuccess) {
+    return { ...prev, lastError: result.error, refreshing: false };
+  }
+  return {
+    status: "error",
+    shifts: [],
+    date: result.date,
+    brandCode: result.brandCode,
+    fetchedAt: null,
+    lastError: result.error,
+    refreshing: false,
+  };
+};
+
 const SURPRISE_SET_STATUS_OPTIONS = ["Not Started", "Built", "Checked", "Live Ready"];
 const SURPRISE_SET_TRACKER_BRANDS = [
   { brand: "Vaulted Rarities", code: "VR" },
@@ -1525,23 +1650,36 @@ const isAutopilotCriticalWarning = (warning) =>
 const hasAutopilotCriticalWarnings = (warnings = []) =>
   (Array.isArray(warnings) ? warnings : []).some(isAutopilotCriticalWarning);
 
+// PokeSpins auto-detect fix: tabs named like "NIGHT 08/17" / "MORNING 08/17"
+// were being misparsed by the streamerFirst pattern below, which captured
+// "Night"/"Morning" as if they were a streamer's name. This denylist
+// rejects shift words as streamer captures at all three assignment points
+// in this function, without changing date/BUILT/shift detection (already
+// correct) or affecting other brands' real streamer-named tabs (verified
+// against "Jordan 8/17", "(Jordan) (8/17)", "8/17 Jordan", "8/17 (Jordan)").
+const AUTOPILOT_SHIFT_WORD_PATTERN = /^(morning|night|day|evening|am|pm)$/i;
+const cleanAutopilotStreamerCapture = (value) => {
+  const trimmed = String(value || "").trim();
+  return AUTOPILOT_SHIFT_WORD_PATTERN.test(trimmed) ? "" : titleCaseSurpriseSetName(trimmed);
+};
+
 const getAutopilotSetupHeader = (line) => {
   const clean = normalizeSetSheetProductName(line);
   if (!clean) return null;
   const parenStreamerDate = clean.match(/^\s*\(([A-Za-z][A-Za-z\s.'-]{1,24})\)\s*\((\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\)(?:\s*\+.*)?$/i);
   if (parenStreamerDate) {
     const isoDate = parseWarehouseSheetDate(parenStreamerDate[2], parenStreamerDate[3], parenStreamerDate[4]);
-    if (isoDate) return { streamDate: isoDate, streamer: titleCaseSurpriseSetName(parenStreamerDate[1]) };
+    if (isoDate) return { streamDate: isoDate, streamer: cleanAutopilotStreamerCapture(parenStreamerDate[1]) };
   }
   const dateFirst = clean.match(/^\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*(?:\(([A-Za-z][A-Za-z\s.'-]{1,24})\)|([A-Za-z][A-Za-z\s.'-]{1,24}))?(?:\s+(?:BUILT|DONE|NOT\s*DONE))?(?:\s*\+.*)?$/i);
   if (dateFirst && (dateFirst[4] || dateFirst[5])) {
     const isoDate = parseWarehouseSheetDate(dateFirst[1], dateFirst[2], dateFirst[3]);
-    if (isoDate) return { streamDate: isoDate, streamer: titleCaseSurpriseSetName(dateFirst[4] || dateFirst[5]) };
+    if (isoDate) return { streamDate: isoDate, streamer: cleanAutopilotStreamerCapture(dateFirst[4] || dateFirst[5]) };
   }
   const streamerFirst = clean.match(/^\s*([A-Za-z][A-Za-z\s.'-]{1,24})\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?:\s+(?:BUILT|DONE|NOT\s*DONE))?(?:\s*\+.*)?$/i);
   if (streamerFirst) {
     const isoDate = parseWarehouseSheetDate(streamerFirst[2], streamerFirst[3], streamerFirst[4]);
-    if (isoDate) return { streamDate: isoDate, streamer: titleCaseSurpriseSetName(streamerFirst[1]) };
+    if (isoDate) return { streamDate: isoDate, streamer: cleanAutopilotStreamerCapture(streamerFirst[1]) };
   }
   return null;
 };
@@ -2069,6 +2207,19 @@ const buildAutopilotPreviewRowsFromSheetTab = ({ channel, channelLabel, spreadsh
   return { previewRows, ignored: 0 };
 };
 
+// Extracted so both the existing manual "Import From Sheets" button and the
+// new PokeSpins auto-detect effect call the exact same network path — one
+// implementation of "call the edge function," not two. No behavior change
+// versus what was previously inlined in handleImportFromSheets.
+const fetchAutopilotSheetsImport = async (channels, dates) => {
+  if (!supabase?.functions?.invoke) throw new Error("Supabase functions unavailable.");
+  const { data, error } = await supabase.functions.invoke("import-surprise-sets", {
+    body: { channels, dates },
+  });
+  if (error || !data?.ok) throw error || new Error("Import failed.");
+  return data;
+};
+
 const buildAutopilotPreviewRowsFromSheetsImport = (payload = {}, selectedDates = []) => {
   const channelMap = payload?.data?.channels || payload?.channels || {};
   let ignoredTabs = 0;
@@ -2337,7 +2488,7 @@ const SHIFT_END = [
   "Confirm no overdue actions",
 ];
 
-// â”€â”€â”€ CS TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CS TEMPLATES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const QUICK_TEMPLATES = [
   { label: "Where is my order?", issueType: "Where is my order", tone: "Friendly" },
   { label: "Label created / no scan", issueType: "Label created / no scan", tone: "Investigation" },
@@ -2373,7 +2524,7 @@ const generateTemplate = (brand, issueType, tone, orderNum, customerName) => {
   return templates[issueType] || `${greeting}\n\nThank you for reaching out about ${oNum}. I'm reviewing your case now and will follow up with an update shortly.${sign}`;
 };
 
-// â”€â”€â”€ PRIMITIVES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PRIMITIVES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const Card = ({ children, className = "", ...props }) => (
   <div {...props} className={`bg-white border border-gray-200 rounded-xl shadow-sm ${className}`}>{children}</div>
 );
@@ -2505,7 +2656,7 @@ const OpsToastStack = ({ toasts, onDismiss }) => (
   </div>
 );
 
-// â”€â”€â”€ PATCH 3: ArchiveBtn - reusable trash icon button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PATCH 3: ArchiveBtn - reusable trash icon button Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const ArchiveBtn = ({ ticketId, setTickets }) => {
   const runArchive = async () => {
     const { error } = await archiveTicketInSupabase(ticketId, "manual archive");
@@ -2541,7 +2692,7 @@ const ArchiveBtn = ({ ticketId, setTickets }) => {
   );
 };
 
-// â”€â”€â”€ SIDEBAR NAV ICONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SIDEBAR NAV ICONS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const ICONS = {
   dashboard: <path d="M2 2h5v5H2zm7 0h5v5H9zM2 9h5v5H2zm7 0h5v5H9z" fill="currentColor" opacity=".7" />,
   daily: <><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 1v3M11 1v3M2 7h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></>,
@@ -2576,7 +2727,7 @@ const NAV = [
   { section: "Reporting", items: [{ id: "weekly", label: "Reports" }, { id: "data", label: "Settings" }] },
 ];
 
-// â”€â”€â”€ OPS ACTIONS SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ OPS ACTIONS SUPABASE HELPERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const ACTION_PRIORITY_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
@@ -2652,7 +2803,7 @@ const deriveActionTitle = (msg) => {
   return `${it} - ${name}`.slice(0, 80);
 };
 
-// â”€â”€â”€ ACTION PRIORITY / STATUS STYLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ACTION PRIORITY / STATUS STYLES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const ShippingScannerView = () => {
   const Html5QrcodeRef = useRef(null);
   const scannerContainerId = "shipping-scanner-preview";
@@ -2669,6 +2820,20 @@ const ShippingScannerView = () => {
   const [cameraReady, setCameraReady] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [trackingStatus, setTrackingStatus] = useState(null);
+  const [scannerMode, setScannerMode] = useState("lookup");
+  const [returnChannel, setReturnChannel] = useState("");
+  const [channelLocked, setChannelLocked] = useState(true);
+  const [sessionReturnCount, setSessionReturnCount] = useState(0);
+  const [returnConfirmation, setReturnConfirmation] = useState(null);
+  const [scannerToast, setScannerToast] = useState(null);
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [archivingScan, setArchivingScan] = useState(false);
+  const [detailTarget, setDetailTarget] = useState(null);
+  const [detailForm, setDetailForm] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState("");
 
   const clearCameraPreview = () => {
     const node = document.getElementById(scannerContainerId);
@@ -2809,8 +2974,218 @@ const ShippingScannerView = () => {
     await loadRecentScans();
   };
 
+  const completeReturnIntakeScan = async (tracking, rawScan) => {
+    const normalizedTracking = cleanScannedTracking(tracking);
+    if (!normalizedTracking || normalizedTracking.length < 20) return false;
+    if (!returnChannel) {
+      setError("Choose a return channel before scanning.");
+      return false;
+    }
+
+    setSaving(true);
+    setError("");
+    const { data: shipmentResult, error: lookupError } = await lookupShipmentByTrackingNumber(normalizedTracking);
+    const shipment = lookupError ? null : shipmentResult;
+    if (lookupError) {
+      console.warn("Return intake shipment lookup skipped:", lookupError.message);
+    }
+
+    const labelCreatedValue = shipment?.label_created_at || shipment?.label_created || shipment?.label_created_time || null;
+    const returnRow = {
+      tracking_number: normalizedTracking,
+      carrier,
+      channel: returnChannel,
+      intake_status: "needs_research",
+      disposition_status: "hold",
+      label_created_at: labelCreatedValue ? String(labelCreatedValue).slice(0, 10) : null,
+      order_number: shipment?.order_number || null,
+      platform: shipment?.platform || shipment?.channel || null,
+      customer_name: shipment?.customer_name || null,
+      customer_username: shipment?.customer_username || null,
+      notes: `Return intake scanned for ${returnChannel}.`,
+    };
+
+    const { data: savedReturn, duplicate, error: returnError } = await saveReturnedPackageToSupabase(returnRow);
+    if (returnError) {
+      setSaving(false);
+      setError(`Return intake save failed: ${returnError.message}`);
+      return false;
+    }
+
+    if (duplicate) {
+      setSaving(false);
+      setReturnConfirmation({
+        trackingNumber: normalizedTracking,
+        channel: savedReturn?.channel || returnChannel,
+        duplicate: true,
+        scanCount: savedReturn?.scan_count || 1,
+      });
+      setScannerToast({ message: "Return already logged. Opening details...", type: "warning" });
+      setTimeout(() => setScannerToast(null), 2500);
+      setTrackingNumber("");
+      setScanType("manual_entry");
+      setResult(null);
+      setTrackingStatus(null);
+      try { navigator.vibrate?.([100, 60, 100]); } catch {}
+      await handleOpenDetails({
+        tracking_number: normalizedTracking,
+        scan_type: "return_intake",
+        matched_brand: savedReturn?.channel || returnChannel,
+      });
+      return true;
+    }
+
+    const scanRow = buildScanRow(normalizedTracking, shipment, "return_intake", rawScan);
+    scanRow.matched_brand = returnChannel;
+    scanRow.current_status = "returned_needs_research";
+    scanRow.action_needed = "research_return";
+    scanRow.notes = `Returned package received for ${returnChannel}.`;
+    const { error: insertError } = await insertPackageScanToSupabase(scanRow);
+    setSaving(false);
+    if (insertError) {
+      setError(`Scan history save failed: ${insertError.message}`);
+      return false;
+    }
+
+    setSessionReturnCount(count => count + 1);
+    setReturnConfirmation({
+      trackingNumber: normalizedTracking,
+      channel: returnChannel,
+      duplicate: false,
+      scanCount: 1,
+    });
+    setScannerToast({ message: `Return saved: ${normalizedTracking}`, type: "success" });
+    setTimeout(() => setScannerToast(null), 3500);
+    setTrackingNumber("");
+    setScanType("manual_entry");
+    setResult(null);
+    setTrackingStatus(null);
+    try { navigator.vibrate?.(120); } catch {}
+    await loadRecentScans();
+    return true;
+  };
+
   const handleSaveScan = async () => {
-    await completeScan(trackingNumber, scanType, trackingNumber);
+    if (scannerMode === "return_intake") {
+      await completeReturnIntakeScan(trackingNumber, trackingNumber);
+    } else {
+      await completeScan(trackingNumber, scanType, trackingNumber);
+    }
+  };
+
+  const normalizePhotoDate = (value) => {
+    const match = String(value || "").match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+    if (!match) return "";
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+    return `${year}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
+  };
+
+  const parsePhotoLabel = (ocrText, barcodeValues) => {
+    const text = String(ocrText || "").replace(/\r/g, "");
+    const upper = text.toUpperCase();
+    const lines = text.split("\n").map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const compactCandidates = [
+      ...(barcodeValues || []),
+      ...((text.match(/(?:\d[\s-]*){20,34}/g) || [])),
+    ].map(value => String(value || "").replace(/\D/g, ""));
+    const tracking = compactCandidates.find(value => value.length === 22 && /^9[2345]/.test(value))
+      || compactCandidates.find(value => value.length >= 20 && value.length <= 34)
+      || "";
+
+    let channel = "";
+    if (/POKIE\s*MART/.test(upper)) channel = "PokieMart";
+    else if (/VAULTED\s+RARITIES/.test(upper)) channel = "Vaulted Rarities";
+    else if (/CARD\s*KING\s*47/.test(upper)) channel = "CardKing47";
+    else if (/POKE\s*SPINS/.test(upper)) channel = "PokeSpins";
+
+    const createdMatch = text.match(/created[^\d]{0,12}(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})/i);
+    const allDates = [...text.matchAll(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g)].map(match => match[0]);
+    const labelCreated = normalizePhotoDate(createdMatch?.[1] || "");
+    const rtsCandidate = allDates.map(normalizePhotoDate).find(value => value && value !== labelCreated) || "";
+
+    const reasons = ["NO MAIL RECEPTACLE", "UNABLE TO FORWARD", "REFUSED", "VACANT", "UNCLAIMED", "INSUFFICIENT ADDRESS", "NO SUCH NUMBER", "NOT DELIVERABLE AS ADDRESSED", "MOVED LEFT NO ADDRESS"];
+    const returnReason = reasons.filter(reason => upper.includes(reason)).join(" / ");
+
+    let shipIndex = lines.findIndex(line => /SHIP\s*TO/i.test(line));
+    let recipient = "", address1 = "", address2 = "", city = "", state = "", postal = "";
+    if (shipIndex >= 0) {
+      const block = lines.slice(shipIndex + 1, shipIndex + 7).filter(line => !/BILL\s*TO|ITEMS|USPS|TRACKING/i.test(line));
+      recipient = block[0] || "";
+      const cityLineIndex = block.findIndex(line => /\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/i.test(line));
+      if (cityLineIndex >= 0) {
+        const cityMatch = block[cityLineIndex].match(/^(.+?)\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)/i);
+        if (cityMatch) { city = cityMatch[1].trim(); state = cityMatch[2].toUpperCase(); postal = cityMatch[3]; }
+        address1 = block[1] || "";
+        address2 = cityLineIndex > 2 ? block[2] : "";
+      }
+    }
+
+    return {
+      tracking, channel, labelCreated, rtsDate: rtsCandidate, returnReason,
+      recipient, address1, address2, city, state, postal,
+      confidence: tracking && channel ? "reviewed_high" : "needs_review",
+    };
+  };
+
+  const handlePhotoLabel = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setPhotoAnalyzing(true);
+    setPhotoProgress("Reading barcode...");
+    setError("");
+    try {
+      let barcodeValues = [];
+      try {
+        const { readBarcodesFromImageFile } = await import("zxing-wasm/reader");
+        const results = await readBarcodesFromImageFile(file, { formats: ["Code128"], tryHarder: true, maxNumberOfSymbols: 4 });
+        barcodeValues = (results || []).map(result => result.text || result.rawValue || "");
+      } catch (barcodeError) {
+        console.warn("Photo barcode pass skipped:", barcodeError);
+      }
+
+      setPhotoProgress("Reading printed label text...");
+      const TesseractModule = await import("tesseract.js");
+      const recognize = TesseractModule.recognize || TesseractModule.default?.recognize;
+      if (!recognize) throw new Error("The label text reader could not start.");
+      const ocrResult = await recognize(file, "eng", {
+        logger: message => {
+          if (message?.status === "recognizing text") setPhotoProgress(`Reading label ${Math.round((message.progress || 0) * 100)}%...`);
+        },
+      });
+      const parsed = parsePhotoLabel(ocrResult?.data?.text || "", barcodeValues);
+      if (!parsed.tracking) throw new Error("Tracking number was not detected. Retake the photo closer and keep the entire barcode and printed number visible.");
+
+      const existing = await fetchReturnedPackageDetailsFromSupabase(parsed.tracking);
+      const data = existing.data || {};
+      setDetailTarget({ tracking_number: parsed.tracking, matched_brand: parsed.channel, photo_intake: true, duplicate: Boolean(existing.data) });
+      setDetailForm({
+        channel: parsed.channel || data.channel || "",
+        customer_name: data.customer_name || parsed.recipient,
+        customer_username: data.customer_username || "",
+        order_number: data.order_number || "",
+        label_created_at: data.label_created_at ? String(data.label_created_at).slice(0, 10) : parsed.labelCreated,
+        rts_date: data.rts_date ? String(data.rts_date).slice(0, 10) : parsed.rtsDate,
+        return_reason: data.return_reason || parsed.returnReason,
+        address_line_1: data.address_line_1 || parsed.address1,
+        address_line_2: data.address_line_2 || parsed.address2,
+        city: data.city || parsed.city,
+        state: data.state || parsed.state,
+        postal_code: data.postal_code || parsed.postal,
+        photo_intake: true,
+        extraction_confidence: parsed.confidence,
+        notes: data.notes || "Photo return intake. Review OCR fields before saving.",
+        intake_status: data.intake_status || "needs_research",
+        disposition_status: data.disposition_status || "hold",
+      });
+      setScannerToast({ message: "Label read. Review every field before saving.", type: "success" });
+      setTimeout(() => setScannerToast(null), 3500);
+    } catch (photoError) {
+      setError(photoError?.message || "The package label could not be read.");
+    } finally {
+      setPhotoAnalyzing(false);
+      setPhotoProgress("");
+    }
   };
 
   const handleStartCamera = async () => {
@@ -2819,34 +3194,113 @@ const ShippingScannerView = () => {
     setError("");
     setIsScanning(true);
     try {
-      const { Html5Qrcode } = await import("html5-qrcode");
+      const QuaggaModule = await import("@ericblade/quagga2");
+      const Quagga = QuaggaModule.default || QuaggaModule;
       clearCameraPreview();
-      const scanner = new Html5Qrcode(scannerContainerId);
-      Html5QrcodeRef.current = scanner;
-      setCameraActive(true);
-      let cameraConfig = { facingMode: { ideal: "environment" } };
-      try {
-        const cameras = await Html5Qrcode.getCameras();
-        const preferred = (cameras || []).find(camera => /back|rear|environment/i.test(String(camera.label || ""))) || (cameras || [])[0];
-        if (preferred?.id) cameraConfig = { deviceId: { exact: preferred.id } };
-      } catch {}
-      await scanner.start(
-        cameraConfig,
-        { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
-        async (decodedText) => {
-          const scanned = cleanScannedTracking(decodedText);
-          if (!scanned) return;
-          setTrackingNumber(scanned);
-          setScanType("camera_scan");
+
+      const target = document.getElementById(scannerContainerId);
+      if (!target) throw new Error("Scanner preview could not be opened.");
+
+      let scanLocked = false;
+      let candidateTracking = "";
+      let candidateCount = 0;
+      let candidateStartedAt = 0;
+      const handleDetected = async (scanResult) => {
+        if (scanLocked) return;
+        const rawValue = scanResult?.codeResult?.code || "";
+        const scanned = cleanScannedTracking(rawValue);
+        if (!scanned || scanned.length !== 22 || !/^9[2345]/.test(scanned)) return;
+
+        const errors = (scanResult?.codeResult?.decodedCodes || [])
+          .map(code => code?.error)
+          .filter(value => Number.isFinite(value));
+        const averageError = errors.length
+          ? errors.reduce((total, value) => total + value, 0) / errors.length
+          : 1;
+        if (averageError > 0.2) return;
+
+        const now = Date.now();
+        if (scanned === candidateTracking && now - candidateStartedAt < 2500) {
+          candidateCount += 1;
+        } else {
+          candidateTracking = scanned;
+          candidateCount = 1;
+          candidateStartedAt = now;
+        }
+        if (candidateCount < 3) return;
+
+        scanLocked = true;
+        setTrackingNumber(scanned);
+        setScanType("camera_scan");
+
+        if (scannerMode === "return_intake") {
+          await completeReturnIntakeScan(scanned, rawValue);
           await stopCamera();
-          await completeScan(scanned, "camera_scan", scanned);
+          return;
+        }
+
+        await stopCamera();
+        await completeScan(scanned, "camera_scan", rawValue);
+      };
+
+      const scannerController = {
+        stop: async () => {
+          try { Quagga.offDetected(handleDetected); } catch {}
+          try { Quagga.stop(); } catch {}
         },
-        () => {}
-      );
+        clear: async () => {
+          clearCameraPreview();
+        },
+      };
+
+      Html5QrcodeRef.current = scannerController;
+      setCameraActive(true);
+
+      await new Promise((resolve, reject) => {
+        Quagga.init(
+          {
+            inputStream: {
+              name: "USPS Camera",
+              type: "LiveStream",
+              target,
+              constraints: {
+                facingMode: "environment",
+                width: { min: 1280, ideal: 1920 },
+                height: { min: 720, ideal: 1080 },
+                aspectRatio: { ideal: 1.777778 },
+              },
+              area: {
+                top: "20%",
+                right: "3%",
+                left: "3%",
+                bottom: "20%",
+              },
+            },
+            decoder: {
+              readers: ["code_128_reader"],
+              multiple: false,
+            },
+            locator: {
+              patchSize: "medium",
+              halfSample: true,
+            },
+            locate: true,
+            frequency: 15,
+            numOfWorkers: Math.min(navigator.hardwareConcurrency || 2, 4),
+          },
+          (initError) => {
+            if (initError) reject(initError);
+            else resolve();
+          }
+        );
+      });
+
+      Quagga.onDetected(handleDetected);
+      Quagga.start();
       setCameraReady(true);
     } catch (err) {
       await stopCamera();
-      setCameraError(err?.message || "Camera start failed.");
+      setCameraError(err?.message || String(err) || "Camera start failed.");
     } finally {
       setIsScanning(false);
     }
@@ -2865,27 +3319,192 @@ const ShippingScannerView = () => {
     await handleStartCamera();
   };
 
-  const renderValue = (value) => value ? value : "â€”";
+  const handleArchiveScan = async () => {
+    if (!archiveTarget) return;
+    setArchivingScan(true);
+    const { error: archiveError } = await archivePackageScanInSupabase(archiveTarget.id, archiveTarget.tracking_number);
+    setArchivingScan(false);
+    if (archiveError) {
+      setError(`Archive failed: ${archiveError.message}`);
+      return;
+    }
+    setRecentScans(scans => scans.filter(scan => scan.id !== archiveTarget.id));
+    setScannerToast({ message: "Scan archived", type: "success" });
+    setTimeout(() => setScannerToast(null), 2500);
+    setArchiveTarget(null);
+  };
+
+  const handleOpenDetails = async (scan) => {
+    setDetailTarget(scan);
+    setDetailLoading(true);
+    setError("");
+    const { data, error: detailsError } = await fetchReturnedPackageDetailsFromSupabase(scan.tracking_number);
+    setDetailLoading(false);
+    if (detailsError) {
+      setDetailTarget(null);
+      setError(`Return details could not be loaded: ${detailsError.message}`);
+      return;
+    }
+    setDetailForm({
+      channel: data?.channel || scan.matched_brand || "",
+      customer_name: data?.customer_name || "",
+      customer_username: data?.customer_username || "",
+      order_number: data?.order_number || "",
+      label_created_at: data?.label_created_at ? String(data.label_created_at).slice(0, 10) : "",
+      rts_date: data?.rts_date ? String(data.rts_date).slice(0, 10) : "",
+      return_reason: data?.return_reason || "",
+      address_line_1: data?.address_line_1 || "",
+      address_line_2: data?.address_line_2 || "",
+      city: data?.city || "",
+      state: data?.state || "",
+      postal_code: data?.postal_code || "",
+      photo_intake: Boolean(data?.photo_intake),
+      extraction_confidence: data?.extraction_confidence || "",
+      notes: data?.notes || "",
+      intake_status: data?.intake_status || "needs_research",
+      disposition_status: data?.disposition_status || "hold",
+    });
+  };
+
+  const handleSaveDetails = async () => {
+    if (!detailTarget || !detailForm) return;
+    if (!detailForm.channel) {
+      setError("Choose a channel before saving return details.");
+      return;
+    }
+    setDetailSaving(true);
+    setError("");
+    const { error: saveError } = await updateReturnedPackageDetailsInSupabase(detailTarget.tracking_number, detailForm);
+    setDetailSaving(false);
+    if (saveError) {
+      setError(`Return details could not be saved: ${saveError.message}`);
+      return;
+    }
+    if (detailTarget.photo_intake && !detailTarget.duplicate) {
+      const photoScan = buildScanRow(detailTarget.tracking_number, null, "return_photo", detailTarget.tracking_number);
+      photoScan.matched_brand = detailForm.channel;
+      photoScan.matched_customer = detailForm.customer_name || null;
+      photoScan.current_status = detailForm.intake_status || "needs_research";
+      photoScan.action_needed = detailForm.disposition_status || "hold";
+      photoScan.notes = `Photo return intake saved for ${detailForm.channel}.`;
+      const { error: historyError } = await insertPackageScanToSupabase(photoScan);
+      if (historyError) {
+        setError(`Return saved, but scan history failed: ${historyError.message}`);
+      } else {
+        setSessionReturnCount(count => count + 1);
+        await loadRecentScans();
+      }
+    }
+    setRecentScans(scans => scans.map(scan => scan.tracking_number === detailTarget.tracking_number ? {
+      ...scan,
+      matched_brand: detailForm.channel || scan.matched_brand,
+      matched_customer: detailForm.customer_name || detailForm.customer_username || scan.matched_customer,
+      matched_username: detailForm.customer_username || scan.matched_username,
+      matched_order_number: detailForm.order_number || scan.matched_order_number,
+      current_status: detailForm.intake_status,
+      action_needed: detailForm.disposition_status,
+      notes: detailForm.notes || scan.notes,
+    } : scan));
+    setScannerToast({ message: "Return details saved", type: "success" });
+    setTimeout(() => setScannerToast(null), 2500);
+    setDetailTarget(null);
+    setDetailForm(null);
+  };
+
+  const returnAge = detailForm?.label_created_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(`${detailForm.label_created_at}T00:00:00`).getTime()) / 86400000))
+    : null;
+
+  const renderValue = (value) => value || "Ã¢â‚¬â€";
 
   const trackingStatusFields = trackingStatus || {};
 
   return (
     <div className="space-y-4">
+      {scannerToast && (
+        <div className={`fixed left-1/2 top-4 z-[100] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-xl border px-4 py-3 shadow-lg ${scannerToast.type === "warning" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-900"}`}>
+          <p className="text-sm font-bold">{scannerToast.message}</p>
+          <p className="mt-0.5 text-xs">Camera stopped. Move this package aside before scanning the next one.</p>
+        </div>
+      )}
       <Card className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-gray-900">Shipping Scanner</p>
-            <p className="mt-0.5 text-xs text-gray-400">Manual USPS scans plus mobile camera barcode capture.</p>
+            <p className="mt-0.5 text-xs text-gray-400">Identify shipments or rapidly intake returned packages.</p>
           </div>
         </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => { setScannerMode("lookup"); setReturnConfirmation(null); }}
+            disabled={cameraActive}
+            className={`h-11 rounded-lg border text-sm font-semibold ${scannerMode === "lookup" ? "border-slate-800 bg-slate-800 text-white" : "border-gray-300 bg-white text-gray-600"}`}
+          >
+            Package Lookup
+          </button>
+          <button
+            type="button"
+            onClick={() => { setScannerMode("return_intake"); setResult(null); setTrackingStatus(null); }}
+            disabled={cameraActive}
+            className={`h-11 rounded-lg border text-sm font-semibold ${scannerMode === "return_intake" ? "border-slate-800 bg-slate-800 text-white" : "border-gray-300 bg-white text-gray-600"}`}
+          >
+            Bulk Return Intake
+          </button>
+        </div>
+
+        {scannerMode === "return_intake" && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-600">Return channel</p>
+                <p className="mt-0.5 text-xs text-slate-500">Sort packages by sender, select one channel, then scan the pile.</p>
+              </div>
+              <div className="rounded-lg bg-white px-3 py-2 text-center shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Session</p>
+                <p className="text-xl font-bold text-slate-900">{sessionReturnCount}</p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {["PokieMart", "Vaulted Rarities", "CardKing47", "PokeSpins"].map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => { setReturnChannel(option); setReturnConfirmation(null); }}
+                  disabled={cameraActive && channelLocked}
+                  className={`min-h-12 rounded-lg border px-2 text-xs font-semibold ${returnChannel === option ? "border-slate-800 bg-slate-800 text-white" : "border-gray-300 bg-white text-gray-700"}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={channelLocked} onChange={event => setChannelLocked(event.target.checked)} disabled={cameraActive} />
+              Keep this channel selected for the next package
+            </label>
+          </div>
+        )}
+
+        {scannerMode === "return_intake" && (
+          <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Complete label intake</p>
+            <p className="mt-1 text-xs text-indigo-700">Photograph the entire label. Ops Hub will read the barcode, printed tracking number, channel, customer address, dates, and return reason.</p>
+            <label className={`mt-3 flex h-14 w-full cursor-pointer items-center justify-center rounded-xl border border-indigo-700 bg-indigo-700 px-4 text-sm font-semibold text-white ${photoAnalyzing ? "pointer-events-none opacity-60" : ""}`}>
+              {photoAnalyzing ? (photoProgress || "Analyzing label...") : "Photograph Package Label"}
+              <input type="file" accept="image/*" capture="environment" onChange={handlePhotoLabel} className="hidden" disabled={photoAnalyzing} />
+            </label>
+            <p className="mt-2 text-[11px] text-indigo-600">Nothing is saved until you review and approve the detected details.</p>
+          </div>
+        )}
+
         <div className="mt-4 space-y-3">
           <button
             type="button"
             onClick={handleStartCamera}
-            disabled={cameraActive || isScanning}
+            disabled={cameraActive || isScanning || (scannerMode === "return_intake" && !returnChannel)}
             className="inline-flex h-14 w-full items-center justify-center rounded-xl border border-slate-800 bg-slate-800 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-900 disabled:opacity-50"
           >
-            Start USPS Camera Scan
+            {scannerMode === "return_intake" ? "Start Bulk Return Scan" : "Start USPS Camera Scan"}
           </button>
           {cameraActive && (
             <button
@@ -2900,7 +3519,20 @@ const ShippingScannerView = () => {
 
         <div className="mt-4">
           <div id={scannerContainerId} className="min-h-[280px] overflow-hidden rounded-lg border border-gray-200 bg-black" />
-          <p className="mt-2 text-[11px] text-gray-400">Use the rear camera on iPhone Safari. The scanner stops automatically when a barcode is detected.</p>
+          <p className="mt-2 text-[11px] text-gray-400">
+            {scannerMode === "return_intake"
+              ? "The scanner verifies the barcode across multiple frames, saves one package, then stops the camera."
+              : "Use the rear camera on iPhone Safari. The scanner stops automatically when a barcode is detected."}
+          </p>
+          {returnConfirmation && scannerMode === "return_intake" && (
+            <div className={`mt-3 rounded-xl border px-4 py-3 ${returnConfirmation.duplicate ? "border-amber-300 bg-amber-50" : "border-emerald-300 bg-emerald-50"}`}>
+              <p className={`text-sm font-bold ${returnConfirmation.duplicate ? "text-amber-800" : "text-emerald-800"}`}>
+                {returnConfirmation.duplicate ? "Duplicate return already logged" : "Return saved"}
+              </p>
+              <p className="mt-1 text-xs text-gray-700">{returnConfirmation.channel} Ã‚· {returnConfirmation.trackingNumber}</p>
+              {returnConfirmation.duplicate && <p className="mt-1 text-xs text-amber-700">Previously scanned. Total scans: {returnConfirmation.scanCount}</p>}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -3025,6 +3657,70 @@ const ShippingScannerView = () => {
         </Card>
       )}
 
+      {detailTarget && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4">
+          <div className="my-auto w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-base font-bold text-gray-900">Return details</p>
+                <p className="mt-1 break-all text-xs text-gray-500">{detailTarget.tracking_number}</p>
+              </div>
+              <button type="button" onClick={() => { setDetailTarget(null); setDetailForm(null); }} className="h-8 w-8 rounded-lg border border-gray-200 text-gray-500">Ã—</button>
+            </div>
+            {detailLoading || !detailForm ? <p className="mt-5 text-sm text-gray-500">Loading details...</p> : (
+              <div className="mt-5 space-y-4">
+                <label className="block text-xs font-semibold text-gray-600">Channel<select value={detailForm.channel} onChange={e => setDetailForm(v => ({ ...v, channel: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal"><option value="">Select channel</option><option value="PokieMart">PokieMart</option><option value="Vaulted Rarities">Vaulted Rarities</option><option value="CardKing47">CardKing47</option><option value="PokeSpins">PokeSpins</option></select></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-gray-600">Customer name<input value={detailForm.customer_name} onChange={e => setDetailForm(v => ({ ...v, customer_name: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                  <label className="text-xs font-semibold text-gray-600">Username<input value={detailForm.customer_username} onChange={e => setDetailForm(v => ({ ...v, customer_username: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-gray-600">Order number<input value={detailForm.order_number} onChange={e => setDetailForm(v => ({ ...v, order_number: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                  <label className="text-xs font-semibold text-gray-600">Original label date<input type="date" value={detailForm.label_created_at} onChange={e => setDetailForm(v => ({ ...v, label_created_at: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                </div>
+                <div className={`rounded-lg border px-3 py-2 text-sm font-semibold ${returnAge !== null && returnAge >= 60 ? "border-amber-300 bg-amber-50 text-amber-800" : "border-gray-200 bg-gray-50 text-gray-700"}`}>
+                  {returnAge === null ? "Age unknown until label date is added" : `${returnAge} days old${returnAge >= 60 ? " · 60+ day review" : ""}`}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-gray-600">USPS RTS date<input type="date" value={detailForm.rts_date || ""} onChange={e => setDetailForm(v => ({ ...v, rts_date: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                  <label className="text-xs font-semibold text-gray-600">ZIP code<input value={detailForm.postal_code || ""} onChange={e => setDetailForm(v => ({ ...v, postal_code: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                </div>
+                <label className="block text-xs font-semibold text-gray-600">Address<input value={detailForm.address_line_1 || ""} onChange={e => setDetailForm(v => ({ ...v, address_line_1: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                <label className="block text-xs font-semibold text-gray-600">Address line 2<input value={detailForm.address_line_2 || ""} onChange={e => setDetailForm(v => ({ ...v, address_line_2: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                <div className="grid grid-cols-[1fr_90px] gap-3">
+                  <label className="text-xs font-semibold text-gray-600">City<input value={detailForm.city || ""} onChange={e => setDetailForm(v => ({ ...v, city: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                  <label className="text-xs font-semibold text-gray-600">State<input value={detailForm.state || ""} maxLength="2" onChange={e => setDetailForm(v => ({ ...v, state: e.target.value.toUpperCase() }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                </div>
+                <label className="block text-xs font-semibold text-gray-600">Return reason<input value={detailForm.return_reason} onChange={e => setDetailForm(v => ({ ...v, return_reason: e.target.value }))} placeholder="Unable to forward, refused, vacant..." className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-gray-600">Research status<select value={detailForm.intake_status} onChange={e => setDetailForm(v => ({ ...v, intake_status: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal"><option value="needs_research">Needs research</option><option value="researching">Researching</option><option value="resolved">Resolved</option></select></label>
+                  <label className="text-xs font-semibold text-gray-600">Next action<select value={detailForm.disposition_status} onChange={e => setDetailForm(v => ({ ...v, disposition_status: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal"><option value="hold">Hold</option><option value="contact_customer">Contact customer</option><option value="reship">Reship</option><option value="refund_review">Refund review</option><option value="warehouse_use_review">Warehouse-use review</option><option value="completed">Completed</option></select></label>
+                </div>
+                <label className="block text-xs font-semibold text-gray-600">Notes<textarea rows="3" value={detailForm.notes} onChange={e => setDetailForm(v => ({ ...v, notes: e.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal" /></label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => { setDetailTarget(null); setDetailForm(null); }} disabled={detailSaving} className="h-11 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700">Cancel</button>
+                  <button type="button" onClick={handleSaveDetails} disabled={detailSaving} className="h-11 rounded-lg border border-slate-800 bg-slate-800 text-sm font-semibold text-white disabled:opacity-50">{detailSaving ? "Saving..." : "Save details"}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {archiveTarget && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl">
+            <p className="text-base font-bold text-gray-900">Archive this scan?</p>
+            <p className="mt-2 break-all text-sm text-gray-600">{archiveTarget.tracking_number}</p>
+            <p className="mt-2 text-xs text-gray-500">It will disappear from active scans and active returned packages. The record remains archived for history.</p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setArchiveTarget(null)} disabled={archivingScan} className="h-11 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700">Cancel</button>
+              <button type="button" onClick={handleArchiveScan} disabled={archivingScan} className="h-11 rounded-lg border border-red-700 bg-red-700 text-sm font-semibold text-white disabled:opacity-50">{archivingScan ? "Archiving..." : "Archive"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Card className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -3038,7 +3734,27 @@ const ShippingScannerView = () => {
             <div key={scan.id || `${scan.tracking_number}-${scan.created_at}`} className="rounded-lg border border-gray-100 bg-white px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-gray-900">{scan.tracking_number || "Unknown tracking"}</p>
-                <Badge label={scan.current_status || scan.action_needed || "Scan"} className="bg-gray-100 text-gray-600 border-gray-200" />
+                <div className="flex items-center gap-2">
+                  <Badge label={scan.current_status || scan.action_needed || "Scan"} className="bg-gray-100 text-gray-600 border-gray-200" />
+                  <button
+                    type="button"
+                    onClick={() => handleOpenDetails(scan)}
+                    className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Edit details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setArchiveTarget(scan)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    aria-label={`Archive scan ${scan.tracking_number || "unknown"}`}
+                    title="Archive scan"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
               <p className="mt-1 text-[11px] text-gray-500">
                 {scan.carrier || "USPS"} · {scan.scan_type || "manual"} · {scan.matched_brand || scan.matched_platform || scan.matched_customer || "No match"} · {scan.matched_order_number || scan.order_number || "No order"} · {scan.action_needed || "none"} · {fmtDate(scan.created_at || nowISO())}
@@ -3069,7 +3785,7 @@ const ACTION_STATUS_STYLE = {
 };
 const ACTION_FILTERS = ["All", "Due Today", "Overdue", "High Priority", "Waiting on Customer", "Replacement Needed"];
 
-// â”€â”€â”€ NEXT ACTION QUEUE VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ NEXT ACTION QUEUE VIEW Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, onRefresh, setActiveView }) => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [busyId, setBusyId] = useState(null);
@@ -3117,6 +3833,18 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
 
   return (
     <div className="space-y-4">
+      {attachmentLightbox && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4" onMouseDown={() => setAttachmentLightbox(null)}>
+          <div className="relative max-h-[92vh] max-w-[92vw]" onMouseDown={event => event.stopPropagation()}>
+            <button type="button" onClick={() => setAttachmentLightbox(null)} className="absolute -right-3 -top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-lg font-bold text-slate-700 shadow-lg">×</button>
+            <img src={attachmentLightbox.url} alt={attachmentLightbox.title || "Customer attachment"} className="max-h-[88vh] max-w-[88vw] rounded-xl bg-white object-contain shadow-2xl" />
+            <div className="mt-2 flex items-center justify-between gap-3 text-xs text-white">
+              <span>{attachmentLightbox.title || "Customer attachment"}</span>
+              <a href={attachmentLightbox.url} target="_blank" rel="noreferrer" className="font-semibold underline">Open original</a>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -3223,7 +3951,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
               {(action.customer_name || action.customer_email) && (
                 <p className="text-[10px] text-gray-400 mb-2">
                   {action.customer_name && <span className="font-medium text-gray-600">{action.customer_name}</span>}
-                  {action.customer_email && <span className="ml-1">Â· {action.customer_email}</span>}
+                  {action.customer_email && <span className="ml-1">Ã‚· {action.customer_email}</span>}
                 </p>
               )}
 
@@ -3266,7 +3994,7 @@ const NextActionQueueView = ({ opsActions, setOpsActions, opsLoading, opsError, 
   );
 };
 
-// â”€â”€â”€ AUTOMATION RULES SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUTOMATION RULES SUPABASE HELPERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const fetchAutomationRulesFromSupabase = async () => {
   if (!supabase) return { data: [], error: { message: "No Supabase client." } };
@@ -3338,7 +4066,7 @@ const findAutomationRule = (rules, msg) => {
   return found || null;
 };
 
-// â”€â”€â”€ INBOUND MESSAGE SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ INBOUND MESSAGE SUPABASE HELPERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const fetchInboundMessagesFromSupabase = async () => {
   if (!supabase) return { data: [], error: { message: "No Supabase client." } };
@@ -3346,8 +4074,9 @@ const fetchInboundMessagesFromSupabase = async () => {
     .from(INBOUND_MESSAGES_TABLE)
     .select("*")
     .is("archived_at", null)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .order("received_time", { ascending: false })
     .limit(300);
   if (error) { console.error("Supabase inbound fetch error:", error); return { data: [], error }; }
   return { data: data || [], error: null };
@@ -3373,7 +4102,7 @@ const archiveInboundInSupabase = async (id) => {
   return { error };
 };
 
-// â”€â”€â”€ REPLACEMENTS SUPABASE HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ REPLACEMENTS SUPABASE HELPERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const closeAndArchiveInboundInSupabase = async (id) => {
   if (!supabase || !id) return { error: { message: "No Supabase client or id." } };
@@ -3396,7 +4125,7 @@ const fetchReplacementsFromSupabase = async () => {
     console.error("Supabase replacements fetch error:", error);
     return { data: [], error };
   }
-  // Normalise snake_case DB columns â†’ camelCase used by the UI
+  // Normalise snake_case DB columns Ã¢â€ â€™ camelCase used by the UI
   const rows = (data || []).map(r => ({
     id:                r.id,
     date:              r.date              || r.created_at?.slice(0, 10) || "",
@@ -3490,7 +4219,7 @@ const insertReplacementToSupabase = async (row = {}) => {
   return { data: dbReplacementToApp(data), error: null };
 };
 
-// â”€â”€â”€ TIKTOK SHOP CHAT EMAIL NORMALIZER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ TIKTOK SHOP CHAT EMAIL NORMALIZER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Cleans TikTok Seller Assistant email boilerplate for display only.
 // Raw message_body in Supabase is NEVER modified.
 
@@ -3499,8 +4228,8 @@ const fetchRecentPackageScansFromSupabase = async () => {
   const { data, error } = await supabase
     .from("package_scans")
     .select("*")
-    .order("created_at", { ascending: false })
-    .limit(25);
+    .is("archived_at", null)
+    .order("created_at", { ascending: false });
   if (error) {
     console.error("Supabase package scans fetch error:", error);
     return { data: [], error };
@@ -3535,6 +4264,114 @@ const insertPackageScanToSupabase = async (row = {}) => {
     return { data: null, error };
   }
   return { data, error: null };
+};
+
+const archivePackageScanInSupabase = async (id, trackingNumber) => {
+  if (!supabase || !id) return { error: { message: "No scan selected." } };
+  const archivedAt = nowISO();
+  const { error } = await supabase.from("package_scans").update({ archived_at: archivedAt }).eq("id", id);
+  if (error) return { error };
+  if (trackingNumber) {
+    const { error: returnError } = await supabase
+      .from("returned_packages")
+      .update({ archived_at: archivedAt, updated_at: archivedAt })
+      .eq("tracking_number", trackingNumber);
+    if (returnError) return { error: returnError };
+  }
+  return { error: null };
+};
+
+const fetchReturnedPackageDetailsFromSupabase = async (trackingNumber) => {
+  if (!supabase || !trackingNumber) return { data: null, error: { message: "No return selected." } };
+  const { data, error } = await supabase.from("returned_packages").select("*").eq("tracking_number", trackingNumber).limit(1).maybeSingle();
+  return { data, error };
+};
+
+const updateReturnedPackageDetailsInSupabase = async (trackingNumber, form) => {
+  if (!supabase || !trackingNumber) return { error: { message: "No return selected." } };
+  const timestamp = nowISO();
+  const payload = {
+    tracking_number: trackingNumber,
+    carrier: "USPS",
+    channel: form.channel,
+    customer_name: form.customer_name || null,
+    customer_username: form.customer_username || null,
+    order_number: form.order_number || null,
+    label_created_at: form.label_created_at || null,
+    rts_date: form.rts_date || null,
+    return_reason: form.return_reason || null,
+    recipient_name: form.customer_name || null,
+    address_line_1: form.address_line_1 || null,
+    address_line_2: form.address_line_2 || null,
+    city: form.city || null,
+    state: form.state || null,
+    postal_code: form.postal_code || null,
+    photo_intake: Boolean(form.photo_intake),
+    extraction_confidence: form.extraction_confidence || null,
+    notes: form.notes || null,
+    intake_status: form.intake_status || "needs_research",
+    disposition_status: form.disposition_status || "hold",
+    details_saved_at: timestamp,
+    updated_at: timestamp,
+  };
+  const { data: existing, error: lookupError } = await supabase.from("returned_packages").select("id, first_scanned_at, scan_count").eq("tracking_number", trackingNumber).limit(1).maybeSingle();
+  if (lookupError) return { error: lookupError };
+  let error = null;
+  if (existing) {
+    ({ error } = await supabase.from("returned_packages").update(payload).eq("id", existing.id));
+  } else {
+    ({ error } = await supabase.from("returned_packages").insert([{
+      ...payload,
+      first_scanned_at: timestamp,
+      last_scanned_at: timestamp,
+      scan_count: 1,
+      created_at: timestamp,
+    }]));
+  }
+  if (error) return { error };
+  const { error: scanError } = await supabase.from("package_scans").update({
+    matched_customer: payload.customer_name || payload.customer_username,
+    matched_username: payload.customer_username,
+    matched_order_number: payload.order_number,
+    current_status: payload.intake_status,
+    action_needed: payload.disposition_status,
+    notes: payload.notes,
+  }).eq("tracking_number", trackingNumber).eq("scan_type", "return_intake").is("archived_at", null);
+  return { error: scanError || null };
+};
+
+const saveReturnedPackageToSupabase = async (row = {}) => {
+  if (!supabase) return { data: null, duplicate: false, error: { message: "No Supabase client." } };
+  const { data: existing, error: lookupError } = await supabase
+    .from("returned_packages")
+    .select("*")
+    .eq("tracking_number", row.tracking_number)
+    .limit(1)
+    .maybeSingle();
+  if (lookupError) return { data: null, duplicate: false, error: lookupError };
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("returned_packages")
+      .update({
+        channel: row.channel || existing.channel,
+        last_scanned_at: nowISO(),
+        scan_count: (existing.scan_count || 1) + 1,
+        updated_at: nowISO(),
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    return { data, duplicate: true, error };
+  }
+
+  const timestamp = nowISO();
+  const { data, error } = await supabase
+    .from("returned_packages")
+    .insert([{ ...row, first_scanned_at: timestamp, last_scanned_at: timestamp, created_at: timestamp, updated_at: timestamp }])
+    .select("*")
+    .single();
+  return { data, duplicate: false, error };
 };
 
 const isTikTokShopMessage = (msg) =>
@@ -3585,7 +4422,7 @@ const cleanTikTokBody = (raw, username) => {
 
   const allLines = raw.split(/\r?\n/).map(l => l.trim());
 
-  // â”€â”€ Step 1: find start of new-message section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Step 1: find start of new-message section Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   let start = 0;
   for (let i = 0; i < allLines.length; i++) {
     if (TIKTOK_NEW_MSG_START.test(allLines[i])) {
@@ -3594,7 +4431,7 @@ const cleanTikTokBody = (raw, username) => {
     }
   }
 
-  // â”€â”€ Step 2: find end of new-message section (history boundary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Step 2: find end of new-message section (history boundary) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   let end = allLines.length;
   for (let i = start; i < allLines.length; i++) {
     if (TIKTOK_HISTORY_BOUNDARIES.some(re => re.test(allLines[i]))) {
@@ -3603,7 +4440,7 @@ const cleanTikTokBody = (raw, username) => {
     }
   }
 
-  // â”€â”€ Step 3: slice to new-message window, strip junk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Step 3: slice to new-message window, strip junk Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const window = allLines.slice(start, end);
   const kept = window.filter(line => !isTikTokJunkLine(line, username));
 
@@ -3674,7 +4511,7 @@ const parseZendeskNotes = (notes) => {
 };
 
 
-// â”€â”€â”€ INBOX PRIORITY / STATUS STYLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ INBOX PRIORITY / STATUS STYLES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const INBOX_PRIORITY_STYLE = {
   "High":   "bg-black text-white border-black",
   "Medium": "bg-slate-50 text-slate-700 border-slate-200",
@@ -3700,7 +4537,7 @@ const RISK_LEVEL_STYLE = {
   "Medium": "bg-slate-50 text-slate-700 border-slate-200",
   "Low":    "bg-gray-100 text-gray-500 border-gray-200",
 };
-const INBOX_FILTER_OPTIONS = ["All", "Zendesk", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority", "Closed", "Archived"];
+const INBOX_FILTER_OPTIONS = ["All", "Today", "Zendesk", "TikTok Shop Chat", "Refunds / Returns", "Shopify", "Outlook", "Noise / Not CS", "Untriaged", "Needs Human Review", "High Priority", "Closed", "Archived"];
 
 const INBOX_BRAND_BORDER_CLASS = {
   "Vaulted Rarities": "border-l-yellow-400",
@@ -3763,7 +4600,7 @@ const getDisplayBrand = (message) => {
   return "Unassigned";
 };
 
-// â”€â”€â”€ INBOX MESSAGE CLASSIFICATION HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ INBOX MESSAGE CLASSIFICATION HELPERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 // Format an ISO timestamp in Pacific time. Gracefully returns "" on bad input.
 const fmtPacific = (iso) => {
@@ -3875,7 +4712,7 @@ const getInboundCardTitle = (msg, sourceType, displayName) => {
 
 
 
-// â”€â”€â”€ COMMAND INBOX VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ COMMAND INBOX VIEW Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const isCommandInboxAssistantOpenStatus = (status) => {
   const normalized = String(status || "").trim();
   return !["Closed", "Archived", "Resolved"].includes(normalized);
@@ -3993,6 +4830,7 @@ const buildLocalAssistantAnalysis = (message) => {
 
   return {
     situation,
+    customerWants: "Customer request is unclear from the current conversation.",
     recommendedNextStep,
     missingInfo,
     draftReply,
@@ -4012,18 +4850,79 @@ const normalizeAssistantStringArray = (value, fallback = []) => {
   return cleaned.length ? cleaned : fallback;
 };
 
+const inferSuggestedIssueType = (message) => {
+  const msg = message || {};
+  const context = msg._triageContext || {};
+  const comments = Array.isArray(context.comments) ? context.comments : [];
+  const orders = Array.isArray(context.orders) ? context.orders : [];
+  const text = [msg.subject, getDisplayInboundMessage(msg).displayBody, ...comments.map(item => item.body)].filter(Boolean).join(" ").toLowerCase();
+  const statuses = orders.map(order => String(order.status || order.order_status || "").toLowerCase());
+  const hasInTransitOrder = statuses.some(status => /in transit|shipped|on the way/.test(status));
+  const hasLabelOnly = statuses.some(status => /label|awaiting carrier|pre.?shipment/.test(status));
+  const latestCustomerText = String(context.latestCustomerMessage || "").toLowerCase();
+  const activeText = latestCustomerText || text;
+
+  if (/wrong item|wrong product|received.*instead|sent me the wrong/.test(activeText)) return ["Wrong Item", "The customer says a different item was received."];
+  if (/damaged|broken|bent|crushed|torn|defective/.test(activeText)) return ["Damaged Item", "The customer reports physical damage or a defective item."];
+  if (/missing item|item.*missing|did not include|wasn't in|not in the (box|package)/.test(activeText)) return ["Missing Item", "The customer reports that part of the delivered order is missing."];
+  if (/marked delivered|says delivered|delivered.*not received|never received.*delivered/.test(activeText)) return ["Delivered Not Received", "Carrier status indicates delivery but the customer reports non-receipt."];
+  if (/return to sender|returned to sender|rts|unable to forward/.test(activeText)) return ["Return to Sender", "The shipment is being returned by the carrier."];
+  if (/refund|return request|want to return/.test(activeText)) return ["Return / Refund", "The customer is requesting a return or refund review."];
+  if (/cancel|cancellation/.test(activeText)) return ["Cancellation", "The customer is requesting cancellation."];
+  if (/change.*address|wrong address|update.*address/.test(activeText)) return ["Address Change", "The customer wants the shipping address changed."];
+  if (/surprise set|mystery|chase|pull|value.*pack/.test(activeText)) return ["Surprise Set Dispute", "The message disputes the contents or value of a surprise product."];
+  if (/tracking|where.*(order|package)|shipment status|when.*ship|on the way/.test(activeText)) {
+    if (hasLabelOnly) return ["Label Created / No Scan", "A label exists but the carrier has not recorded movement."];
+    if (hasInTransitOrder) return ["General Question", "The customer is asking for tracking and the matching order is already in transit."];
+    return ["Tracking Not Moving", "The customer is asking about shipment movement and no current in-transit confirmation was found."];
+  }
+  return ["General Question", "No replacement, refund, damage, loss, or shipping exception is clearly established."];
+};
+
 const sanitizeAssistantAnalysis = (message, data) => {
   const fallback = buildLocalAssistantAnalysis(message);
   const source = data && typeof data === "object" ? data : {};
+  const [localIssueType, localReason] = inferSuggestedIssueType(message);
+  const suggestedIssueType = validateAssistantChoice(source.suggestedIssueType || source.issueType, CASE_ISSUE_TYPES, localIssueType);
+  const suggestedRule = CASE_SOP_RULES[suggestedIssueType] || CASE_SOP_RULES["General Question"];
+  const triageContext = message?._triageContext || {};
+  const latestCustomerText = String(triageContext.latestCustomerMessage || "");
+  const firstOrder = Array.isArray(triageContext.orders) ? triageContext.orders[0] : null;
+  const trackingQuestion = /tracking|where.*(order|package)|shipment status|when.*ship/i.test(latestCustomerText);
+  const trackingDetail = firstOrder?.trackingNumber ? " Tracking: " + firstOrder.trackingNumber + "." : "";
+  const orderDetail = firstOrder?.orderId ? " for order " + firstOrder.orderId : "";
+  const contextDraft = suggestedIssueType === "General Question" && trackingQuestion && firstOrder
+    ? "Hello, thanks for reaching out. I found the shipment" + orderDetail + ", and its current status is " + (firstOrder.status || "in progress") + "." + trackingDetail + (firstOrder.trackingNumber ? " Please let us know if you have any other questions." : " I am checking the tracking details now and will provide them as soon as they are available.")
+    : fallback.draftReply;
+  const backendDraft = String(source.draftReply || "");
+  const backendForgotDetectedOrder = Boolean(firstOrder && /order number|which order|share.*order|send.*order/i.test(backendDraft));
+  const finalDraft = suggestedIssueType === "General Question" && trackingQuestion && firstOrder && (backendForgotDetectedOrder || !backendDraft)
+    ? contextDraft
+    : backendDraft || contextDraft;
+  const trackingAction = firstOrder?.trackingNumber
+    ? "Provide the detected tracking number and current shipment status."
+    : "Open the detected TikTok order card, retrieve its tracking number, and reply with the current shipment status.";
+  const finalRecommendedAction = suggestedIssueType === "General Question" && trackingQuestion && firstOrder
+    ? trackingAction
+    : String(source.recommendedAction || source.recommendedNextStep || suggestedRule.action);
+  const finalMissingEvidence = suggestedIssueType === "General Question" && trackingQuestion && firstOrder
+    ? (firstOrder.trackingNumber ? [] : ["Tracking number from the detected order"])
+    : normalizeAssistantStringArray(source.missingEvidence, suggestedRule.evidence);
   return {
     situation: String(source.situation || fallback.situation),
-    recommendedNextStep: String(source.recommendedNextStep || fallback.recommendedNextStep),
-    missingInfo: normalizeAssistantStringArray(source.missingInfo, fallback.missingInfo),
-    draftReply: String(source.draftReply || fallback.draftReply),
+    customerWants: String(source.customerWants || fallback.customerWants),
+    recommendedNextStep: finalRecommendedAction,
+    missingInfo: finalMissingEvidence.length ? finalMissingEvidence : ["No additional customer information needed."],
+    draftReply: finalDraft,
     suggestedPriority: validateAssistantChoice(source.suggestedPriority, ["Low", "Medium", "High"], fallback.suggestedPriority),
     suggestedStatus: String(source.suggestedStatus || fallback.suggestedStatus),
     confidence: validateAssistantChoice(source.confidence, ["Low", "Medium", "High"], fallback.confidence),
     reasoningTags: normalizeAssistantStringArray(source.reasoningTags, fallback.reasoningTags),
+    suggestedIssueType,
+    classificationReason: String(source.classificationReason || source.reason || localReason),
+    recommendedAction: finalRecommendedAction,
+    evidencePresent: normalizeAssistantStringArray(source.evidencePresent, []),
+    missingEvidence: finalMissingEvidence,
   };
 };
 
@@ -4277,12 +5176,38 @@ const buildReplacementCaseFromWorkQueue = (msg) => {
   };
 };
 
+const CASE_SOP_RULES = {
+  "Missing Item": { action: "Verify the missing item, then replace or route to refund review", dueHours: 24, priority: "High", allowed: ["request_photos", "investigate", "approve_replacement", "refund_review", "waiting_customer"], prohibited: "Do not promise a refund or replacement until the order and prior resolutions are checked.", closure: "Replacement/refund execution is verified and the customer was updated.", guidance: "Acknowledge the missing item, request only the evidence still needed, and avoid promising an outcome before review.", evidence: ["Order confirmed", "Packing slip or package photo", "Missing item identified", "Prior replacement/refund checked"] },
+  "Wrong Item": { action: "Verify the mismatch, then approve the correct replacement", dueHours: 24, priority: "High", allowed: ["request_photos", "investigate", "approve_replacement", "refund_review", "waiting_customer"], prohibited: "Do not approve a replacement without confirming what was ordered and received.", closure: "Return/replacement requirements are complete and execution is verified.", guidance: "Ask for a clear item and packing-slip photo if they are not already present.", evidence: ["Order confirmed", "Photo of item received", "Packing slip photo", "Correct item identified"] },
+  "Damaged Item": { action: "Document the damage and choose replacement or refund review", dueHours: 24, priority: "High", allowed: ["request_photos", "investigate", "approve_replacement", "refund_review", "waiting_customer"], prohibited: "Do not promise compensation before damage evidence is reviewed.", closure: "Approved resolution is executed and documented.", guidance: "Request product and packaging photos only when missing.", evidence: ["Order confirmed", "Damage photos", "Packaging photos", "Requested resolution recorded"] },
+  "Delivered Not Received": { action: "Verify address and carrier evidence before financial action", dueHours: 24, priority: "High", allowed: ["investigate", "usps_follow_up", "waiting_customer", "refund_review"], prohibited: "Do not promise a refund or replacement solely from a delivered scan.", closure: "Carrier/address investigation and the approved outcome are documented.", guidance: "Explain that delivery evidence and the shipping address must be reviewed first.", evidence: ["Tracking reviewed", "Shipping address verified", "Delivery evidence checked", "Prior claim/replacement checked"] },
+  "Label Created / No Scan": { action: "Investigate warehouse handoff and shipment status", dueHours: 24, priority: "High", allowed: ["investigate", "usps_follow_up", "waiting_customer"], prohibited: "Do not blame USPS or promise a ship date until warehouse handoff is confirmed.", closure: "Shipment is moving, replaced, refunded, or otherwise resolved and verified.", guidance: "Tell the customer the fulfillment handoff is being checked and give a realistic update deadline.", evidence: ["Label date confirmed", "Tracking reviewed", "Warehouse status requested", "Customer update prepared"] },
+  "Tracking Not Moving": { action: "Review tracking age and open a carrier follow-up when eligible", dueHours: 24, priority: "Medium", allowed: ["investigate", "usps_follow_up", "waiting_customer"], prohibited: "Do not declare a package lost before the carrier threshold is met.", closure: "Tracking resumed or the approved loss resolution was executed.", guidance: "Share the last scan and the next review point without guaranteeing delivery.", evidence: ["Tracking reviewed", "Last carrier scan recorded", "Shipment age checked", "Escalation threshold checked"] },
+  "Return to Sender": { action: "Match the return and decide reship or refund review", dueHours: 48, priority: "Medium", allowed: ["investigate", "approve_replacement", "refund_review", "waiting_customer"], prohibited: "Do not promise reshipment until the address and physical return are verified.", closure: "The returned package is received and the approved disposition is complete.", guidance: "Confirm the return is being matched and request address confirmation if needed.", evidence: ["Tracking matched", "Return reason recorded", "Address verified", "Reship/refund decision recorded"] },
+  "Return / Refund": { action: "Review the request and platform deadline before approving money movement", dueHours: 12, priority: "Critical", allowed: ["request_photos", "investigate", "refund_review", "waiting_customer"], prohibited: "Do not approve or promise a refund outside the documented policy.", closure: "Refund decision and platform action are recorded.", guidance: "Acknowledge the request and explain what must be reviewed before a decision.", evidence: ["Order confirmed", "Return reason reviewed", "Evidence reviewed", "Platform deadline checked"] },
+  "Cancellation": { action: "Check fulfillment state immediately", dueHours: 4, priority: "Critical", allowed: ["investigate", "refund_review", "waiting_customer"], prohibited: "Do not promise cancellation after fulfillment has progressed beyond eligibility.", closure: "Cancellation or inability to cancel is confirmed to the customer.", guidance: "State that fulfillment status must be checked before cancellation can be confirmed.", evidence: ["Order confirmed", "Fulfillment status checked", "Cancellation eligibility checked"] },
+  "Address Change": { action: "Check whether fulfillment can still be changed", dueHours: 4, priority: "Critical", allowed: ["investigate", "waiting_customer"], prohibited: "Do not promise an address change after carrier handoff.", closure: "Address outcome is confirmed and documented.", guidance: "Collect the corrected address but do not guarantee the change until fulfillment is checked.", evidence: ["Order confirmed", "Current address verified", "Fulfillment status checked", "New address recorded"] },
+  "Surprise Set Dispute": { action: "Review listing terms, pull record, and submitted evidence", dueHours: 24, priority: "High", allowed: ["request_photos", "investigate", "refund_review", "waiting_customer"], prohibited: "Do not promise compensation before the listing and fulfillment record are reviewed.", closure: "Policy decision and supporting evidence are recorded.", guidance: "Acknowledge the concern and explain that the listing and fulfillment record will be reviewed.", evidence: ["Order confirmed", "Listing/odds reviewed", "Customer evidence reviewed", "Fulfillment record checked"] },
+  "General Question": { action: "Answer directly or route to the correct owner", dueHours: 24, priority: "Medium", allowed: ["investigate", "waiting_customer"], prohibited: "Do not make financial or fulfillment promises without an order review.", closure: "Question is answered or ownership is transferred.", guidance: "Give a direct answer when known; otherwise state what is being checked.", evidence: ["Question understood", "Account/order context checked"] },
+};
+
+const CASE_ISSUE_TYPES = Object.keys(CASE_SOP_RULES);
+const RESOLUTION_LABELS = {
+  request_photos: "Request Photos",
+  investigate: "Investigate",
+  approve_replacement: "Approve Replacement",
+  usps_follow_up: "Create USPS Follow-Up",
+  waiting_customer: "Waiting on Customer",
+  refund_review: "Refund Review",
+};
+
 const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading, inboundError, onRefresh, setTickets, replacements, setReplacements, setActiveView, setReplacementFocus, inboxFilter, onClearInboxFilter, opsActions, setOpsActions, automationRules, automationRulesLoading }) => {
   const [busyId, setBusyId]     = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [sortMode, setSortMode] = useState("Newest first");
   const [collapsedDrafts, setCollapsedDrafts] = useState({});
-  const [expandedMessages, setExpandedMessages] = useState({});
+  const [expandedMessageId, setExpandedMessageId] = useState(null);
+  const [attachmentLightbox, setAttachmentLightbox] = useState(null);
   const emptyManualMessageForm = {
     brand: "Vaulted Rarities",
     channel: "Manual",
@@ -4305,6 +5230,121 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   const autoDraftedIdsRef = useRef(new Set());
   const [autoDraftBusyIds, setAutoDraftBusyIds] = useState({});
   const [autoDraftActivity, setAutoDraftActivity] = useState(null);
+  const [zendeskNoteText, setZendeskNoteText] = useState({});
+  const [zendeskNoteBusyId, setZendeskNoteBusyId] = useState(null);
+  const [zendeskNoteNotice, setZendeskNoteNotice] = useState({});
+  const [zendeskReplyText, setZendeskReplyText] = useState({});
+  const [zendeskReplyBusyId, setZendeskReplyBusyId] = useState(null);
+  const [zendeskReplyNotice, setZendeskReplyNotice] = useState({});
+  const [zendeskCases, setZendeskCases] = useState([]);
+  const [zendeskCasesLoading, setZendeskCasesLoading] = useState(false);
+  const [zendeskCasesError, setZendeskCasesError] = useState("");
+  const [zendeskSyncBusy, setZendeskSyncBusy] = useState(false);
+  const [zendeskSyncNotice, setZendeskSyncNotice] = useState("");
+  const [expandedZendeskCases, setExpandedZendeskCases] = useState({});
+  const [workflowBusyId, setWorkflowBusyId] = useState(null);
+  const [commitmentDrafts, setCommitmentDrafts] = useState({});
+  const [commitmentNotice, setCommitmentNotice] = useState({});
+  const [advancedWorkflowOpen, setAdvancedWorkflowOpen] = useState({});
+  const [resolutionNotice, setResolutionNotice] = useState({});
+  const [approvalQueueOpen, setApprovalQueueOpen] = useState(true);
+  const [approvalQueueFilter, setApprovalQueueFilter] = useState("All decisions");
+
+  const loadZendeskCases = async () => {
+    if (!supabase) return;
+    setZendeskCasesLoading(true);
+    setZendeskCasesError("");
+    const { data, error } = await supabase
+      .from("zendesk_cases")
+      .select("*, zendesk_order_cards(*), zendesk_comments(*)")
+      .order("zendesk_updated_at", { ascending: false })
+      .limit(200);
+    setZendeskCasesLoading(false);
+    if (error) {
+      setZendeskCasesError(error.message);
+      return;
+    }
+    setZendeskCases(Array.isArray(data) ? data : []);
+  };
+
+  useEffect(() => {
+    loadZendeskCases();
+  }, []);
+
+  const syncZendeskTicket = async () => {
+    const rawTicketId = window.prompt("Enter the Zendesk ticket number to sync:", "96");
+    if (rawTicketId == null) return;
+    const ticketId = Number(String(rawTicketId).replace(/[^0-9]/g, ""));
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      setZendeskCasesError("Enter a valid Zendesk ticket number.");
+      return;
+    }
+    setZendeskSyncBusy(true);
+    setZendeskCasesError("");
+    setZendeskSyncNotice("");
+    const { data, error } = await supabase.functions.invoke("zendesk-mirror", { body: { ticket_id: ticketId } });
+    setZendeskSyncBusy(false);
+    if (error || data?.error) {
+      setZendeskCasesError(error?.message || data?.error || "Zendesk sync failed.");
+      return;
+    }
+    setZendeskSyncNotice(`Ticket #${data.ticket_id} synced: ${data.comments} comments and ${data.order_cards} order cards.`);
+    await loadZendeskCases();
+    setExpandedZendeskCases(prev => ({ ...prev, [data.case_id]: true }));
+  };
+
+  const submitZendeskPrivateNote = async (msg) => {
+    const note = String(zendeskNoteText[msg.id] || "").trim();
+    const metadata = getInboundMetadata(msg);
+    const ticketId = Number(metadata.zendesk_ticket_id || msg.external_message_id || metadata.ticket_id);
+    if (!ticketId || !note) return;
+    setZendeskNoteBusyId(msg.id);
+    setZendeskNoteNotice(prev => ({ ...prev, [msg.id]: "" }));
+    const { data, error } = await supabase.functions.invoke("zendesk-mirror", {
+      body: { ticket_id: ticketId, action: "add_comment", comment: note, public: false },
+    });
+    setZendeskNoteBusyId(null);
+    if (error || data?.error) {
+      setZendeskNoteNotice(prev => ({ ...prev, [msg.id]: error?.message || data?.error || "Private note failed." }));
+      return;
+    }
+    setZendeskNoteText(prev => ({ ...prev, [msg.id]: "" }));
+    setZendeskNoteNotice(prev => ({ ...prev, [msg.id]: "Private note saved in Zendesk." }));
+    await loadZendeskCases();
+  };
+
+  const submitZendeskPublicReply = async (msg) => {
+    const reply = String(zendeskReplyText[msg.id] || "").trim();
+    const metadata = getInboundMetadata(msg);
+    const ticketId = Number(metadata.zendesk_ticket_id || msg.external_message_id || metadata.ticket_id);
+    if (!ticketId || !reply) return;
+    setZendeskReplyBusyId(msg.id);
+    setZendeskReplyNotice(prev => ({ ...prev, [msg.id]: "" }));
+    const { data, error } = await supabase.functions.invoke("zendesk-mirror", {
+      body: { ticket_id: ticketId, action: "add_comment", comment: reply, public: true, status: "pending" },
+    });
+    setZendeskReplyBusyId(null);
+    if (error || data?.error) {
+      setZendeskReplyNotice(prev => ({ ...prev, [msg.id]: error?.message || data?.error || "Public reply failed." }));
+      return;
+    }
+    setZendeskReplyText(prev => ({ ...prev, [msg.id]: "" }));
+    setZendeskReplyNotice(prev => ({ ...prev, [msg.id]: "Public reply sent through Zendesk. Ticket is now pending." }));
+    setInboundMessages(prev => prev.map(item => item.id === msg.id ? { ...item, status: "in_progress" } : item));
+    await loadZendeskCases();
+  };
+
+  const handleZendeskPublicReply = (msg) => {
+    const reply = String(zendeskReplyText[msg.id] || "").trim();
+    if (!reply) return;
+    showOpsConfirm({
+      title: "Send this reply to the customer?",
+      body: `This is a public Zendesk reply and the customer will receive it.\n\n${reply.slice(0, 600)}${reply.length > 600 ? "..." : ""}`,
+      confirmLabel: "Send Public Reply",
+      variant: "send",
+      onConfirm: () => submitZendeskPublicReply(msg),
+    });
+  };
 
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
   const safeOpsActions = Array.isArray(opsActions) ? opsActions : [];
@@ -4328,18 +5368,57 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     setActiveFilter(nextFilter);
     if (inboxFilter.kind === "overdue") setSortMode("Oldest first");
     if (inboxFilter.messageId) {
-      setExpandedMessages(prev => ({ ...prev, [inboxFilter.messageId]: true }));
+      setExpandedMessageId(inboxFilter.messageId);
       window.requestAnimationFrame(() => {
         document.getElementById(`inbox-message-${inboxFilter.messageId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
       });
     }
   }, [inboxFilterKey]);
 
-  // â”€â”€ filter logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ filter logic Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const isUntriaged = (m) => !m.triage_status || m.triage_status === "Untriaged";
+  const findZendeskCaseForMessage = (message) => {
+    if (classifyInboundSource(message) !== "Zendesk") return null;
+    const metadata = getInboundMetadata(message);
+    return zendeskCases.find(item =>
+      String(item.id) === String(metadata.zendesk_case_id || "") ||
+      String(item.zendesk_ticket_id) === String(metadata.zendesk_ticket_id || message.external_message_id || "")
+    ) || null;
+  };
+  const getLatestMessageTime = (message) => {
+    const matchedCase = findZendeskCaseForMessage(message);
+    const latestCommentTime = (Array.isArray(matchedCase?.zendesk_comments) ? matchedCase.zendesk_comments : [])
+      .reduce((latest, comment) => {
+        const value = new Date(comment.zendesk_created_at || comment.created_at || 0).getTime() || 0;
+        return Math.max(latest, value);
+      }, 0);
+    if (latestCommentTime) return latestCommentTime;
+    return new Date(
+      message.last_message_at ||
+      message.received_at ||
+      message.email_received_at ||
+      message.received_time ||
+      message.created_at || 0
+    ).getTime() || 0;
+  };
+  const getSortTime = (message) => getLatestMessageTime(message);
+  const getPacificDateKey = (value) => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const part = (type) => parts.find(item => item.type === type)?.value || "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+  };
+  const pacificTodayKey = getPacificDateKey(new Date());
   const filtered = safeInboundMessages.filter(m => {
     if (inboxFilter && !matchesCommandInboxFilter(m, inboxFilter)) return false;
     if (activeFilter === "All")                 return true;
+    if (activeFilter === "Today")               return getPacificDateKey(getSortTime(m)) === pacificTodayKey;
     if (activeFilter === "Zendesk")             return classifyInboundSource(m) === "Zendesk";
     if (activeFilter === "TikTok Shop Chat")      return classifyInboundSource(m) === "TikTok Shop Chat";
     if (activeFilter === "Refunds / Returns")   return classifyInboundSource(m) === "TikTok Refund";
@@ -4354,7 +5433,6 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     if (activeFilter === "Archived")            return false;
     return true;
   });
-  const getSortTime = (message) => new Date(message.created_at || message.received_time || message.email_received_at || message.received_at || 0).getTime() || 0;
   const getPriorityRank = (priority) => ({ High: 0, Medium: 1, Low: 2 }[priority] ?? 3);
   const newestFirst = (a, b) => getSortTime(b) - getSortTime(a);
   const sortedFiltered = [...filtered].sort((a, b) => {
@@ -4369,6 +5447,51 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     }
     return newestFirst(a, b);
   });
+  const approvalFinancialIssues = new Set(["Missing Item", "Wrong Item", "Damaged Item", "Return / Refund", "Delivered Not Received", "Surprise Set Dispute"]);
+  const approvalRows = openInboxMessages.map(message => {
+    const metadata = getInboundMetadata(message);
+    const linkedActions = safeOpsActions.filter(action =>
+      String(action.inbound_message_id || "") === String(message.id) &&
+      !["completed", "closed", "cancelled", "canceled", "resolved"].includes(String(action.status || "").toLowerCase())
+    );
+    const overdueAction = linkedActions.find(action => action.due_at && new Date(action.due_at).getTime() < Date.now());
+    const issueType = String(message.issue_type || metadata.issue_type || "").trim();
+    const normalizedStatus = normalizeWorkQueueStatus(message.status);
+    const customerReplied = normalizedStatus === "needs_reply";
+    const financialReview = approvalFinancialIssues.has(issueType) || /refund|replacement/i.test(String(metadata.recommended_action || message.notes || ""));
+    const unclassified = !issueType || issueType === "General Question" || !message.triage_status || message.triage_status === "Untriaged";
+    const highPriority = isHighPriorityMessage(message);
+    let score = 0;
+    const reasons = [];
+    if (overdueAction) { score += 100; reasons.push("Overdue work"); }
+    if (financialReview) { score += 80; reasons.push("Financial decision"); }
+    if (customerReplied) { score += 70; reasons.push("Customer replied"); }
+    if (highPriority) { score += 55; reasons.push("High priority"); }
+    if (unclassified) { score += 40; reasons.push("Needs classification"); }
+    if (!score) return null;
+    const dueAt = overdueAction?.due_at || linkedActions.map(action => action.due_at).filter(Boolean).sort()[0] || null;
+    return { message, linkedActions, overdueAction, issueType, customerReplied, financialReview, unclassified, highPriority, score, reasons, dueAt };
+  }).filter(Boolean).sort((a, b) => b.score - a.score || getSortTime(b.message) - getSortTime(a.message));
+  const visibleApprovalRows = approvalRows.filter(row => {
+    if (approvalQueueFilter === "Overdue work") return Boolean(row.overdueAction);
+    if (approvalQueueFilter === "Customer replied") return row.customerReplied;
+    if (approvalQueueFilter === "Financial review") return row.financialReview;
+    if (approvalQueueFilter === "Unclassified") return row.unclassified;
+    return true;
+  }).slice(0, 8);
+  const approvalCounts = {
+    overdue: approvalRows.filter(row => row.overdueAction).length,
+    replies: approvalRows.filter(row => row.customerReplied).length,
+    financial: approvalRows.filter(row => row.financialReview).length,
+    unclassified: approvalRows.filter(row => row.unclassified).length,
+  };
+  const openApprovalCase = (messageId) => {
+    setExpandedMessageId(messageId);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`inbox-message-${messageId}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  };
+
   const inboxFilterLabel = inboxFilter
     ? [
         inboxFilter.kind === "overdue" ? "Overdue" :
@@ -4433,23 +5556,55 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
   }, [inboundLoading, inboundMessages, setInboundMessages]);
 
   const toggleMessageExpanded = (id) => {
-    setExpandedMessages(prev => ({ ...prev, [id]: !prev[id] }));
+    setExpandedMessageId(current => current === id ? null : id);
   };
+
+  useEffect(() => {
+    if (!expandedMessageId) return;
+    const handlePointerDown = (event) => {
+      const card = event.target?.closest?.(`[data-inbox-card="${expandedMessageId}"]`);
+      if (!card) setExpandedMessageId(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        if (attachmentLightbox) setAttachmentLightbox(null);
+        else setExpandedMessageId(null);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [expandedMessageId, attachmentLightbox]);
 
   const handleAskAssistant = async (msg) => {
     if (assistantLoadingId === msg.id) return;
-    if (assistantMessageId === msg.id && assistantResults[msg.id]) {
-      setAssistantMessageId(null);
-      setCopiedAssistantDraftId(null);
-      return;
-    }
-
     setAssistantMessageId(msg.id);
     setCopiedAssistantDraftId(null);
     setAssistantLoadingId(msg.id);
     setAssistantResults(prev => ({ ...prev, [msg.id]: null }));
 
-    const fallback = sanitizeAssistantAnalysis(msg, buildLocalAssistantAnalysis(msg));
+    const zendeskMetadata = getInboundMetadata(msg);
+    const matchedCase = zendeskCases.find(item =>
+      String(item.id) === String(zendeskMetadata.zendesk_case_id || "") ||
+      String(item.zendesk_ticket_id) === String(zendeskMetadata.zendesk_ticket_id || msg.external_message_id || "")
+    );
+    const comments = Array.isArray(matchedCase?.zendesk_comments) ? matchedCase.zendesk_comments : [];
+    const orders = Array.isArray(matchedCase?.zendesk_order_cards) ? matchedCase.zendesk_order_cards : [];
+    const requesterId = String(matchedCase?.requester_id || "");
+    const latestCustomerComment = [...comments].sort((a, b) => new Date(b.zendesk_created_at || 0) - new Date(a.zendesk_created_at || 0)).find(comment => String(comment.author_id || "") === requesterId && comment.is_public !== false);
+    const triageContext = {
+      customer: matchedCase ? { name: matchedCase.customer_name, email: matchedCase.customer_email, shop: matchedCase.shop_name } : null,
+      subject: matchedCase?.subject || msg.subject || "",
+      latestCustomerMessage: latestCustomerComment?.body || getDisplayInboundMessage(msg).displayBody || "",
+      comments: comments.slice(-40).map(comment => ({ body: comment.body, isPublic: comment.is_public, authorId: comment.author_id, createdAt: comment.zendesk_created_at })),
+      orders: orders.map(order => ({ orderId: order.order_id, status: order.order_status, amount: order.payment_amount, trackingNumber: order.tracking_number || null, product: order.product_name || order.item_name || null })),
+      currentClassification: msg.issue_type || "",
+    };
+    const triageMessage = { ...msg, _triageContext: triageContext };
+    const fallback = sanitizeAssistantAnalysis(triageMessage, buildLocalAssistantAnalysis(triageMessage));
 
     if (!supabase?.functions?.invoke) {
       setAssistantResults(prev => ({
@@ -4466,13 +5621,17 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-message-assistant", {
-        body: { message: msg },
+        body: {
+          message: { ...msg, caseContext: triageContext },
+          caseContext: triageContext,
+          task: "Return structured customer-service triage: suggestedIssueType, classificationReason, recommendedAction, evidencePresent, missingEvidence, draftReply, confidence. Never send or approve an action.",
+        },
       });
       if (error) throw error;
       setAssistantResults(prev => ({
         ...prev,
         [msg.id]: {
-          analysis: sanitizeAssistantAnalysis(msg, data),
+          analysis: sanitizeAssistantAnalysis(triageMessage, data),
           source: "ai",
           error: "",
         },
@@ -4557,7 +5716,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     setManualMessageError("");
   };
 
-  // â”€â”€ handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ handlers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const handleManualMessageSubmit = async () => {
     const brand = manualMessageForm.brand.trim();
     const channel = manualMessageForm.channel.trim();
@@ -4638,8 +5797,26 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     });
   };
 
-  const runCloseAndArchiveMessage = async (id) => {
+  const runCloseAndArchiveMessage = async (msg) => {
+    const id = msg.id;
     setBusyId(id);
+    if (String(msg.source || "").toLowerCase() === "zendesk") {
+      const metadata = getInboundMetadata(msg);
+      const ticketId = Number(metadata.zendesk_ticket_id || msg.external_message_id || metadata.ticket_id);
+      if (!ticketId) {
+        setBusyId(null);
+        showOpsToast("Zendesk ticket number is missing.", { type: "error" });
+        return;
+      }
+      const { data, error: zendeskError } = await supabase.functions.invoke("zendesk-mirror", {
+        body: { ticket_id: ticketId, action: "set_status", status: "solved" },
+      });
+      if (zendeskError || data?.error) {
+        setBusyId(null);
+        showOpsToast(`Zendesk close failed: ${zendeskError?.message || data?.error}`, { type: "error" });
+        return;
+      }
+    }
     const { error } = await closeAndArchiveInboundInSupabase(id);
     setBusyId(null);
     if (error) { showOpsToast(`Close and archive failed: ${error.message}`, { type: "error" }); return; }
@@ -4647,13 +5824,15 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     showOpsToast("Message closed and archived.");
   };
 
-  const handleCloseAndArchive = (id) => {
+  const handleCloseAndArchive = (msg) => {
     showOpsConfirm({
       title: "Close and archive this message?",
-      body: "This will mark the message as closed and remove it from the active inbox queue.",
+      body: String(msg.source || "").toLowerCase() === "zendesk"
+        ? "This will solve the Zendesk ticket and remove its card from the active Command Inbox."
+        : "This will mark the message as closed and remove it from the active inbox queue.",
       confirmLabel: "Close + Archive",
       variant: "archive",
-      onConfirm: () => runCloseAndArchiveMessage(id),
+      onConfirm: () => runCloseAndArchiveMessage(msg),
     });
   };
 
@@ -4688,6 +5867,195 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     await updateInboundStatusInSupabase(msg.id, "Ticket Created");
     setBusyId(null);
     setInboundMessages(prev => prev.map(m => m.id === msg.id ? { ...m, status: "Ticket Created" } : m));
+  };
+
+  const persistCaseWorkflow = async (msg, patch) => {
+    if (!supabase || !msg?.id) return { error: { message: "No Supabase client or message id." } };
+    const currentMetadata = getInboundMetadata(msg);
+    const nextMetadata = {
+      ...currentMetadata,
+      case_workflow: {
+        ...(currentMetadata.case_workflow || {}),
+        ...patch,
+        updated_at: nowISO(),
+      },
+    };
+    const payload = { metadata: nextMetadata, updated_at: nowISO() };
+    if (patch.issue_type) {
+      payload.issue_type = patch.issue_type;
+    }
+    const { error } = await supabase.from(INBOUND_MESSAGES_TABLE).update(payload).eq("id", msg.id);
+    if (!error) {
+      setInboundMessages(prev => prev.map(item => item.id === msg.id ? { ...item, ...payload } : item));
+    }
+    return { error };
+  };
+
+  const handleClassifyCase = async (msg, issueType) => {
+    setWorkflowBusyId(msg.id);
+    const rule = CASE_SOP_RULES[issueType];
+    const { error } = await persistCaseWorkflow(msg, {
+      issue_type: issueType,
+      recommended_action: rule?.action || "Review case",
+      evidence: {},
+      classified_at: nowISO(),
+    });
+    setWorkflowBusyId(null);
+    if (error) showOpsToast(`Classification failed: ${error.message}`, { type: "error" });
+  };
+
+  const handleEvidenceToggle = async (msg, evidenceLabel, checked) => {
+    const workflow = getInboundMetadata(msg).case_workflow || {};
+    const evidence = { ...(workflow.evidence || {}), [evidenceLabel]: checked };
+    setInboundMessages(prev => prev.map(item => item.id === msg.id ? {
+      ...item,
+      metadata: { ...getInboundMetadata(item), case_workflow: { ...workflow, evidence } },
+    } : item));
+    setWorkflowBusyId(msg.id);
+    const { error } = await persistCaseWorkflow(msg, { evidence });
+    setWorkflowBusyId(null);
+    if (error) showOpsToast(`Evidence update failed: ${error.message}`, { type: "error" });
+  };
+
+  const handleCreateCommitment = async (msg) => {
+    const issueType = msg.issue_type || "General Question";
+    const rule = CASE_SOP_RULES[issueType] || CASE_SOP_RULES["General Question"];
+    const draft = commitmentDrafts[msg.id] || {};
+    const promise = String(draft.promise || rule.action).trim();
+    const dueAt = draft.due_at || new Date(Date.now() + rule.dueHours * 60 * 60 * 1000).toISOString();
+    if (!promise) return;
+    setWorkflowBusyId(msg.id);
+    const { displayName, displayBody } = getDisplayInboundMessage(msg);
+    const row = {
+      inbound_message_id: msg.id,
+      brand: msg.brand || null,
+      channel: msg.channel || null,
+      customer_name: displayName || msg.customer_name || msg.sender_name || null,
+      customer_email: msg.sender_email || null,
+      action_type: issueType === "Missing Item" || issueType === "Wrong Item" || issueType === "Damaged Item" ? "Replacement Commitment" : "Customer Commitment",
+      title: promise.slice(0, 80),
+      details: [`Issue: ${issueType}`, promise, displayBody].filter(Boolean).join("\n\n").slice(0, 1000),
+      priority: rule.priority,
+      status: "Open",
+      due_at: dueAt,
+      source: "customer-commitment",
+      created_at: nowISO(),
+      updated_at: nowISO(),
+    };
+    const { data: inserted, error } = await insertOpsActionToSupabase(row);
+    setWorkflowBusyId(null);
+    if (error) {
+      setCommitmentNotice(prev => ({ ...prev, [msg.id]: error.message }));
+      return;
+    }
+    if (inserted) setOpsActions(prev => [inserted, ...prev]);
+    setCommitmentNotice(prev => ({ ...prev, [msg.id]: "Commitment tracked with a due date." }));
+    setCommitmentDrafts(prev => ({ ...prev, [msg.id]: { ...prev[msg.id], promise: "", due_at: "" } }));
+  };
+
+  const createResolutionTask = async (msg, actionType, title, details) => {
+    const issueType = msg.issue_type || "General Question";
+    const rule = CASE_SOP_RULES[issueType] || CASE_SOP_RULES["General Question"];
+    const dueAt = new Date(Date.now() + rule.dueHours * 60 * 60 * 1000).toISOString();
+    const { displayName } = getDisplayInboundMessage(msg);
+    const row = {
+      inbound_message_id: msg.id,
+      brand: msg.brand || null,
+      channel: msg.channel || null,
+      customer_name: displayName || msg.customer_name || msg.sender_name || null,
+      customer_email: msg.sender_email || null,
+      action_type: actionType,
+      title: title.slice(0, 80),
+      details: [`Issue: ${issueType}`, details].filter(Boolean).join("\n\n").slice(0, 1000),
+      priority: rule.priority,
+      status: "Open",
+      due_at: dueAt,
+      source: "resolution-execution",
+      created_at: nowISO(),
+      updated_at: nowISO(),
+    };
+    const { data, error } = await insertOpsActionToSupabase(row);
+    if (!error && data) setOpsActions(prev => [data, ...prev]);
+    return { data, error };
+  };
+
+  const handleResolutionDecision = async (msg, decision) => {
+    const issueType = msg.issue_type || "General Question";
+    const rule = CASE_SOP_RULES[issueType] || CASE_SOP_RULES["General Question"];
+    setWorkflowBusyId(msg.id);
+    setResolutionNotice(prev => ({ ...prev, [msg.id]: "" }));
+    let error = null;
+    let notice = "";
+
+    if (decision === "request_photos") {
+      const customerName = (getDisplayInboundMessage(msg).displayName || "there").replace(/^\[US\]/i, "");
+      setZendeskReplyText(prev => ({ ...prev, [msg.id]: `Hello ${customerName},\n\nThanks for reaching out. To review this properly, please send clear photos of the item received, the packing slip, and the outside of the package. Once we receive them, we will review everything and update you.\n\nThank you.` }));
+      await persistCaseWorkflow(msg, { resolution_state: "awaiting_evidence", selected_resolution: decision });
+      notice = "Evidence-request reply prepared. Review it, then send through Zendesk.";
+    } else if (decision === "waiting_customer") {
+      const result = await persistCaseWorkflow(msg, { resolution_state: "waiting_customer", selected_resolution: decision });
+      error = result.error;
+      if (!error) {
+        await updateInboundStatusInSupabase(msg.id, "in_progress");
+        setInboundMessages(prev => prev.map(item => item.id === msg.id ? { ...item, status: "in_progress" } : item));
+        const followUp = await createResolutionTask(msg, "Customer Follow-Up", `Follow up with ${getDisplayInboundMessage(msg).displayName || "customer"}`, "Check for the requested customer evidence or response, then continue the resolution.");
+        if (followUp.error) error = followUp.error;
+        else notice = "Waiting on customer. A dated follow-up task was created.";
+      }
+    } else {
+      const taskMap = {
+        investigate: ["Investigation", `Investigate: ${issueType}`, rule.action],
+        usps_follow_up: ["USPS Follow-Up", `USPS follow-up: ${getDisplayInboundMessage(msg).displayName || "Customer"}`, "Open and document the carrier investigation."],
+        refund_review: ["Refund Review", `Refund review: ${getDisplayInboundMessage(msg).displayName || "Customer"}`, "Review policy, evidence, amount, and platform deadline. No refund is authorized by this task."],
+      };
+      const config = taskMap[decision];
+      if (config) {
+        const result = await createResolutionTask(msg, config[0], config[1], config[2]);
+        error = result.error;
+        if (!error) {
+          await persistCaseWorkflow(msg, { resolution_state: "execution_open", selected_resolution: decision });
+          notice = `${RESOLUTION_LABELS[decision]} execution task created and dated.`;
+        }
+      }
+    }
+
+    setWorkflowBusyId(null);
+    if (error) showOpsToast(`Resolution failed: ${error.message}`, { type: "error" });
+    else if (notice) setResolutionNotice(prev => ({ ...prev, [msg.id]: notice }));
+  };
+
+  const handleCompleteCaseWork = async (msg, action) => {
+    if (!action?.id) return;
+    setWorkflowBusyId(msg.id);
+    const { error } = await updateOpsActionStatusInSupabase(action.id, "Completed");
+    setWorkflowBusyId(null);
+    if (error) {
+      showOpsToast(`Work completion failed: ${error.message}`, { type: "error" });
+      return;
+    }
+    setOpsActions(prev => prev.filter(item => String(item.id) !== String(action.id)));
+    setResolutionNotice(prev => ({ ...prev, [msg.id]: `Completed: ${action.title || action.action_type || "case work"}.` }));
+  };
+
+  const handleVerifiedClose = async (msg) => {
+    if (!supabase) return;
+    setWorkflowBusyId(msg.id);
+    const { data: openWork, error } = await supabase
+      .from("ops_actions")
+      .select("id, title, status")
+      .eq("inbound_message_id", msg.id)
+      .neq("status", "Completed")
+      .limit(5);
+    setWorkflowBusyId(null);
+    if (error) {
+      showOpsToast(`Closure check failed: ${error.message}`, { type: "error" });
+      return;
+    }
+    if (openWork?.length) {
+      setResolutionNotice(prev => ({ ...prev, [msg.id]: `Cannot close: ${openWork.length} commitment or execution task${openWork.length === 1 ? " is" : "s are"} still open.` }));
+      return;
+    }
+    handleCloseAndArchive(msg);
   };
 
   const handleCreateAction = async (msg) => {
@@ -4788,8 +6156,13 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       metadata: nextMetadata,
       tags: nextTags,
     } : m));
+    const replacementTask = await createResolutionTask(msg, "Replacement Execution", `Execute replacement for ${getDisplayInboundMessage(msg).displayName || "customer"}`, "Replacement was approved and logged. Verify fulfillment, tracking, and the customer update before completing this task.");
+    if (!replacementTask.error) {
+      await persistCaseWorkflow(msg, { resolution_state: "execution_open", selected_resolution: "approve_replacement" });
+    }
     setBusyId(null);
-    showOpsToast("Replacement case logged.");
+    if (replacementTask.error) showOpsToast(`Replacement logged, but execution task failed: ${replacementTask.error.message}`, { type: "error" });
+    else showOpsToast("Replacement logged and execution task created.");
   };
 
   const handleRunTriage = async (msgId) => {
@@ -4875,12 +6248,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
     ));
   };
 
-  // â”€â”€ Process Queue state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Process Queue state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [queueRunning, setQueueRunning]   = useState(false);
   const [queueProgress, setQueueProgress] = useState("");
   const [queueSummary, setQueueSummary]   = useState(null);
 
-  // â”€â”€ Check Gmail state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Check Gmail state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [isCheckingGmail, setIsCheckingGmail] = useState(false);
   const [lastGmailCheckAt, setLastGmailCheckAt] = useState(null);
   const [gmailCheckError, setGmailCheckError] = useState("");
@@ -4951,7 +6324,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
       const msg = candidates[i];
       setQueueProgress(`Processing ${i + 1} of ${candidates.length}...`);
 
-      // â”€â”€ Step 1: Triage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Step 1: Triage Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       let triaged = msg;
       try {
         const { data: tData, error: tErr } = await supabase.functions.invoke(
@@ -4963,10 +6336,10 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         }
       } catch (_) { /* non-fatal */ }
 
-      // â”€â”€ Step 2: Find matching automation rule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Step 2: Find matching automation rule Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       const rule = findAutomationRule(automationRules, triaged);
 
-      // â”€â”€ Step 3: Noise handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Step 3: Noise handling Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       const isNoise = triaged.triage_status === "Noise / Not CS" ||
         triaged.issue_type === "Noise / Not CS";
 
@@ -4987,7 +6360,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         continue;
       }
 
-      // â”€â”€ Step 4: Draft â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Step 4: Draft Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       // Rule-driven if rule exists; safe default = draft only low-risk reply work.
       const shouldDraft = !getCommandInboxRiskFlag(triaged) && (
         rule ? rule.auto_draft === true : isCommandInboxAutoDraftEligible(triaged)
@@ -5006,7 +6379,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         } catch (_) { /* non-fatal */ }
       }
 
-      // â”€â”€ Step 5: Create action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Step 5: Create action Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       // Rule-driven if rule exists; safe default = create if next_action is set
       const shouldCreateAction = rule
         ? rule.auto_create_action === true
@@ -5100,6 +6473,88 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           </button>
         </Card>
       )}
+
+
+      {/* Approval Queue V1 */}
+      <Card className="overflow-hidden border-slate-300">
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-bold text-slate-900">Approval Queue</p>
+              <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-white">{approvalRows.length} decisions</span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-slate-500">Only work requiring judgment or follow-through. Open Case uses the existing workspace below.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setApprovalQueueOpen(value => !value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            {approvalQueueOpen ? "Hide queue" : "Show queue"}
+          </button>
+        </div>
+        {approvalQueueOpen && (
+          <div className="space-y-3 p-4">
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["All decisions", approvalRows.length],
+                ["Overdue work", approvalCounts.overdue],
+                ["Customer replied", approvalCounts.replies],
+                ["Financial review", approvalCounts.financial],
+                ["Unclassified", approvalCounts.unclassified],
+              ].map(([label, count]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setApprovalQueueFilter(label)}
+                  className={`rounded-full border px-3 py-1 text-[10px] font-semibold transition-colors ${approvalQueueFilter === label ? "border-slate-800 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"}`}
+                >
+                  {label} · {count}
+                </button>
+              ))}
+            </div>
+            {visibleApprovalRows.length ? (
+              <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                {visibleApprovalRows.map(row => {
+                  const message = row.message;
+                  const customer = message.customer_handle || message.customer_name || message.sender_name || message.sender || "Unknown customer";
+                  const dueLabel = row.dueAt ? new Date(row.dueAt).toLocaleString() : null;
+                  return (
+                    <div key={message.id} className="flex flex-col gap-3 bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`h-2 w-2 rounded-sm ${getInboxBrandBorderClass(getDisplayBrand(message)).replace("border-l-4", "bg-slate-400")}`} />
+                          <span className="text-xs font-bold text-slate-900">{getDisplayBrand(message)}</span>
+                          <span className="text-xs font-semibold text-slate-700">{customer}</span>
+                          {row.issueType && <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-600">{row.issueType}</span>}
+                        </div>
+                        <p className="mt-1 truncate text-[11px] text-slate-600">{row.reasons.join(" · ")}</p>
+                        {dueLabel && <p className={`mt-0.5 text-[10px] font-semibold ${row.overdueAction ? "text-red-700" : "text-amber-700"}`}>{row.overdueAction ? "Overdue: " : "Due: "}{dueLabel}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openApprovalCase(message.id)}
+                        className="shrink-0 rounded-lg border border-slate-800 bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+                      >
+                        Open Case
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-center text-xs font-semibold text-emerald-700">No cases match this approval filter.</div>
+            )}
+            {approvalRows.filter(row => {
+              if (approvalQueueFilter === "Overdue work") return Boolean(row.overdueAction);
+              if (approvalQueueFilter === "Customer replied") return row.customerReplied;
+              if (approvalQueueFilter === "Financial review") return row.financialReview;
+              if (approvalQueueFilter === "Unclassified") return row.unclassified;
+              return true;
+            }).length > 8 && <p className="text-center text-[10px] text-slate-400">Showing the 8 highest-priority decisions.</p>}
+          </div>
+        )}
+      </Card>
 
       {manualMessageOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-6">
@@ -5195,7 +6650,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </>
             )}
           </div>
-          <button onClick={() => setQueueSummary(null)} className="text-teal-400 hover:text-teal-700 text-lg leading-none ml-3 flex-shrink-0">Ã—</button>
+          <button onClick={() => setQueueSummary(null)} className="text-teal-400 hover:text-teal-700 text-lg leading-none ml-3 flex-shrink-0">Ãƒ—</button>
         </div>
       )}
 
@@ -5305,9 +6760,21 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const sourceType     = classifyInboundSource(msg);
         const sourceBadgeCls = SOURCE_BADGE_STYLE[sourceType] || SOURCE_BADGE_STYLE["Other"];
         const cardTitle      = getInboundCardTitle(msg, sourceType, displayName);
-        const ts             = getInboundTimestamp(msg);
         const orderNum       = msg.order_number || msg.orderNumber || null;
         const isZendesk      = sourceType === "Zendesk";
+        const zendeskMetadata = isZendesk ? getInboundMetadata(msg) : {};
+        const zendeskCase = isZendesk ? zendeskCases.find(item =>
+          String(item.id) === String(zendeskMetadata.zendesk_case_id || "") ||
+          String(item.zendesk_ticket_id) === String(zendeskMetadata.zendesk_ticket_id || msg.external_message_id || "")
+        ) : null;
+        const zendeskOrders = Array.isArray(zendeskCase?.zendesk_order_cards) ? zendeskCase.zendesk_order_cards : [];
+        const zendeskComments = Array.isArray(zendeskCase?.zendesk_comments)
+          ? [...zendeskCase.zendesk_comments].sort((a, b) => new Date(a.zendesk_created_at || 0) - new Date(b.zendesk_created_at || 0))
+          : [];
+        const latestMessageTime = getLatestMessageTime(msg);
+        const ts = latestMessageTime
+          ? { iso: new Date(latestMessageTime).toISOString(), label: "Latest message", display: fmtPacific(latestMessageTime) }
+          : getInboundTimestamp(msg);
         const zendeskNotes   = isZendesk ? parseZendeskNotes(msg.notes) : null;
         const zendeskSubject = zendeskNotes?.subject || "";
         const zendeskPreview = zendeskNotes?.preview || "";
@@ -5315,7 +6782,7 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
         const zendeskUrl     = zendeskNotes?.url || "";
         const isRefund       = sourceType === "TikTok Refund";
         const isNoise        = sourceType === "Noise";
-        const isMessageExpanded = expandedMessages[msg.id] === true;
+        const isMessageExpanded = expandedMessageId === msg.id;
         const sourceBadgeLabel = isRefund ? "Refund / Return" : sourceType;
         const displayBrand = getDisplayBrand(msg);
         const brandBorderCls = getInboxBrandBorderClass(displayBrand);
@@ -5339,9 +6806,36 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
           : replacementLogged
           ? "Open Replacement Case"
           : "Send to Replacement Log";
+        const caseWorkflow = getInboundMetadata(msg).case_workflow || {};
+        const selectedIssueType = msg.issue_type || caseWorkflow.issue_type || "";
+        const selectedSop = CASE_SOP_RULES[selectedIssueType] || null;
+        const evidenceState = caseWorkflow.evidence || {};
+        const evidenceComplete = selectedSop ? selectedSop.evidence.filter(item => evidenceState[item]).length : 0;
+        const defaultCommitmentDue = selectedSop ? new Date(Date.now() + selectedSop.dueHours * 60 * 60 * 1000).toISOString().slice(0, 16) : "";
+        const caseOpenWork = safeOpsActions
+          .filter(action => String(action.inbound_message_id || "") === String(msg.id) && action.status !== "Completed")
+          .sort((a, b) => new Date(a.due_at || "9999-12-31") - new Date(b.due_at || "9999-12-31"));
 
         return (
-          <Card key={msg.id} id={`inbox-message-${msg.id}`} className={`w-full p-4 border-l-4 ${brandBorderCls} ${isNoise ? "opacity-75" : ""}`}>
+          <Card
+            key={msg.id}
+            id={`inbox-message-${msg.id}`}
+            data-inbox-card={msg.id}
+            role="button"
+            tabIndex={0}
+            aria-expanded={isMessageExpanded}
+            onClick={(event) => {
+              if (event.target.closest("button, a, textarea, input, select, [data-no-card-toggle], img")) return;
+              toggleMessageExpanded(msg.id);
+            }}
+            onKeyDown={(event) => {
+              if ((event.key === "Enter" || event.key === " ") && !event.target.closest("button, a, textarea, input, select")) {
+                event.preventDefault();
+                toggleMessageExpanded(msg.id);
+              }
+            }}
+            className={`w-full p-4 border-l-4 transition-all duration-200 ${brandBorderCls} ${isNoise ? "opacity-75" : ""} ${isMessageExpanded ? "ring-2 ring-slate-200 shadow-md" : "cursor-pointer hover:border-slate-300 hover:shadow-sm"}`}
+          >
             {/* Card header row */}
             <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -5378,11 +6872,12 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   <Badge label="Replacement Logged" className="bg-slate-100 text-slate-700 border-slate-200" />
                 )}
               </div>
-              {/* Timestamp - Pacific time, labeled Received or Imported */}
+              {/* Latest conversation activity in Pacific time */}
               {ts.display && (
                 <div className="flex flex-col items-start flex-shrink-0 sm:items-end">
                   <span className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">{ts.label}</span>
                   <span className="text-[10px] text-gray-500 font-medium whitespace-nowrap">{ts.display} PT</span>
+                  <span className="mt-1 text-sm font-bold text-slate-400" aria-hidden="true">{isMessageExpanded ? "⌃" : "⌄"}</span>
                 </div>
               )}
             </div>
@@ -5404,8 +6899,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
             {!isRefund && displayCustomer && (
               <p className="text-xs text-gray-600 mb-1.5">
                 <span className="font-semibold text-gray-800">{displayCustomer}</span>
-                {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">Â· {msg.sender_email}</span>}
-                {isZendesk && orderNum && <span className="text-gray-400 ml-1">Â· Ticket {orderNum}</span>}
+                {!displayName && msg.sender_email && <span className="text-gray-400 ml-1">Ã‚· {msg.sender_email}</span>}
+                {isZendesk && orderNum && <span className="text-gray-400 ml-1">Ã‚· Ticket {orderNum}</span>}
               </p>
             )}
 
@@ -5433,12 +6928,217 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </div>
             )}
 
+            {isZendesk && isMessageExpanded && zendeskCase && (
+              <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="grid gap-3 text-xs sm:grid-cols-3">
+                  <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Customer</p><p className="mt-1 font-semibold text-slate-800">{zendeskCase.customer_name || displayCustomer || "—"}</p><p className="text-slate-500">{zendeskCase.customer_email || msg.sender_email || "—"}</p></div>
+                  <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Shop / Priority</p><p className="mt-1 font-semibold text-slate-800">{zendeskCase.shop_name || displayBrand || "—"}</p><p className="text-slate-500">{zendeskCase.priority || msg.priority || "Normal"}</p></div>
+                  <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Case evidence</p><p className="mt-1 text-slate-700"><b>{zendeskCase.comment_count || 0}</b> comments · <b>{zendeskCase.image_count || 0}</b> images</p>{zendeskUrl && <a href={zendeskUrl} target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline">Open Zendesk ticket</a>}</div>
+                </div>
+                <div className="mt-3 border-t border-slate-200 pt-3" data-no-card-toggle>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Resolution plan</p>
+                        <p className="mt-1 text-[11px] text-slate-500">Confirm the issue, then approve one permitted next step.</p>
+                      </div>
+                      <select value={selectedIssueType} disabled={workflowBusyId === msg.id} onChange={event => handleClassifyCase(msg, event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-slate-600">
+                        <option value="">Classify issue...</option>
+                        {CASE_ISSUE_TYPES.map(issueType => <option key={issueType} value={issueType}>{issueType}</option>)}
+                      </select>
+                    </div>
+
+                    {selectedSop ? (
+                      <div className="mt-3">
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.65fr)]">
+                          <div className="rounded-lg bg-slate-50 px-3 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Recommended next action</p>
+                            <p className="mt-1 text-sm font-bold text-slate-900">{selectedSop.action}</p>
+                            <p className="mt-2 text-[11px] leading-relaxed text-slate-600">{selectedSop.guidance}</p>
+                          </div>
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Guardrail</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-amber-900">{selectedSop.prohibited}</p>
+                            <p className="mt-2 text-[10px] font-semibold text-amber-800">Missing evidence: {selectedSop.evidence.length - evidenceComplete} of {selectedSop.evidence.length}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {selectedSop.allowed.map(decision => (
+                            <button key={decision} type="button" disabled={workflowBusyId === msg.id} onClick={() => decision === "approve_replacement" ? handleSendToReplacementLog(msg) : handleResolutionDecision(msg, decision)} className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50 ${decision === "approve_replacement" ? "bg-slate-800 text-white hover:bg-slate-900" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>{RESOLUTION_LABELS[decision]}</button>
+                          ))}
+                          <button type="button" disabled={workflowBusyId === msg.id} onClick={() => handleVerifiedClose(msg)} className="ml-auto rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Resolve and Close</button>
+                        </div>
+                        {resolutionNotice[msg.id] && <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700">{resolutionNotice[msg.id]}</p>}
+
+                        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Open commitments & execution</p><p className="mt-0.5 text-[11px] text-slate-500">Replying does not complete this work.</p></div>
+                            <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${caseOpenWork.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700"}`}>{caseOpenWork.length ? `${caseOpenWork.length} open` : "Clear"}</span>
+                          </div>
+                          {caseOpenWork.length ? <div className="mt-2 space-y-2">{caseOpenWork.map(action => {
+                            const overdue = action.due_at && new Date(action.due_at) < new Date();
+                            return <div key={action.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                              <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-800">{action.title || action.action_type}</p><p className={`mt-0.5 text-[10px] ${overdue ? "font-bold text-red-600" : "text-slate-500"}`}>{overdue ? "Overdue · " : ""}{action.due_at ? new Date(action.due_at).toLocaleString() : "No deadline"} · {action.status || "Open"}</p></div>
+                              <button type="button" disabled={workflowBusyId === msg.id} onClick={() => handleCompleteCaseWork(msg, action)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Mark Complete</button>
+                            </div>;
+                          })}</div> : <p className="mt-2 text-[11px] font-semibold text-emerald-700">No unfinished promise or execution task blocks closure.</p>}
+                        </div>
+
+                        <button type="button" onClick={() => setAdvancedWorkflowOpen(prev => ({ ...prev, [msg.id]: !prev[msg.id] }))} className="mt-3 text-[11px] font-semibold text-slate-500 hover:text-slate-800">{advancedWorkflowOpen[msg.id] ? "Hide advanced details" : "Advanced details"}</button>
+                        {advancedWorkflowOpen[msg.id] && (
+                          <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+                            <div>
+                              <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Evidence checklist</p><span className="text-[10px] font-bold text-slate-500">{evidenceComplete}/{selectedSop.evidence.length}</span></div>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                {selectedSop.evidence.map(item => <label key={item} className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-2.5 py-2 text-[11px] text-slate-700"><input type="checkbox" checked={Boolean(evidenceState[item])} disabled={workflowBusyId === msg.id} onChange={event => handleEvidenceToggle(msg, item, event.target.checked)} className="h-4 w-4 rounded border-slate-300" /><span>{item}</span></label>)}
+                              </div>
+                              <p className="mt-2 text-[10px] text-slate-500"><b>Closure requirement:</b> {selectedSop.closure}</p>
+                            </div>
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Manual commitment override</p>
+                              <input type="text" value={commitmentDrafts[msg.id]?.promise ?? selectedSop.action} onChange={event => setCommitmentDrafts(prev => ({ ...prev, [msg.id]: { ...prev[msg.id], promise: event.target.value } }))} className="mt-2 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs" />
+                              <div className="mt-2 flex gap-2"><input type="datetime-local" value={commitmentDrafts[msg.id]?.due_at ?? defaultCommitmentDue} onChange={event => setCommitmentDrafts(prev => ({ ...prev, [msg.id]: { ...prev[msg.id], due_at: event.target.value } }))} className="min-w-0 flex-1 rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-xs" /><button type="button" disabled={workflowBusyId === msg.id} onClick={() => handleCreateCommitment(msg)} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Track</button></div>
+                              {commitmentNotice[msg.id] && <p className="mt-2 text-[11px] font-semibold text-amber-800">{commitmentNotice[msg.id]}</p>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">Choose the issue once. Ops Hub will load the permitted resolution path.</div>}
+                  </div>
+                </div>
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">TikTok order cards ({zendeskOrders.length})</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {zendeskOrders.length ? zendeskOrders.map(order => (
+                      <div key={order.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <p className="truncate text-xs font-bold text-slate-900">{order.order_id}</p>
+                        <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span>{order.order_status || "Status unavailable"}</span><span className="font-bold text-slate-800">{order.payment_amount != null ? `$${Number(order.payment_amount).toFixed(2)}` : "—"}</span></div>
+                        {order.order_url && <a href={order.order_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-blue-700 hover:underline">Open TikTok order</a>}
+                      </div>
+                    )) : <p className="text-xs text-slate-500">No order cards detected.</p>}
+                  </div>
+                </div>
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Conversation history ({zendeskComments.length})</p>
+                  <div className="mt-2 max-h-80 space-y-2 overflow-y-auto pr-1">
+                    {zendeskComments.length ? zendeskComments.map(comment => {
+                      const fromCustomer = String(comment.author_id || "") === String(zendeskCase.requester_id || "");
+                      return (
+                        <div key={comment.id || comment.zendesk_comment_id} className={`rounded-xl border px-3 py-2 shadow-sm ${comment.is_public === false ? "mx-auto max-w-[92%] border-slate-200 bg-slate-100" : fromCustomer ? "mr-auto max-w-[88%] border-slate-200 bg-white" : "ml-auto max-w-[88%] border-blue-200 bg-blue-50"}`}>
+                          <div className="flex items-center justify-between gap-2 text-[10px] font-semibold">
+                            <span className={`inline-flex items-center gap-1.5 ${comment.is_public === false ? "text-slate-500" : fromCustomer ? "text-slate-700" : "text-blue-700"}`}>
+                              <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${comment.is_public === false ? "bg-slate-300 text-slate-700" : fromCustomer ? "bg-slate-800 text-white" : "bg-blue-700 text-white"}`}>
+                                {comment.is_public === false ? "SYS" : fromCustomer ? String(zendeskCase.customer_name || displayCustomer || "C").trim().charAt(0).toUpperCase() : "JV"}
+                              </span>
+                              {comment.is_public === false ? "System / internal activity" : fromCustomer ? "Customer" : "Support · Jonny"}
+                            </span>
+                            <span className="text-slate-400">{comment.zendesk_created_at ? new Date(comment.zendesk_created_at).toLocaleString() : ""}</span>
+                          </div>
+                          <div className="mt-1 text-xs leading-relaxed text-slate-700">{renderZendeskCommentBody(comment.body)}</div>
+                          {Array.isArray(comment.attachment_urls) && comment.attachment_urls.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {comment.attachment_urls.map((url, attachmentIndex) => {
+                                const cleanUrl = String(url || "");
+                                const isImage = /\.(png|jpe?g|gif|webp|bmp)(?:\?|$)/i.test(cleanUrl) || cleanUrl.includes("/attachments/") || cleanUrl.includes("zendesk");
+                                return isImage ? (
+                                  <button
+                                    key={`${comment.id || comment.zendesk_comment_id}-${attachmentIndex}`}
+                                    type="button"
+                                    data-no-card-toggle
+                                    onClick={() => setAttachmentLightbox({ url: cleanUrl, title: `Customer attachment ${attachmentIndex + 1}` })}
+                                    className="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm hover:border-blue-400"
+                                  >
+                                    <img src={cleanUrl} alt={`Attachment ${attachmentIndex + 1}`} className="h-24 w-24 object-cover transition-transform group-hover:scale-105" loading="lazy" />
+                                  </button>
+                                ) : (
+                                  <a key={`${comment.id || comment.zendesk_comment_id}-${attachmentIndex}`} data-no-card-toggle href={cleanUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-blue-700 hover:bg-blue-50">Open attachment {attachmentIndex + 1}</a>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }) : <p className="text-xs text-slate-500">No conversation comments mirrored yet.</p>}
+                  </div>
+                </div>
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Public customer reply</p>
+                  <p className="mt-1 text-[11px] font-medium text-blue-700">The customer will receive this message through Zendesk.</p>
+                  <textarea
+                    rows="4"
+                    maxLength="64000"
+                    value={zendeskReplyText[msg.id] || ""}
+                    onChange={event => setZendeskReplyText(prev => ({ ...prev, [msg.id]: event.target.value }))}
+                    placeholder="Write the customer-visible reply..."
+                    className="mt-2 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-400">{String(zendeskReplyText[msg.id] || "").length}/64000 · Public/customer-visible</span>
+                    <button type="button" disabled={zendeskReplyBusyId === msg.id || !String(zendeskReplyText[msg.id] || "").trim()} onClick={() => handleZendeskPublicReply(msg)} className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50">{zendeskReplyBusyId === msg.id ? "Sending..." : "Send Public Reply"}</button>
+                  </div>
+                  {zendeskReplyNotice[msg.id] && <p className="mt-2 text-xs font-semibold text-slate-600">{zendeskReplyNotice[msg.id]}</p>}
+                </div>
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-violet-700">AI Assist / Draft Studio</p>
+                      <p className="mt-1 text-[11px] text-slate-500">Reviews the full case and prepares an editable customer reply. Nothing is sent automatically.</p>
+                    </div>
+                    <button
+                      type="button"
+                      data-no-card-toggle
+                      disabled={isAssistantLoading}
+                      onClick={() => handleAskAssistant(msg)}
+                      className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                    >
+                      {isAssistantLoading ? "Reviewing case..." : assistantAnalysis ? "Refresh AI Draft" : "Generate AI Draft"}
+                    </button>
+                  </div>
+                  {assistantAnalysis ? (
+                    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                      <div>
+                        <textarea
+                          rows="6"
+                          maxLength="64000"
+                          value={zendeskReplyText[msg.id] || assistantAnalysis.draftReply || ""}
+                          onChange={event => setZendeskReplyText(prev => ({ ...prev, [msg.id]: event.target.value }))}
+                          className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+                        />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" data-no-card-toggle onClick={() => setZendeskReplyText(prev => ({ ...prev, [msg.id]: assistantAnalysis.draftReply || "" }))} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">Use AI Draft</button>
+                          <button type="button" data-no-card-toggle onClick={() => navigator.clipboard.writeText(String(zendeskReplyText[msg.id] || assistantAnalysis.draftReply || ""))} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">Copy Draft</button>
+                          <button type="button" data-no-card-toggle disabled={!String(zendeskReplyText[msg.id] || assistantAnalysis.draftReply || "").trim() || zendeskReplyBusyId === msg.id} onClick={() => {
+                            const selectedDraft = String(zendeskReplyText[msg.id] || assistantAnalysis.draftReply || "");
+                            setZendeskReplyText(prev => ({ ...prev, [msg.id]: selectedDraft }));
+                            window.setTimeout(() => handleZendeskPublicReply({ ...msg }), 0);
+                          }} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-800 disabled:opacity-50">Send Public Reply</button>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
+                        <p className="font-bold uppercase tracking-wide text-slate-400">Approval-ready triage</p>
+                        <p className="mt-2"><b>Suggested issue:</b> {assistantAnalysis.suggestedIssueType}</p>
+                        <p className="mt-1 leading-relaxed"><b>Why:</b> {assistantAnalysis.classificationReason}</p>
+                        <p className="mt-1 leading-relaxed"><b>Next:</b> {assistantAnalysis.recommendedAction}</p>
+                        <p className="mt-1"><b>Confidence:</b> {assistantAnalysis.confidence}</p>
+                        {assistantAnalysis.missingEvidence?.length > 0 && <p className="mt-1 leading-relaxed"><b>Still needed:</b> {assistantAnalysis.missingEvidence.join(", ")}</p>}
+                        <button type="button" data-no-card-toggle disabled={workflowBusyId === msg.id || assistantAnalysis.suggestedIssueType === selectedIssueType} onClick={() => handleClassifyCase(msg, assistantAnalysis.suggestedIssueType)} className="mt-3 w-full rounded-lg bg-violet-700 px-3 py-2 text-[11px] font-bold text-white hover:bg-violet-800 disabled:opacity-50">{assistantAnalysis.suggestedIssueType === selectedIssueType ? "Classification Already Applied" : "Approve Classification"}</button>
+                        <p className="mt-2 text-[10px] text-slate-400">Nothing is applied or sent until you approve it.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-dashed border-violet-200 bg-violet-50/40 px-3 py-4 text-center text-xs text-violet-700">Generate a draft to replace the screenshot-and-paste workflow.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* History note */}
             {hasHistory && (
               <p className="text-[10px] text-gray-400 italic mb-2">Conversation history saved in raw email.</p>
             )}
 
-            {/* â”€â”€ Triage fields â”€â”€ */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ Triage fields Ã¢â€â‚¬Ã¢â€â‚¬ */}
             {(msg.issue_type || msg.customer_intent || msg.risk_level || msg.triage_summary || msg.next_action || msg.recommended_reply_type || msg.confidence_score != null) && (
               <div className="border border-gray-100 rounded-lg bg-gray-50 px-3 py-2.5 mb-3 space-y-1.5">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Triage</p>
@@ -5459,8 +7159,8 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
               </div>
             )}
 
-            {/* â”€â”€ AI Draft box â”€â”€ */}
-            {isAssistantOpen && (
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ AI Draft box Ã¢â€â‚¬Ã¢â€â‚¬ */}
+            {isAssistantOpen && !isZendesk && (
               <div className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -5631,26 +7331,17 @@ const CommandInboxView = ({ inboundMessages, setInboundMessages, inboundLoading,
                   Open in Zendesk
                 </button>
               )}
-              <button
-                type="button"
-                disabled={!displayBody}
-                onClick={() => setExpandedMessages(prev => ({ ...prev, [msg.id]: true }))}
-                aria-expanded={isMessageExpanded}
-                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors whitespace-nowrap"
-              >
-                View Message
-              </button>
               <button disabled={isBusy || isAssistantLoading} onClick={() => handleAskAssistant(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
-                {isAssistantLoading ? "Reviewing..." : isAssistantOpen ? "Hide Assistant" : "Ask Assistant"}
+                {isAssistantLoading ? "Reviewing..." : isAssistantOpen ? "Hide AI Assist" : "AI Assist"}
               </button>
               <button disabled={isBusy} onClick={() => handleSendToReplacementLog(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap">
                 {isBusy ? "Sending..." : replacementButtonLabel}
               </button>
-              <button disabled={isBusy} onClick={() => handleCloseAndArchive(msg.id)}
+              <button disabled={isBusy} onClick={() => handleVerifiedClose(msg)}
                 className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 disabled:opacity-50 cursor-pointer transition-colors whitespace-nowrap sm:ml-auto">
-                {isBusy ? "Closing..." : "Mark Closed + Archive"}
+                {isBusy ? "Closing..." : "Verified Close"}
               </button>
             </div>
           </Card>
@@ -5722,10 +7413,10 @@ const buildFullReport = ({ tickets, replacements, studios, surpriseSets, raiseSc
   return `JONNY OPS - WEEKLY RAISE TRACKER REPORT
 Week of ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
 Prepared by: Jonny Valencia
-${"â”€".repeat(52)}
+${"Ã¢â€â‚¬".repeat(52)}
 
 TIKTOK SPS / CUSTOMER SUPPORT
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 Reviewed ${safeTickets.length} support tickets across all four brands this week.
 
 By brand:
@@ -5739,7 +7430,7 @@ Summary:
   SLA risks (active, < 2h): ${safeTickets.filter(t => isActiveSlaRisk(t)).length}
 
 INVENTORY & STUDIO READINESS
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 ${safeStudios.map(s => `  ${s.id}: ${s.streamReady ? "Stream-ready" : "NOT READY"} - ${s.notes}`).join("\n")}
 
   Overall readiness:     ${studioScore}%
@@ -5747,7 +7438,7 @@ ${safeStudios.map(s => `  ${s.id}: ${s.streamReady ? "Stream-ready" : "NOT READY
   Studios counted:       ${safeStudios.filter(s => s.countCompleted).length}/${safeStudios.length}
 
 SHIPPING LOSS PREVENTION
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   Replacement cases logged:   ${safeReplacements.length}
   Estimated loss tracked:     $${totalLoss.toFixed(2)}
   Preventable cases:          ${preventable.length}${preventable.length > 0 ? ` (${preventable.map(r => r.orderNum).join(", ")})` : ""}
@@ -5755,13 +7446,13 @@ SHIPPING LOSS PREVENTION
 ${topCauses.length > 0 ? `\n  Top root causes:\n${topCauses.map(([c, n]) => `  - ${c}: ${n} case${n > 1 ? "s" : ""}`).join("\n")}` : ""}
 
 SURPRISE SET EXECUTION
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   Sets tracked:       ${safeSurpriseSets.length}
   Ready for live:     ${setsReady.length}
 ${safeSurpriseSets.map(s => `  - ${s.setName} (${s.brand}) - ${s.readyForLive ? "Ready" : "Not ready"}`).join("\n")}
 
 RAISE PATH - SELF ASSESSMENT
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   Consistency:          ${raiseScores.consistency}%
   Accuracy:             ${raiseScores.accuracy}%
   Loss Reduction:       ${raiseScores.lossReduction}%
@@ -5769,23 +7460,23 @@ RAISE PATH - SELF ASSESSMENT
   Process Improvement:  ${raiseScores.processImprovement}%
 
 PROCESS IMPROVEMENTS
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 ${improvements || "  No process improvements noted this week."}
 
 RISKS / BLOCKERS
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 ${risks || "  No active risks or blockers noted."}
 
 NEXT WEEK FOCUS
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 ${nextFocus || "  No focus areas set for next week."}
 
-${"â”€".repeat(52)}
+${"Ã¢â€â‚¬".repeat(52)}
 Generated by Jonny Ops Command Center v1.1
 ${new Date().toLocaleString()}`.trim();
 };
 
-// â”€â”€â”€ DAILY OPS BRIEF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DAILY OPS BRIEF Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Pure computation - reads already-fetched state, no new Supabase calls.
 
 const buildBriefSummary = ({ msgsNeedingReply, draftsReady, overdueActions, highActions, dueTodayActions, waitingActions }) => {
@@ -5831,7 +7522,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   const isTicketNew = (t) => t.status === "New" || t.status === "In Progress";
   const createdToday = (iso) => { const d = new Date(iso); return d >= todayStart && d <= todayEnd; };
 
-  // â”€â”€ Metric counts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Metric counts Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const msgsNeedingReply  = safeInboundMessages.filter(m => m.status === "Needs Reply" || !m.status).length;
   const draftsReady       = safeInboundMessages.filter(m => m.draft_status === "Draft Ready").length;
   const openActions       = safeOpsActions.length;
@@ -5841,7 +7532,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   const waitingActions    = safeOpsActions.filter(a => a.status === "Waiting on Customer").length;
   const ticketsToday      = safeTickets.filter(t => t.createdAt && createdToday(t.createdAt)).length;
 
-  // â”€â”€ Build Start Here list (max 5, priority-ordered) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Build Start Here list (max 5, priority-ordered) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const startHere = [];
 
   // 1. Overdue ops_actions
@@ -6033,7 +7724,7 @@ const DailyOpsBrief = ({ inboundMessages, opsActions, tickets, setActiveView }) 
   );
 };
 
-// â”€â”€â”€ NOTIFICATION DROPDOWN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ NOTIFICATION DROPDOWN Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const SystemStatusPanel = ({ inboundMessages, inboundLoading, inboundError, lastSyncAt }) => {
   const [open, setOpen] = useState(false);
   const safeInboundMessages = Array.isArray(inboundMessages) ? inboundMessages : [];
@@ -6176,7 +7867,7 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
           <div className="absolute right-0 top-8 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
               <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Notifications</p>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">Ã—</button>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">Ãƒ—</button>
             </div>
             {recentActivity.length === 0 && items.length === 0 ? (
               <div className="px-4 py-6 text-center">
@@ -6228,7 +7919,7 @@ const NotificationDropdown = ({ inboundMessages, opsActions, replacements, setAc
   );
 };
 
-// â”€â”€â”€ DASHBOARD VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DASHBOARD VIEW Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const CLOSED_INBOUND_STATUSES = ["Closed", "Archived", "Resolved"];
 const OPEN_INBOUND_STATUSES = ["Needs Reply", "In Progress", "Draft Ready", "Ticket Created", "Manual Review", ""];
 const getMessageSortTimestamp = (message) =>
@@ -6641,7 +8332,7 @@ const DashboardView = ({ tickets, setTickets, replacements, studios, surpriseSet
   );
 };
 
-// â”€â”€â”€ DAILY COMMAND BOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DAILY COMMAND BOARD Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const DailyCommandView = ({ tickets }) => {
   const [startC, setStartC] = useState(SHIFT_START.map(() => false));
   const [endC, setEndC] = useState(SHIFT_END.map(() => false));
@@ -6667,7 +8358,7 @@ const DailyCommandView = ({ tickets }) => {
 
   return (
     <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold text-gray-900">Daily Command Board</h2><p className="text-xs text-gray-400 mt-0.5">{todayStr()} Â· {nowStr()}</p></div>
+      <div><h2 className="text-2xl font-bold text-gray-900">Daily Command Board</h2><p className="text-xs text-gray-400 mt-0.5">{todayStr()} Ã‚· {nowStr()}</p></div>
       {crit.length > 0 && (
         <div className="bg-red-600 rounded-lg px-5 py-3">
           <p className="text-white text-xs font-bold uppercase tracking-widest mb-1">Critical SLA Alert Zone - Action Required Now</p>
@@ -6698,7 +8389,7 @@ const DailyCommandView = ({ tickets }) => {
   );
 };
 
-// â”€â”€â”€ TICKET QUEUE (KANBAN) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ TICKET QUEUE (KANBAN) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const TicketQueueView = ({ tickets, setTickets }) => {
   const emptyF = { brand: "", channel: "", issueType: "", priority: "Medium", slaRisk: "No", status: "New", notes: "", nextAction: "" };
   const [form, setForm] = useState(emptyF);
@@ -6724,7 +8415,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   };
   const filtered = tickets.filter(t => (!filter.brand || t.brand === filter.brand) && (!filter.status || t.status === filter.status) && (!filter.priority || t.priority === filter.priority));
 
-  // â”€â”€ PATCH 4b: TCard gets archive button in top-right corner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ PATCH 4b: TCard gets archive button in top-right corner Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const TCard = ({ ticket: t }) => {
     const cd = slaDisplay(t.createdAt);
     const showSla = t.slaRisk === "Yes" && t.status !== "Resolved";
@@ -6740,7 +8431,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
           <ArchiveBtn ticketId={t.id} setTickets={setTickets} />
         </div>
         <p className="text-xs font-semibold text-gray-900 mb-1">{t.issueType}</p>
-        <p className="text-[10px] text-gray-400 mb-1">{t.channel} Â· {fmtDate(t.createdAt)}</p>
+        <p className="text-[10px] text-gray-400 mb-1">{t.channel} Ã‚· {fmtDate(t.createdAt)}</p>
         {showSla && <p className={`text-[10px] font-mono font-bold mb-1 ${cd.urgent ? "text-red-600" : cd.warning ? "text-amber-500" : "text-gray-500"}`}>SLA: {cd.display} remaining</p>}
         {t.notes && <p className="text-[10px] text-gray-500 mb-2 line-clamp-2">{t.notes}</p>}
         {t.nextAction && <p className="text-[10px] text-slate-600">{t.nextAction}</p>}
@@ -6792,7 +8483,7 @@ const TicketQueueView = ({ tickets, setTickets }) => {
   );
 };
 
-// â”€â”€â”€ BROWSER PROFILE MAP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ BROWSER PROFILE MAP Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const BrowserProfileView = () => {
   const profiles = [
     { brand: "Vaulted Rarities", tools: ["TikTok Seller Center", "TikTok Shop Chat", "TikTok DMs", "Instagram DMs", "Outlook Email", "TikTok Streamer Desktop"] },
@@ -6824,7 +8515,7 @@ const BrowserProfileView = () => {
   );
 };
 
-// â”€â”€â”€ CS TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CS TEMPLATES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const CSTemplateView = ({ setTickets }) => {
   const [brand, setBrand] = useState("");
   const [issue, setIssue] = useState("");
@@ -6934,7 +8625,7 @@ const CSTemplateView = ({ setTickets }) => {
   );
 };
 
-// â”€â”€â”€ REPLACEMENT LOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ REPLACEMENT LOG Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const REPLACEMENT_STATUS_OPTIONS = ["Open", "Reshipped", "Refunded", "Resolved", "Pending"];
 const REPLACEMENT_FILTERS = ["Active", "All", "Archived", "CardKing47", "Vaulted Rarities", "PokeSpins", "Pokiemart", "Follow-Up Needed"];
 const DANTE_DEPT_FAULT_OPTIONS = ["James", "JB", "Jojo", "Gio", "Gurt", "Bernardo", "Sarah", "Streamer"];
@@ -7056,7 +8747,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     return () => clearTimeout(timer);
   }, [replacementFocus, safeReplacements.length]);
 
-  // â”€â”€ Add new row (local-only until Supabase migration of replacements table) â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Add new row (local-only until Supabase migration of replacements table) Ã¢â€â‚¬Ã¢â€â‚¬
   const add = () => {
     if (!form.brand || !form.orderNum) return;
     setReplacements(p => [{
@@ -7066,7 +8757,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     setForm(emptyF); setShow(false);
   };
 
-  // â”€â”€ Archive row (soft-delete via Supabase, fall back to local remove) â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Archive row (soft-delete via Supabase, fall back to local remove) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const runArchiveReplacement = async (row) => {
     if (supabase && row.id && !/^[a-z0-9]{7}$/.test(row.id)) {
       // Only call Supabase for UUID-format ids (real rows); skip local uid() rows
@@ -7090,7 +8781,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     });
   };
 
-  // â”€â”€ Save inline edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Save inline edit Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const handleSaveEdit = async () => {
     const updated = {
       ...editForm,
@@ -7123,7 +8814,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
     setSavingId(null);
   };
 
-  // â”€â”€ Filter + derived stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Filter + derived stats Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const displayRows = safeReplacements.filter(r => {
     if (activeFilter === "All")              return true;
     if (activeFilter === "Active")           return !r.archived_at;
@@ -7287,7 +8978,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                     className={`border-b border-gray-50 ${isFocused ? "bg-slate-100 ring-1 ring-inset ring-slate-300" : isEditing ? "bg-slate-50" : isArchived ? "bg-gray-50 text-gray-500" : "hover:bg-gray-50"}`}
                   >
                     {isEditing ? (
-                      /* â”€â”€ Inline edit row â”€â”€ */
+                      /* Ã¢â€â‚¬Ã¢â€â‚¬ Inline edit row Ã¢â€â‚¬Ã¢â€â‚¬ */
                       <>
                         <td className="px-3 py-2"><Inp type="date" value={editForm.date || ""} onChange={ef("date")} className="w-32" /></td>
                         <td className="px-3 py-2"><Inp value={editForm.orderNum || editForm.order_number || ""} onChange={ef("orderNum")} placeholder="Order #" className="w-24" /></td>
@@ -7317,7 +9008,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
                         </td>
                       </>
                     ) : (
-                      /* â”€â”€ Read row â”€â”€ */
+                      /* Ã¢â€â‚¬Ã¢â€â‚¬ Read row Ã¢â€â‚¬Ã¢â€â‚¬ */
                       <>
                         <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{dante.date || "-"}</td>
                         <td className="px-3 py-2.5 font-mono text-gray-800 whitespace-nowrap">{dante.order || "-"}</td>
@@ -7376,7 +9067,7 @@ const ReplacementLogView = ({ replacements, setReplacements, replacementsLoading
   );
 };
 
-// â”€â”€â”€ STUDIO READINESS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ STUDIO READINESS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const LegacyStudioReadinessView = ({ studios, setStudios }) => {
   const safeStudios = Array.isArray(studios) ? studios : [];
   const upd = (id, field, val) => setStudios(p => p.map(s => s.id === id ? { ...s, [field]: val } : s));
@@ -7384,7 +9075,7 @@ const LegacyStudioReadinessView = ({ studios, setStudios }) => {
   const overall = safeStudios.length ? Math.round(safeStudios.reduce((a, s) => a + score(s), 0) / safeStudios.length) : 0;
   return (
     <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness Â· <span className="font-medium text-gray-500">{getWeekOfLabel()}</span></p></div>
+      <div><h2 className="text-2xl font-bold text-gray-900">Inventory &amp; Studio Readiness</h2><p className="text-xs text-gray-400 mt-0.5">Track station counts, stock levels, and stream readiness Ã‚· <span className="font-medium text-gray-500">{getWeekOfLabel()}</span></p></div>
       <Card className="p-4 flex items-center gap-6">
         <div className="text-center"><p className="text-xs text-gray-400 mb-1">Overall Readiness</p><p className="text-5xl font-bold text-gray-900">{overall}%</p></div>
         <div className="flex-1"><ProgressBar pct={overall} color="bg-slate-500" /><p className="text-xs text-gray-400 mt-1.5">{safeStudios.filter(s => s.streamReady).length}/{safeStudios.length} stations stream-ready</p></div>
@@ -7430,7 +9121,7 @@ const LegacyStudioReadinessView = ({ studios, setStudios }) => {
   );
 };
 
-// â”€â”€â”€ SURPRISE SET TRACKER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SURPRISE SET TRACKER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const INVENTORY_CONTROL_SAMPLE_ROWS = [
   { id: "inv-vr-lorwyn-play", studio: "VR", zone: "Row 3C", internalName: "Lorwyn Play", shopifyTitle: "Lorwyn Eclipsed Play Booster Pack", sku: "VR-LORWYN-PLAY", countUnit: "Pack", conversion: "1 pack = 1 unit", shopifyQty: 42, physicalQty: "", notes: "" },
   { id: "inv-ps-chaos-etb", studio: "PS", zone: "PS3A", internalName: "Chaos Rising ETB", shopifyTitle: "Chaos Rising Elite Trainer Box", sku: "PS-CHAOS-ETB", countUnit: "Box", conversion: "1 box = 1 unit", shopifyQty: 18, physicalQty: "", notes: "" },
@@ -8180,8 +9871,8 @@ const LegacySurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   );
 };
 
-// â”€â”€â”€ WEEKLY RAISE TRACKER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// â”€â”€â”€ OPERATIONS IMPACT REPORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ WEEKLY RAISE TRACKER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ OPERATIONS IMPACT REPORT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 // Week range helpers
 const getWeekRange = () => {
@@ -8222,6 +9913,13 @@ const OpsImpactMetricCard = ({ label, value, accent = false, sub }) => (
 const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const [selectedDay, setSelectedDay] = useState(getDefaultSurpriseSetBoardDay());
   const [focusChannel, setFocusChannel] = useState("All");
+  // SetSheet UX simplification: top-level date view. "Today" is the
+  // default per the approved plan. This is separate from `selectedDay`
+  // (a weekday name used only by the existing weekly board, unchanged
+  // below) — dateFilter drives exact-date filtering via entry.streamDate.
+  const [dateFilter, setDateFilter] = useState("Today");
+  const [pickedDate, setPickedDate] = useState(() => getLocalISODate());
+  const [advancedImportOpen, setAdvancedImportOpen] = useState(false);
   const [boardEntries, setBoardEntries] = useState(() => loadSurpriseSetBoardEntries());
   const [builderForm, setBuilderForm] = useState(null);
   const [converterError, setConverterError] = useState("");
@@ -8237,6 +9935,18 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const [autopilotLoading, setAutopilotLoading] = useState(false);
   const [autopilotError, setAutopilotError] = useState("");
   const [autopilotPreviewRows, setAutopilotPreviewRows] = useState([]);
+  // PokeSpins auto-detect: deliberately isolated from the manual Import
+  // From Sheets state above (autopilotPreviewRows/autopilotSummary/
+  // agentActivity) so this background effect can never overwrite or
+  // interfere with whatever the operator is doing manually elsewhere on
+  // this screen.
+  // Phase A: keyed by buildDetectedSetsCacheKey(brandCode, dateISO) ->
+  // entry shape per EMPTY_DETECTED_SET_ENTRY above. Replaces the prior
+  // single-slot pokeSpinsDetected state so more than one date's result
+  // can be held at once (needed for later phases' Tomorrow-preload and
+  // instant date-switching). Only "PS" keys are ever populated in this
+  // phase.
+  const [detectedSetsCache, setDetectedSetsCache] = useState({});
 
   useEffect(() => {
     setSurpriseSets(prev => normalizeWeeklySurpriseSets(prev));
@@ -8250,6 +9960,259 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     try { localStorage.setItem(SURPRISE_SET_BOARD_STORAGE_KEY, JSON.stringify(boardEntries)); } catch {}
   }, [boardEntries]);
 
+  // SetSheet UX simplification: resolve the compact-row target date for
+  // Today/Tomorrow/Pick Date. "This Week" doesn't use this for row
+  // filtering (targetDateRows returns [] for it below), but the auto-
+  // detect effect immediately after still needs targetDateISO defined so
+  // it can skip fetching in that case.
+  const todayISO = getLocalISODate();
+  const targetDateISO = dateFilter === "Tomorrow" ? addDaysISO(todayISO, 1)
+    : dateFilter === "Pick Date" ? (pickedDate || todayISO)
+    : todayISO; // "Today" and "This Week" both resolve to today; This Week's fetch is skipped separately
+
+  // SetSheet background architecture, Phase B: shared detection function.
+  // Extracted from the Phase A effect body so both the "selected date"
+  // effect (below) and the new preload effect (further below) call the
+  // exact same fetch->parse->group->merge pipeline — one implementation,
+  // not two. Uses functional state updates for boardEntries/
+  // convertedEntries (reading `prev` at write time, never a snapshot
+  // captured before the async fetch) so that Today's and Tomorrow's
+  // concurrent preload fetches can never overwrite each other's merged
+  // board entries, regardless of which one resolves first. Preserves the
+  // existing mergeImportedSetIntoBoard dedup/match-key semantics exactly
+  // — this does not redesign the board model, it only changes how the
+  // result of that existing merge gets written into state.
+  //
+  // autoOpenBuilder: only true for the currently-viewed date's effect —
+  // a silent background preload of a date the operator isn't looking at
+  // should never pop the Set Builder open out from under them.
+  // isStale: () => boolean, provided by the caller (each effect has its
+  // own `cancelled` flag) so an abandoned/unmounted fetch's result never
+  // gets written after the fact.
+  // TEMPORARY DIAGNOSTIC ONLY — added to trace the Phase B preload/detect
+  // runtime path end-to-end, per explicit request. Does not change any
+  // behavior/logic. Remove after diagnosis. Filter devtools console on
+  // "[PS-DIAG]" to isolate this output.
+  const psDiag = (...args) => console.log("[PS-DIAG]", ...args);
+
+  const detectPokeSpinsForDate = async (forDateISO, { autoOpenBuilder, isStale }) => {
+    const cacheKey = buildDetectedSetsCacheKey("PS", forDateISO);
+    psDiag("detectPokeSpinsForDate: cache key created", { forDateISO, cacheKey, autoOpenBuilder }); // #3
+    try {
+      psDiag("fetchAutopilotSheetsImport: starting", { channels: ["PS"], dates: [forDateISO] }); // #4
+      const data = await fetchAutopilotSheetsImport(["PS"], [forDateISO]);
+      psDiag("fetchAutopilotSheetsImport: RESOLVED", { forDateISO, dataOk: data?.ok, dataSource: data?.source, importedAt: data?.importedAt }); // #5 (resolve)
+      // Top-level shape/counts of the returned payload, per-channel tab counts.
+      const rawChannelMap = data?.data?.channels || data?.channels || {};
+      const rawShapeSummary = Object.fromEntries(
+        Object.entries(rawChannelMap).map(([channel, channelData]) => [
+          channel,
+          { tabCount: Array.isArray(channelData?.tabs) ? channelData.tabs.length : 0, tabNames: Array.isArray(channelData?.tabs) ? channelData.tabs.map(t => t?.tabName) : [] },
+        ])
+      );
+      psDiag("raw payload shape/counts", { forDateISO, rawShapeSummary }); // #6
+      // buildAutopilotPreviewRowsFromSheetsImport already applies
+      // selectedDates filtering internally (see its use of `selectedDates`
+      // against each row's own parsed streamDate) — passing [forDateISO]
+      // here enforces client-side date validation regardless of whether
+      // the Apps Script's `dates` parameter also filters server-side.
+      const { previewRows } = buildAutopilotPreviewRowsFromSheetsImport(data, [forDateISO]);
+      psDiag("previewRows produced", { forDateISO, count: previewRows.length, rows: previewRows.map(r => ({ channel: r.channel, streamDate: r.streamDate, shift: r.shift, sheetTab: r.sheetTab, warnings: r.warnings })) }); // #7
+      if (isStale()) { psDiag("STALE after previewRows — aborting before any state write", { forDateISO }); return; }
+      const psRows = previewRows.filter(row => row.channel === "PS" && row.streamDate === forDateISO);
+      psDiag("psRows survive channel+date filter", { forDateISO, count: psRows.length, sheetTabs: psRows.map(r => r.sheetTab) }); // #8
+      if (!psRows.length) {
+        psDiag("no PS rows for this date -> writing status:none", { forDateISO, cacheKey });
+        setDetectedSetsCache(prev => {
+          const nextEntry = mergeDetectedSetResult(prev[cacheKey], { ok: true, status: "none", shifts: [], date: forDateISO, brandCode: "PS" });
+          psDiag("cache write (none)", { cacheKey, prevEntry: prev[cacheKey], nextEntry }); // #10
+          return { ...prev, [cacheKey]: nextEntry };
+        });
+        return;
+      }
+      // Group by shift; when a built and an unbuilt tab both exist for
+      // the same shift, prefer the built one. Unchanged from Phase A.
+      const byShift = new Map();
+      psRows.forEach(row => {
+        const shiftKey = row.shift === "pm" ? "pm" : row.shift === "am" ? "am" : "unknown";
+        const isBuilt = /\bBUILT\b/i.test(row.sheetTab || "");
+        const current = byShift.get(shiftKey);
+        if (!current || (isBuilt && !current.isBuilt)) byShift.set(shiftKey, { row, isBuilt });
+      });
+      psDiag("grouped by shift", { forDateISO, groups: Array.from(byShift.entries()).map(([shiftKey, { row, isBuilt }]) => ({ shiftKey, isBuilt, sheetTab: row.sheetTab })) }); // #9
+
+      const shiftsResult = [];
+      const readyImportedSets = [];
+
+      byShift.forEach(({ row, isBuilt }, shiftKey) => {
+        if (!isBuilt) {
+          shiftsResult.push({ shift: shiftKey, ready: false, reason: "not_built", streamDate: row.streamDate, sheetTab: row.sheetTab });
+          return;
+        }
+        if (hasAutopilotCriticalWarnings(row.warnings)) {
+          shiftsResult.push({ shift: shiftKey, ready: false, reason: "parse_failed", streamDate: row.streamDate, sheetTab: row.sheetTab, warnings: row.warnings });
+          return;
+        }
+        // Identical shape to handleConfirmAutopilotImport's importedSet
+        // construction, applied to this one auto-detected row.
+        readyImportedSets.push({
+          brand: row.brand,
+          brandCode: getSurpriseSetBrandCode(row.brand),
+          day: row.day,
+          shift: row.shift === "pm" ? "pm" : "am",
+          streamer: row.streamer,
+          streamDate: row.streamDate,
+          setNumber: row.setNumber,
+          surpriseSetName: row.surpriseSetName,
+          startingBid: row.startingBid,
+          hardFloor: row.hardFloor,
+          stretch: row.stretch,
+          input: row.productLines.join("\n"),
+          productLines: row.productLines,
+          sourceProductUnits: row.sourceProductUnits,
+          warnings: row.warnings,
+          needsReview: false,
+          sheetTab: row.sheetTab,
+          columnGroup: row.columnGroup,
+        });
+        shiftsResult.push({ shift: shiftKey, ready: true, streamDate: row.streamDate, sheetTab: row.sheetTab });
+      });
+
+      psDiag("shift processing complete", { forDateISO, shiftsResult, readyCount: readyImportedSets.length }); // part of #9/#11
+
+      if (readyImportedSets.length && !isStale()) {
+        // Single functional update covering every ready shift for THIS
+        // date: `prev` is read fresh at write time, not a snapshot taken
+        // before the fetch, so a concurrent write from the other
+        // preloaded date can never be clobbered. mergeImportedSetIntoBoard
+        // itself is completely unchanged — same dedup/match-key logic as
+        // before.
+        const newlyConverted = [];
+        setBoardEntries(prev => {
+          let working = prev;
+          newlyConverted.length = 0;
+          readyImportedSets.forEach(importedSet => {
+            const merge = mergeImportedSetIntoBoard(working, importedSet);
+            working = merge.boardEntries;
+            psDiag("setBoardEntries merge step", { forDateISO, shift: importedSet.shift, cardStatus: merge.card.status, rowsCount: merge.card.rows?.length || 0, updated: merge.updated }); // #11
+            if (merge.card.status === "Converted" && merge.card.rows.length) {
+              newlyConverted.push(merge.card);
+            }
+          });
+          return working;
+        });
+        psDiag("newlyConverted after board merge", { forDateISO, count: newlyConverted.length, ids: newlyConverted.map(c => c.id) }); // #11
+        if (newlyConverted.length) {
+          setConvertedEntries(prev => {
+            const safePrev = Array.isArray(prev) ? prev : [];
+            const entries = newlyConverted.map(card => {
+              const templateConfig = getSetSheetTemplateConfig(card.brand);
+              return {
+                id: card.id,
+                createdAt: card.convertedAt,
+                brand: card.brand,
+                warehouse: templateConfig.usesWarehouse ? SETSHEET_WAREHOUSES[0] : "",
+                day: card.day,
+                shift: card.shift,
+                streamer: card.streamer,
+                streamDate: card.streamDate,
+                setNumber: card.setNumber,
+                surpriseSetName: card.surpriseSetName,
+                startingBid: card.startingBid,
+                fileName: card.fileName,
+                input: card.input,
+                templatePath: templateConfig.path,
+                usesWarehouse: templateConfig.usesWarehouse,
+                rows: card.rows,
+                summary: card.summary,
+                sourceProductUnits: card.sourceProductUnits,
+              };
+            });
+            const newIds = new Set(entries.map(entry => entry.id));
+            return [...entries, ...safePrev.filter(entry => !newIds.has(entry.id))].slice(0, 20);
+          });
+          if (autoOpenBuilder) {
+            const firstReadyCard = newlyConverted[0];
+            setSelectedDay(firstReadyCard.day);
+            setBuilderForm(firstReadyCard);
+          }
+        }
+      } else {
+        psDiag("no ready shifts reached setBoardEntries (either zero built+valid shifts, or isStale() was true)", { forDateISO, readyCount: readyImportedSets.length, wasStale: isStale() }); // #11
+      }
+
+      if (!isStale()) {
+        setDetectedSetsCache(prev => {
+          const nextEntry = mergeDetectedSetResult(prev[cacheKey], { ok: true, status: "ready", shifts: shiftsResult, date: forDateISO, brandCode: "PS" });
+          psDiag("cache write (ready)", { cacheKey, prevEntry: prev[cacheKey], nextEntry }); // #10
+          return { ...prev, [cacheKey]: nextEntry };
+        });
+      }
+    } catch (err) {
+      psDiag("fetchAutopilotSheetsImport or downstream: REJECTED/THREW", { forDateISO, errorMessage: String(err?.message || err), errorStack: err?.stack }); // #5 (reject)
+      if (!isStale()) {
+        setDetectedSetsCache(prev => {
+          const nextEntry = mergeDetectedSetResult(prev[cacheKey], { ok: false, error: String(err?.message || err), date: forDateISO, brandCode: "PS" });
+          psDiag("cache write (error)", { cacheKey, prevEntry: prev[cacheKey], nextEntry }); // #10
+          return { ...prev, [cacheKey]: nextEntry };
+        });
+      }
+    }
+  };
+
+  // Selected-date effect (Phase A, refactored in Phase B to call the
+  // shared function above). Re-runs whenever the selected date
+  // (targetDateISO) changes — Today, Tomorrow, and Pick Date all
+  // fetch/detect their own date. Skipped entirely for "This Week" (no
+  // single target date, and the existing weekly board doesn't need this
+  // fetch at all). autoOpenBuilder:true — this is the date the operator
+  // is actively viewing, so a newly-ready set should open in the builder
+  // for review, same as Phase A's behavior.
+  useEffect(() => {
+    if (dateFilter === "This Week") return undefined;
+    let cancelled = false;
+    psDiag("SELECTED-DATE EFFECT FIRED", { dateFilter, targetDateISO }); // #1 (comparison)
+    detectPokeSpinsForDate(targetDateISO, { autoOpenBuilder: true, isStale: () => cancelled });
+    return () => { cancelled = true; };
+    // Re-runs whenever targetDateISO changes (Today/Tomorrow/Pick Date
+    // switch, or a new Pick Date is chosen) OR dateFilter itself changes
+    // (targetDateISO alone doesn't change when switching between "Today"
+    // and "This Week", since both resolve to the same date value — adding
+    // dateFilter here makes the This-Week bail-out re-evaluate explicitly
+    // rather than relying only on the value coincidence).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetDateISO, dateFilter]);
+
+  // Preload effect (Phase B, new). Runs once on mount, regardless of
+  // which date is currently selected — fetches Today and Tomorrow in
+  // parallel (neither is awaited before the other starts), so the
+  // operator has both dates' results already cached the moment they
+  // switch to either one. autoOpenBuilder:false for both — a silent
+  // background preload must never pop the Set Builder open for a date
+  // the operator isn't actively looking at.
+  //
+  // Known, accepted trade-off: since dateFilter defaults to "Today", the
+  // selected-date effect above will independently fetch Today too, at
+  // roughly the same time as this effect's Today fetch. That's one
+  // harmless extra network call — mergeDetectedSetResult and
+  // mergeImportedSetIntoBoard are both idempotent under repeated calls
+  // with equivalent data, so nothing duplicates or corrupts. Not
+  // optimized in this phase; revisit once the Phase E refresh layer
+  // becomes the central fetch coordinator.
+  useEffect(() => {
+    let cancelled = false;
+    psDiag("PRELOAD EFFECT FIRED on mount"); // #1
+    const preloadTodayISO = getLocalISODate();
+    const preloadTomorrowISO = addDaysISO(preloadTodayISO, 1);
+    psDiag("preload dates computed", { preloadTodayISO, preloadTomorrowISO }); // #2
+    detectPokeSpinsForDate(preloadTodayISO, { autoOpenBuilder: false, isStale: () => cancelled });
+    detectPokeSpinsForDate(preloadTomorrowISO, { autoOpenBuilder: false, isStale: () => cancelled });
+    return () => { cancelled = true; psDiag("preload effect cleanup (cancelled=true)"); };
+    // Mount-only by design — preloads today+tomorrow once when SetSheet
+    // opens, independent of dateFilter/targetDateISO.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const weeklyBlocks = normalizeWeeklySurpriseSets(surpriseSets);
   const safeSurpriseSets = Array.isArray(weeklyBlocks) ? weeklyBlocks : [];
   const trackerBlocks = safeSurpriseSets.filter(block => normalizeSurpriseSetBrandValue(block.brand));
@@ -8261,6 +10224,51 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
   const brain = getSurpriseSetBrainNotes(boardEntries, selectedDay);
   const selectedTemplateConfig = getSetSheetTemplateConfig(builderForm?.brand || "Vaulted Rarities");
   const builderSummary = getSetSheetSummary(builderForm?.rows || []);
+
+  // targetDateISO is computed earlier (before the auto-detect effect,
+  // which needs it too) — see the comment there for why.
+  const targetDateRows = (() => {
+    if (dateFilter === "This Week") return [];
+    const entryRows = boardEntries
+      .filter(entry => entry.streamDate === targetDateISO)
+      .filter(entry => focusChannel === "All" || entry.brandCode === focusChannel)
+      .map(entry => ({
+        kind: "entry",
+        id: entry.id,
+        brandCode: entry.brandCode,
+        shift: entry.shift,
+        displayStatus: deriveSetSheetDisplayStatus(entry),
+        entry,
+      }));
+    // PokeSpins "Detected, Not Built" placeholders now apply to whichever
+    // date is selected (Today/Tomorrow/Pick Date) — gated on the cache
+    // entry's date matching targetDateISO exactly, so a stale result from
+    // a date the operator already switched away from can never display
+    // as if it were current.
+    const pokeSpinsEntryKey = buildDetectedSetsCacheKey("PS", targetDateISO);
+    const pokeSpinsEntry = detectedSetsCache[pokeSpinsEntryKey] || EMPTY_DETECTED_SET_ENTRY;
+    psDiag("UI READ: targetDateRows consumer", {
+      dateFilter, targetDateISO, pokeSpinsEntryKey,
+      cacheHasKey: Object.prototype.hasOwnProperty.call(detectedSetsCache, pokeSpinsEntryKey),
+      allCacheKeys: Object.keys(detectedSetsCache),
+      pokeSpinsEntry,
+    }); // #12
+    const showPlaceholders = pokeSpinsEntry.date === targetDateISO && (focusChannel === "All" || focusChannel === "PS");
+    const placeholderRows = showPlaceholders
+      ? pokeSpinsEntry.shifts
+          .filter(s => s.reason === "not_built")
+          .filter(s => !entryRows.some(r => r.brandCode === "PS" && r.shift === s.shift))
+          .map(s => ({
+            kind: "detected-not-built",
+            id: `ps-not-built-${s.shift}`,
+            brandCode: "PS",
+            shift: s.shift,
+            displayStatus: "Detected, Not Built",
+            sheetTab: s.sheetTab,
+          }))
+      : [];
+    return [...entryRows, ...placeholderRows];
+  })();
 
   const updateBuilderField = (field, value) => {
     setBuilderForm(prev => {
@@ -8638,11 +10646,7 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     setConverterError("");
     setAutopilotPreviewRows([]);
     try {
-      if (!supabase?.functions?.invoke) throw new Error("Supabase functions unavailable.");
-      const { data, error } = await supabase.functions.invoke("import-surprise-sets", {
-        body: { channels, dates },
-      });
-      if (error || !data?.ok) throw error || new Error("Import failed.");
+      const data = await fetchAutopilotSheetsImport(channels, dates);
       const result = buildAutopilotPreviewRowsFromSheetsImport(data, dates);
       if (!result.previewRows.length) throw new Error("No matching sets returned.");
       setAutopilotPreviewRows(result.previewRows);
@@ -8881,6 +10885,54 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
     );
   };
 
+  // SetSheet UX simplification: compact row for the new Today/Tomorrow/
+  // Pick Date view. Reuses existing brand colors and existing action
+  // handlers (handleDownloadSet, handleMarkUploaded, setBuilderForm) —
+  // no new action logic, just a smaller presentation of the same data
+  // and same handlers the weekly board's cards already use.
+  const TODAY_ROW_STATUS_STYLES = {
+    "Ready": "border-blue-200 bg-blue-50 text-blue-700",
+    "Detected, Not Built": "border-amber-200 bg-amber-50 text-amber-700",
+    "Downloaded": "border-slate-200 bg-slate-100 text-slate-700",
+    "Uploaded": "border-violet-200 bg-violet-50 text-violet-700",
+    "Live Ready": "border-emerald-200 bg-emerald-50 text-emerald-700",
+    "Needs Attention": "border-red-200 bg-red-50 text-red-700",
+  };
+
+  const renderTodayRow = (row) => {
+    const pillClass = TODAY_ROW_STATUS_STYLES[row.displayStatus] || "border-gray-200 bg-gray-50 text-gray-600";
+    let primaryAction = null;
+    if (row.kind === "entry") {
+      if (row.displayStatus === "Ready") {
+        primaryAction = <BtnPrimary onClick={() => handleDownloadSet(row.entry)}>Download</BtnPrimary>;
+      } else if (row.displayStatus === "Downloaded") {
+        primaryAction = <BtnSecondary onClick={() => handleMarkUploaded(row.entry)}>Mark Uploaded</BtnSecondary>;
+      } else if (row.displayStatus === "Needs Attention") {
+        primaryAction = <BtnSecondary onClick={() => setBuilderForm(row.entry)}>Open in Builder</BtnSecondary>;
+      }
+      // "Uploaded" and "Live Ready" are terminal for this row — no action needed.
+    }
+    // "detected-not-built" rows have no board entry yet, so no action is
+    // available — the operator can open Advanced / Manual Import if they
+    // want to look at it before the warehouse marks it BUILT.
+    return (
+      <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3">
+        <div className="flex items-center gap-3">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SURPRISE_SET_BOARD_BRAND_COLORS[row.brandCode] || "#CBD5E1" }} />
+          <span className="text-sm font-bold text-gray-900">{row.brandCode}</span>
+          <span className="text-xs font-semibold text-gray-500">{row.shift === "pm" ? "Night" : "Morning"}</span>
+          {row.kind === "entry" && row.entry.surpriseSetName && (
+            <span className="hidden text-xs text-gray-400 sm:inline">{row.entry.surpriseSetName}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${pillClass}`}>{row.displayStatus}</span>
+          {primaryAction}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -8894,6 +10946,61 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           </button>
         </div>
       </div>
+
+      <Card className="p-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <FL>Date</FL>
+            <div className="flex flex-wrap gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+              {["Today", "Tomorrow", "This Week", "Pick Date"].map(option => (
+                <button
+                  key={option}
+                  onClick={() => setDateFilter(option)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${dateFilter === option ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:bg-white hover:text-gray-800"}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+          {dateFilter === "Pick Date" && (
+            <label className="space-y-1">
+              <FL>Date</FL>
+              <input
+                type="date"
+                value={pickedDate}
+                onChange={(event) => setPickedDate(event.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700"
+              />
+            </label>
+          )}
+          <label className="space-y-1">
+            <FL>Brand</FL>
+            <Sel value={focusChannel} onChange={setFocusChannel} options={SURPRISE_SET_BOARD_FOCUS_OPTIONS} placeholder="" />
+          </label>
+        </div>
+      </Card>
+
+      {dateFilter !== "This Week" && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold text-gray-900">
+              {dateFilter === "Today" ? "Today" : dateFilter === "Tomorrow" ? "Tomorrow" : targetDateISO}
+            </p>
+            <span className="text-[10px] font-semibold text-gray-400">{targetDateRows.length} set{targetDateRows.length === 1 ? "" : "s"}</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {targetDateRows.length ? targetDateRows.map(renderTodayRow) : (
+              <div className="flex h-16 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white text-[11px] font-medium text-gray-400">
+                No sets for {dateFilter === "Today" ? "today" : dateFilter === "Tomorrow" ? "tomorrow" : "this date"}.
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {dateFilter === "This Week" && (
+      <div className="space-y-4">
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
@@ -8910,6 +11017,23 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
         ))}
       </div>
 
+      </div>
+      )}
+
+      <Card className="p-3">
+        <button
+          onClick={() => setAdvancedImportOpen(value => !value)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <div>
+            <p className="text-sm font-bold text-gray-900">Advanced / Manual Import</p>
+            <p className="mt-0.5 text-xs text-gray-400">Import From Sheets, Import From Paste, date range and channel controls.</p>
+          </div>
+          <span className="text-xs font-bold text-gray-400">{advancedImportOpen || autopilotOpen || autopilotPreviewRows.length > 0 ? "▾ Hide" : "▸ Show"}</span>
+        </button>
+      </Card>
+
+      {(advancedImportOpen || autopilotOpen || autopilotPreviewRows.length > 0) && (
       <Card className="p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -9041,6 +11165,10 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
           </div>
         )}
       </Card>
+      )}
+
+      {dateFilter === "This Week" && (
+      <div className="space-y-4">
 
       <Card className="p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -9095,6 +11223,9 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
             ))}
           </div>
       </Card>
+
+      </div>
+      )}
 
       {builderForm ? (
         <Card className="p-4">
@@ -9222,17 +11353,17 @@ const SurpriseSetView = ({ surpriseSets, setSurpriseSets }) => {
 };
 
 const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseScores, setRaiseScores, inboundMessages }) => {
-  // â”€â”€ Safe arrays â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Safe arrays Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const safeInbound      = Array.isArray(inboundMessages) ? inboundMessages : [];
   const safeReplacements = Array.isArray(replacements)    ? replacements    : [];
   const activeReplacements = safeReplacements.filter(r => !r.archived_at);
   const safeStudios      = Array.isArray(studios)         ? studios         : [];
   const safeSets         = Array.isArray(surpriseSets)    ? surpriseSets    : [];
 
-  // â”€â”€ Week range â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Week range Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const week = getWeekRange();
 
-  // â”€â”€ localStorage-persisted notes (all hooks at top level) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ localStorage-persisted notes (all hooks at top level) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [wins,      setWins]      = useState(() => { try { return localStorage.getItem("ops_report_wins_v1")  || ""; } catch { return ""; } });
   const [risks,     setRisks]     = useState(() => { try { return localStorage.getItem("ops_report_risks_v1") || ""; } catch { return ""; } });
   const [nextFocus, setNextFocus] = useState(() => { try { return localStorage.getItem("ops_report_focus_v1") || ""; } catch { return ""; } });
@@ -9242,7 +11373,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   const saveRisks     = (v) => { setRisks(v);     try { localStorage.setItem("ops_report_risks_v1", v); } catch {} };
   const saveNextFocus = (v) => { setNextFocus(v); try { localStorage.setItem("ops_report_focus_v1", v); } catch {} };
 
-  // â”€â”€ Core metric counts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Core metric counts Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const msgsImported    = safeInbound.filter(m => isThisWeek(m.received_at || m.email_received_at || m.received_time || m.created_at, week.start, week.end)).length || safeInbound.length;
   const needsReply      = getNeedsReplyMessages(safeInbound).length;
   const closedMsgs      = safeInbound.filter(m => m.status === "Closed").length;
@@ -9254,7 +11385,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   const setsReady       = safeSets.filter(s => s.readyForLive).length;
   const draftsGenerated = safeInbound.filter(m => m.ai_draft).length;
 
-  // â”€â”€ Brand breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Brand breakdown Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const brandRows = REPORT_BRANDS.map(brand => ({
     brand,
     open:        getOpenMessages(safeInbound).filter(m => getDisplayBrand(m) === brand).length,
@@ -9263,13 +11394,13 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
     replacements: activeReplacements.filter(r => r.brand === brand).length,
   }));
 
-  // â”€â”€ Estimated time saved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Estimated time saved Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const timeMins = (msgsImported * 2) + (draftsGenerated * 5) + (activeReplacements.length * 3) + (setsReady * 5);
   const timeHours = (timeMins / 60).toFixed(1);
 
-  // â”€â”€ Plain-text summary builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Plain-text summary builder Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const buildSummary = () => {
-    const sep = "â”€".repeat(52);
+    const sep = "Ã¢â€â‚¬".repeat(52);
     const brandTable = brandRows.map(b =>
       `  ${b.brand.padEnd(18)} open: ${b.open}  closed: ${b.closed}  refunds: ${b.refunds}  replacements: ${b.replacements}`
     ).join("\n");
@@ -9336,7 +11467,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Operations Impact Report</h2>
           <p className="text-xs text-gray-400 mt-0.5">Weekly summary of workload, follow-ups, replacements, readiness, and system impact.</p>
-          <p className="text-xs text-gray-500 font-medium mt-1">{week.label} <span className="text-gray-400 font-normal">Â· {week.range}</span></p>
+          <p className="text-xs text-gray-500 font-medium mt-1">{week.label} <span className="text-gray-400 font-normal">Ã‚· {week.range}</span></p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleCopy}
@@ -9445,7 +11576,7 @@ const WeeklyRaiseView = ({ tickets, replacements, studios, surpriseSets, raiseSc
   );
 };
 
-// â”€â”€â”€ DATA MANAGEMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DATA MANAGEMENT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const parsePriceCheckCsv = (text) => {
   const rows = [];
   let row = [];
@@ -9569,8 +11700,8 @@ const extractTcgProductId = (value) => {
 const cleanTcgSearchQuery = (title) => String(title || "")
   .replace(/\bMagic:\s*The\s*Gathering\s*-\s*/ig, "")
   .replace(/\bMTG\s*-\s*/ig, "")
-  .replace(/\bPok[eÃ©]mon\s*-\s*/ig, "")
-  .replace(/\bPok[eÃ©]mon\b/ig, "")
+  .replace(/\bPok[eÃƒÂ©]mon\s*-\s*/ig, "")
+  .replace(/\bPok[eÃƒÂ©]mon\b/ig, "")
   .replace(/^\s*\d+\s*x\s+/i, "")
   .replace(/\s+/g, " ")
   .trim();
@@ -9914,7 +12045,7 @@ const PriceCheckView = () => {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">{activeRow.title || "Untitled product"}</h3>
-                  <p className="mt-1 text-xs text-gray-400">{activeRow.handle || "No handle"} Â· SKU {activeRow.sku || "-"}</p>
+                  <p className="mt-1 text-xs text-gray-400">{activeRow.handle || "No handle"} Ã‚· SKU {activeRow.sku || "-"}</p>
                 </div>
                 <Badge label={activeRow.computed.status} className={statusClass(activeRow.computed.status)} />
               </div>
@@ -10086,7 +12217,7 @@ const safeTickets = Array.isArray(tickets) ? tickets : [];
     e.target.value = "";
   };
 
-// â”€â”€ req 7: Clear All deletes every ticket from Supabase (hard delete) â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ req 7: Clear All deletes every ticket from Supabase (hard delete) Ã¢â€â‚¬Ã¢â€â‚¬
 const clearAll = async () => {
   setClearErr("");
   try {
@@ -10194,7 +12325,7 @@ const clearAll = async () => {
   );
 };
 
-// â”€â”€â”€ OP SIDEKICK HASH BRIDGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ OP SIDEKICK HASH BRIDGE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const normalizeSidekickBrand = (brand, brandCode) => {
   const value = (brand || brandCode || "").toString().trim();
   const upper = value.toUpperCase();
@@ -10277,8 +12408,563 @@ const getSidekickTicketFromHash = () => {
   };
 };
 
-// â”€â”€â”€ MAIN APP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export default function JonnyOpsCommandCenter() {
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ MAIN APP Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+
+
+// OP_ZENDESK_HYBRID_V2
+const ZendeskHybridView = () => {
+  const READ_KEY = "op_zendesk_hybrid_read_state_v2";
+  const [messages, setMessages] = useState([]);
+  const [cases, setCases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [filter, setFilter] = useState("Needs Reply");
+  const [query, setQuery] = useState("");
+  const [reply, setReply] = useState("");
+  const [replyBusy, setReplyBusy] = useState(false);
+  const [replyNotice, setReplyNotice] = useState("");
+  const [confirmReply, setConfirmReply] = useState(false);
+  const [syncBusyId, setSyncBusyId] = useState(null);
+  const [seenMap, setSeenMap] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(READ_KEY) || "{}"); } catch { return {}; }
+  });
+  const syncedRef = useRef(new Set());
+  const conversationScrollRef = useRef(null);
+  // Tracks which selectedId we've already auto-positioned to the newest
+  // message for. Lets the effect below correctly wait for comments that
+  // arrive on a later render (e.g. a not-yet-synced case) without
+  // re-scrolling every time comments.length changes afterward.
+  const scrolledForCaseRef = useRef(null);
+  // CS Livability Sprint, Phase 3: AI case analysis, keyed by ticketId so
+  // a result can never be displayed against, or leak into, a different
+  // case. Entry shape: { status: "loading"|"ready"|"error", analysis,
+  // error }. Same keyed-cache pattern already proven correct in the
+  // SetSheet background-detection work.
+  const [caseAnalysisCache, setCaseAnalysisCache] = useState({});
+  const saveSeen = (next) => {
+    setSeenMap(next);
+    try { localStorage.setItem(READ_KEY, JSON.stringify(next)); } catch {}
+  };
+  const messageStamp = (m) => new Date(m?.last_message_at || m?.updated_at || m?.received_at || m?.created_at || 0).getTime() || 0;
+  const isUnread = (m) => Number(seenMap[String(m?.id)] || 0) < messageStamp(m);
+  const markRead = (m) => saveSeen({ ...seenMap, [String(m.id)]: Math.max(Date.now(), messageStamp(m)) });
+  const markUnread = (m) => {
+    const next = { ...seenMap };
+    delete next[String(m.id)];
+    saveSeen(next);
+  };
+  const cleanPreview = (value) => String(value || "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "Image attachment")
+    .replace(/\[(?:Zendesk Image Display|Image)\]\([^)]*\)/gi, "Image attachment")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Command Inbox correction pass: display-only cleanup. Strips a leading
+  // "[US]"-style locale prefix (or any single bracketed tag) from a name
+  // for presentation ONLY — the raw customer_name value used for search
+  // matching, AI triage context, and Active Context's other consumers is
+  // never touched, only what gets rendered to the operator's eyes.
+  const stripUsPrefix = (value) => String(value || "").replace(/^\s*\[[a-z]{2,4}\]\s*/i, "").trim() || String(value || "");
+  const getInitials = (value) => {
+    const cleaned = stripUsPrefix(value).trim();
+    if (!cleaned) return "?";
+    const parts = cleaned.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
+  // OP_ZENDESK_IMAGE_RENDERER_V3
+  const renderZendeskCommentBody = (value) => {
+    const text = String(value || "");
+    if (!text) return <span className="text-slate-500">Attachment</span>;
+
+    // Zendesk/TikTok image mirrors currently arrive as markdown such as:
+    // ![Zendesk Image Display](https://...jpeg?...)
+    // Some older rows omit the leading !, so support both forms plus bare image URLs.
+    const imagePattern = /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)|\[((?:Zendesk\s+Image\s+Display|Image|Attachment)[^\]]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>'"]+?\.(?:png|jpe?g|gif|webp)(?:\?[^\s<>'"]*)?)/gi;
+    const nodes = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    const pushText = (chunk) => {
+      if (!chunk || !chunk.trim()) return;
+      nodes.push(<span key={`text-${key++}`} className="whitespace-pre-wrap break-words">{chunk}</span>);
+    };
+
+    while ((match = imagePattern.exec(text)) !== null) {
+      pushText(text.slice(lastIndex, match.index));
+      const alt = String(match[1] || match[3] || "Zendesk attachment").trim();
+      const rawUrl = match[2] || match[4] || match[5] || "";
+      const url = rawUrl.replace(/&amp;/gi, "&");
+
+      nodes.push(
+        <figure key={`img-${key++}`} className="my-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+          <a href={url} target="_blank" rel="noreferrer noopener" className="block cursor-zoom-in bg-white">
+            <img
+              src={url}
+              alt={alt}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              className="max-h-[420px] w-full bg-white object-contain"
+              onError={(event) => {
+                const anchor = event.currentTarget.parentElement;
+                event.currentTarget.style.display = "none";
+                const fallback = anchor?.nextElementSibling;
+                if (fallback) fallback.style.display = "block";
+              }}
+            />
+          </a>
+          <div style={{ display:"none" }} className="px-3 py-2 text-[10px] leading-relaxed text-slate-500">
+            Image could not be loaded inline. Open the full Zendesk ticket to view the attachment.
+          </div>
+        </figure>
+      );
+      lastIndex = imagePattern.lastIndex;
+    }
+
+    pushText(text.slice(lastIndex));
+    if (!nodes.length) return <span className="whitespace-pre-wrap break-words">{text}</span>;
+    return <div className="space-y-1">{nodes}</div>;
+  };
+  const relativeTime = (value) => {
+    const ms = Date.now() - new Date(value || 0).getTime();
+    if (!Number.isFinite(ms) || ms < 0) return "now";
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "now";
+    if (min < 60) return `${min}m`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h`;
+    const day = Math.floor(hr / 24);
+    return day === 1 ? "Yesterday" : `${day}d`;
+  };
+  const brandMeta = (brand) => {
+    const b = String(brand || "").toLowerCase();
+    if (b.includes("cardking") || b === "ck") return { key:"CK", label:"CardKing47", dot:"bg-blue-600", chip:"bg-blue-50 text-blue-700 border-blue-200", edge:"border-l-blue-500", tint:"bg-blue-50/60" };
+    if (b.includes("pokespins") || b === "ps") return { key:"PS", label:"PokeSpins", dot:"bg-red-500", chip:"bg-red-50 text-red-700 border-red-200", edge:"border-l-red-500", tint:"bg-red-50/60" };
+    if (b.includes("pokiemart") || b.includes("pokiemart") || b === "pm") return { key:"PM", label:"PokieMart", dot:"bg-emerald-600", chip:"bg-emerald-50 text-emerald-700 border-emerald-200", edge:"border-l-emerald-500", tint:"bg-emerald-50/60" };
+    if (b.includes("vaulted") || b === "vr") return { key:"VR", label:"Vaulted Rarities", dot:"bg-amber-400", chip:"bg-amber-50 text-amber-800 border-amber-200", edge:"border-l-amber-400", tint:"bg-amber-50/60" };
+    return { key:"ZD", label:brand || "Zendesk", dot:"bg-slate-400", chip:"bg-slate-100 text-slate-700 border-slate-200", edge:"border-l-slate-300", tint:"bg-slate-50" };
+  };
+  const normalizedStatus = (m) => String(m?.status || "needs_reply").toLowerCase().replace(/\s+/g, "_");
+  const statusInfo = (m, detail) => {
+    const s = normalizedStatus(m);
+    if (["pending","in_progress","waiting","waiting_on_customer"].includes(s)) return { label:"Waiting", cls:"bg-slate-100 text-slate-600 border-slate-200" };
+    if (/refund|return/i.test(`${detail.subject} ${detail.preview}`)) return { label:"Refund / Return", cls:"bg-rose-50 text-rose-700 border-rose-200" };
+    if (["high","urgent"].includes(String(m?.priority || "").toLowerCase())) return { label:"High Priority", cls:"bg-orange-50 text-orange-700 border-orange-200" };
+    return { label:"Needs Reply", cls:"bg-indigo-50 text-indigo-700 border-indigo-200" };
+  };
+
+  const refresh = async () => {
+    if (!supabase) {
+      setLoading(false);
+      setError("OP Software could not connect to the data client. Restart the app and try again.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const [queueSettled, caseSettled] = await Promise.allSettled([
+        supabase.from("work_queue").select("*").is("archived_at", null).order("last_message_at", { ascending:false }).limit(500),
+        supabase.from("zendesk_cases").select("*, zendesk_order_cards(*), zendesk_comments(*)").order("zendesk_updated_at", { ascending:false }).limit(250),
+      ]);
+
+      const queueResult = queueSettled.status === "fulfilled" ? queueSettled.value : { data:null, error:queueSettled.reason };
+      const caseResult = caseSettled.status === "fulfilled" ? caseSettled.value : { data:null, error:caseSettled.reason };
+      const errors = [];
+
+      if (!queueResult?.error) {
+        const onlyZendesk = (Array.isArray(queueResult?.data) ? queueResult.data : []).filter((item) => String(item?.source || "").toLowerCase() === "zendesk");
+        setMessages(onlyZendesk);
+        setSelectedId((current) => {
+          if (current && onlyZendesk.some((item) => String(item.id) === String(current))) return current;
+          return onlyZendesk[0]?.id || null;
+        });
+      } else {
+        errors.push(`Queue: ${queueResult.error?.message || queueResult.error || "load failed"}`);
+      }
+
+      if (!caseResult?.error) {
+        setCases(Array.isArray(caseResult?.data) ? caseResult.data : []);
+      } else {
+        errors.push(`Zendesk cases: ${caseResult.error?.message || caseResult.error || "load failed"}`);
+      }
+
+      if (errors.length) setError(errors.join(" · "));
+    } catch (refreshError) {
+      console.error("Zendesk hybrid refresh failed:", refreshError);
+      setError(refreshError?.message || "Zendesk queue refresh failed. Existing data has been kept on screen.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const caseByTicket = useMemo(() => {
+    const map = new Map();
+    cases.forEach((item) => { if (item?.zendesk_ticket_id != null) map.set(String(item.zendesk_ticket_id), item); });
+    return map;
+  }, [cases]);
+  const messageDetails = (message) => {
+    const metadata = getInboundMetadata(message || {});
+    const notes = parseZendeskNotes(message?.notes);
+    const ticketId = String(metadata.zendesk_ticket_id || message?.external_message_id || metadata.ticket_id || notes?.ticketId || "").replace(/[^0-9]/g, "");
+    const matchedCase = ticketId ? caseByTicket.get(ticketId) : null;
+    const brand = matchedCase?.shop_name || message?.account || message?.brand || message?.shop || "Unassigned";
+    const customer = matchedCase?.customer_name || message?.sender_name || message?.customer_name || notes?.requesterEmail || message?.sender_email || "Customer";
+    const preview = cleanPreview(notes?.preview || message?.preview || message?.body || message?.message || matchedCase?.subject || "");
+    const subject = cleanPreview(notes?.subject || matchedCase?.subject || message?.subject || "Zendesk ticket");
+    return { metadata, notes, ticketId, matchedCase, brand, customer, preview, subject };
+  };
+  const selectedMessage = messages.find((item) => String(item.id) === String(selectedId)) || messages[0] || null;
+  const selected = messageDetails(selectedMessage);
+  // Always mirrors the latest selected ticketId, updated synchronously on
+  // every render (not via an effect) — read inside async callbacks below
+  // so a staleness check reflects the live selection, not whatever
+  // closure the async call happened to start in. A plain re-read of
+  // `selected.ticketId` inside those callbacks would not work here: the
+  // callback closes over the render that *initiated* the request, so it
+  // would always equal itself and never detect that the operator has
+  // since switched cases.
+  const selectedTicketIdRef = useRef(selected.ticketId);
+  selectedTicketIdRef.current = selected.ticketId;
+
+  useEffect(() => {
+    if (!selectedMessage) { clearActiveContext(); return; }
+    const orders = Array.isArray(selected.matchedCase?.zendesk_order_cards) ? selected.matchedCase.zendesk_order_cards : [];
+
+    // Tier 0 shipping-exception classification: build the bounded window of
+    // the 5 most recent customer-authored, public comments, newest first —
+    // same filter criteria zendesk-mirror already uses for its own
+    // "latest customer comment" logic (author_id === requester_id, is_public
+    // !== false). This is windowing/ordering only; classifyShippingSignal
+    // itself does no filtering or fetching.
+    const requesterIdForSignal = String(selected.matchedCase?.requester_id || "");
+    const allCommentsForSignal = Array.isArray(selected.matchedCase?.zendesk_comments) ? selected.matchedCase.zendesk_comments : [];
+    const recentCustomerComments = allCommentsForSignal
+      .filter((c) => String(c.author_id) === requesterIdForSignal && c.is_public !== false)
+      .sort((a, b) => new Date(a.zendesk_created_at || a.created_at || 0) - new Date(b.zendesk_created_at || b.created_at || 0))
+      .slice(-5)
+      .reverse()
+      .map((c) => ({ id: c.id, body: c.body || "" }));
+    const classified = classifyShippingSignal(recentCustomerComments);
+    const shippingSignal = classified.category ? {
+      ...classified,
+      guidance: CASE_SOP_RULES[classified.category]?.action || null,
+    } : null;
+
+    const aiAnalysis = selected.ticketId ? (caseAnalysisCache[selected.ticketId] || null) : null;
+    // Command Inbox correction pass: compact, display-ready order summaries
+    // for the new right-rail Orders panel. Defensive field reads — I don't
+    // have confirmed evidence zendesk_order_cards always carries a product
+    // name or image URL, so every field here degrades to a clean fallback
+    // rather than assuming the data exists.
+    const orderSummaries = orders.map((order) => ({
+      id: order.id || order.order_id,
+      orderId: order.order_id || "",
+      status: order.order_status || "Status unavailable",
+      amount: order.payment_amount != null ? `$${Number(order.payment_amount).toFixed(2)}` : "",
+      productName: order.product_name || order.item_name || null,
+      imageUrl: order.image_url || order.product_image_url || order.thumbnail_url || null,
+    }));
+
+    setCaseContext({ messageId:selectedMessage.id, ticketId:selected.ticketId, brand:selected.brand, customer:stripUsPrefix(selected.customer), orderId:orders[0]?.order_id || "", preview:selected.preview.slice(0,180), shippingSignal, aiAnalysis, orders: orderSummaries });
+  }, [selectedId, selected.ticketId, selected.brand, selected.customer, selected.preview, selected.matchedCase, caseAnalysisCache]);
+
+  useEffect(() => {
+    const ticketId = selected.ticketId;
+    if (!supabase || !ticketId || selected.matchedCase || syncedRef.current.has(ticketId)) return;
+    let cancelled = false;
+    syncedRef.current.add(ticketId);
+    setSyncBusyId(ticketId);
+
+    (async () => {
+      try {
+        const { error:syncError, data } = await supabase.functions.invoke("zendesk-mirror", { body:{ ticket_id:Number(ticketId) } });
+        if (cancelled) return;
+        if (syncError || data?.error) {
+          syncedRef.current.delete(ticketId);
+          setError(`Ticket #${ticketId} could not sync yet. You can retry with Refresh.`);
+          return;
+        }
+        const { data:refreshed, error:refreshError } = await resolveCaseContext(supabase, ticketId);
+        if (cancelled) return;
+        if (refreshError) {
+          syncedRef.current.delete(ticketId);
+          setError(`Ticket #${ticketId} synced, but its case details could not be reloaded yet.`);
+          return;
+        }
+        if (refreshed) setCases((current) => [refreshed, ...current.filter((item) => String(item.zendesk_ticket_id) !== ticketId)]);
+      } catch (syncError) {
+        if (!cancelled) {
+          syncedRef.current.delete(ticketId);
+          setError(syncError?.message || `Ticket #${ticketId} could not sync yet.`);
+        }
+      } finally {
+        if (!cancelled) setSyncBusyId(null);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selected.ticketId, selected.matchedCase]);
+
+  const matchesFilter = (message, desired = filter) => {
+    const detail = messageDetails(message); const status = normalizedStatus(message);
+    if (desired === "Needs Reply") return ["needs_reply","needs reply",""] .includes(status);
+    if (desired === "Unread") return isUnread(message);
+    if (desired === "High Priority") return ["high","urgent"].includes(String(message?.priority || "").toLowerCase());
+    if (desired === "Refunds") return /refund|return/i.test(`${detail.subject} ${detail.preview}`);
+    if (desired === "Waiting") return ["pending","in_progress","waiting","waiting_on_customer"].includes(status);
+    return true;
+  };
+  const visibleMessages = messages.filter((message) => {
+    const detail = messageDetails(message);
+    const haystack = [detail.brand, detail.customer, detail.subject, detail.preview, detail.ticketId].join(" ").toLowerCase();
+    return (!query.trim() || haystack.includes(query.trim().toLowerCase())) && matchesFilter(message);
+  });
+  const filters = ["Needs Reply","Unread","High Priority","Refunds","Waiting","All"];
+  const filterCount = (name) => messages.filter((m) => matchesFilter(m, name)).length;
+
+  const comments = useMemo(() => {
+    const list = Array.isArray(selected.matchedCase?.zendesk_comments) ? selected.matchedCase.zendesk_comments : [];
+    return [...list].sort((a,b) => new Date(a.zendesk_created_at || a.created_at || 0) - new Date(b.zendesk_created_at || b.created_at || 0));
+  }, [selected.matchedCase]);
+  const orders = Array.isArray(selected.matchedCase?.zendesk_order_cards) ? selected.matchedCase.zendesk_order_cards : [];
+  const requesterId = String(selected.matchedCase?.requester_id || "");
+
+  // Command Inbox livability pass: position the conversation at the
+  // newest message once, per case selection — not every time
+  // comments.length changes for any reason. Depends on both selectedId
+  // and comments.length because a not-yet-synced case's comments can
+  // populate on a LATER render than the selectedId change itself; the
+  // scrolledForCaseRef guard below ensures that once we've positioned for
+  // a given case (whether comments were already loaded or arrived a
+  // moment later), a background sync bringing in a new comment for that
+  // SAME case does not re-trigger the scroll — deliberately, so an
+  // operator reading older history is never yanked back to the bottom
+  // mid-read. Wrapped in requestAnimationFrame so it runs after the
+  // browser has actually laid out the newly-rendered messages, not
+  // potentially racing that layout pass.
+  useEffect(() => {
+    if (scrolledForCaseRef.current === selectedId) return undefined;
+    if (!comments.length) return undefined; // wait for real data before marking this case "positioned"
+    const frame = requestAnimationFrame(() => {
+      const node = conversationScrollRef.current;
+      if (node) node.scrollTop = node.scrollHeight;
+      scrolledForCaseRef.current = selectedId;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, comments.length]);
+
+  // CS Livability Sprint, Phase 3: automatic AI case analysis. Reuses the
+  // existing, proven generate-message-assistant call and its exact
+  // normalization (sanitizeAssistantAnalysis/buildLocalAssistantAnalysis
+  // — both already defined top-level in this file, previously only
+  // invoked from CommandInboxView). No new AI backend call shape, no new
+  // edge function, byte-for-byte the same request/response contract.
+  //
+  // Triggers only when the selected case has no existing cache entry
+  // (loading/ready/error all count as "already has one" and are left
+  // alone) — satisfies "trigger automatically if no current analysis"
+  // without re-analyzing on every render or every unrelated field change.
+  // Guarded by a per-run ticketId check before every state write, so a
+  // slow response for a case the operator has since navigated away from
+  // can never be written into a different case's slot (rapid A/B/A
+  // switching safety).
+  const runCaseAnalysis = (ticketId) => {
+    const matchedCase = selected.matchedCase;
+    if (!ticketId || !matchedCase) return;
+    setCaseAnalysisCache(prev => ({ ...prev, [ticketId]: { status: "loading", analysis: null, error: null } }));
+
+    const requesterIdForAnalysis = String(matchedCase.requester_id || "");
+    const caseComments = Array.isArray(matchedCase.zendesk_comments) ? matchedCase.zendesk_comments : [];
+    const caseOrders = Array.isArray(matchedCase.zendesk_order_cards) ? matchedCase.zendesk_order_cards : [];
+    const latestCustomerComment = [...caseComments]
+      .sort((a, b) => new Date(b.zendesk_created_at || 0) - new Date(a.zendesk_created_at || 0))
+      .find(c => String(c.author_id || "") === requesterIdForAnalysis && c.is_public !== false);
+
+    // Identical shape to handleAskAssistant's triageContext in
+    // CommandInboxView, adapted to read directly from the already-
+    // resolved matchedCase this view holds (no re-lookup needed).
+    const triageContext = {
+      customer: { name: matchedCase.customer_name, email: matchedCase.customer_email, shop: matchedCase.shop_name },
+      subject: matchedCase.subject || "",
+      latestCustomerMessage: latestCustomerComment?.body || "",
+      comments: caseComments.slice(-40).map(c => ({ body: c.body, isPublic: c.is_public, authorId: c.author_id, createdAt: c.zendesk_created_at })),
+      orders: caseOrders.map(o => ({ orderId: o.order_id, status: o.order_status, amount: o.payment_amount, trackingNumber: o.tracking_number || null, product: o.product_name || o.item_name || null })),
+      currentClassification: "",
+    };
+    const triageMessage = { id: ticketId, subject: matchedCase.subject || "", issue_type: "", _triageContext: triageContext };
+
+    (async () => {
+      if (!supabase?.functions?.invoke) {
+        const fallback = sanitizeAssistantAnalysis(triageMessage, buildLocalAssistantAnalysis(triageMessage));
+        if (String(selectedTicketIdRef.current) !== String(ticketId)) return;
+        setCaseAnalysisCache(prev => ({ ...prev, [ticketId]: { status: "ready", analysis: fallback, error: "AI assistant unavailable. Showing local fallback." } }));
+        return;
+      }
+      try {
+        const { data, error } = await supabase.functions.invoke("generate-message-assistant", {
+          body: {
+            message: { ...triageMessage, caseContext: triageContext },
+            caseContext: triageContext,
+            task: "Return structured customer-service triage: suggestedIssueType, classificationReason, recommendedAction, evidencePresent, missingEvidence, draftReply, confidence. Never send or approve an action.",
+          },
+        });
+        if (error) throw error;
+        if (String(selectedTicketIdRef.current) !== String(ticketId)) return; // stale — operator navigated away
+        setCaseAnalysisCache(prev => ({ ...prev, [ticketId]: { status: "ready", analysis: sanitizeAssistantAnalysis(triageMessage, data), error: null } }));
+      } catch (err) {
+        if (String(selectedTicketIdRef.current) !== String(ticketId)) return;
+        // Command Inbox correction pass: the operator should never see raw
+        // technical failure text (e.g. "Edge Function returned a non-2xx
+        // status code"). The real error is still logged to console for
+        // diagnostics; the UI gets a fixed, calm message plus Retry.
+        console.warn("AI case analysis failed:", err?.message || err);
+        setCaseAnalysisCache(prev => ({ ...prev, [ticketId]: { status: "error", analysis: null, error: "Case summary unavailable right now." } }));
+      }
+    })();
+  };
+
+  useEffect(() => {
+    const ticketId = selected.ticketId;
+    if (!ticketId || !selected.matchedCase) return;
+    if (caseAnalysisCache[ticketId]) return; // already loading/ready/error — don't re-trigger
+    runCaseAnalysis(ticketId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected.ticketId, selected.matchedCase]);
+
+  // Cross-component commands from OPCockpit's right rail (a different
+  // component instance — this is the same kind of DOM-event bridge
+  // already used for the existing Draft/Reply focus button, just for two
+  // new one-shot actions rather than shared state).
+  useEffect(() => {
+    const onUseDraft = (event) => {
+      const { ticketId, draftText } = event.detail || {};
+      if (String(ticketId) !== String(selected.ticketId)) return; // only apply to the case it was requested for
+      setReply(draftText || "");
+    };
+    const onRetryAnalysis = (event) => {
+      const { ticketId } = event.detail || {};
+      if (String(ticketId) !== String(selected.ticketId)) return;
+      setCaseAnalysisCache(prev => { const next = { ...prev }; delete next[ticketId]; return next; });
+      runCaseAnalysis(ticketId);
+    };
+    window.addEventListener("op:use-draft", onUseDraft);
+    window.addEventListener("op:retry-analysis", onRetryAnalysis);
+    return () => {
+      window.removeEventListener("op:use-draft", onUseDraft);
+      window.removeEventListener("op:retry-analysis", onRetryAnalysis);
+    };
+  }, [selected.ticketId, selected.matchedCase]);
+
+  const sendReply = async () => {
+    const text = reply.trim();
+    const ticketId = selected.ticketId;
+    if (!supabase || !ticketId || !text || replyBusy) return;
+
+    setReplyBusy(true);
+    setReplyNotice("");
+    try {
+      const { data, error:sendError } = await supabase.functions.invoke("zendesk-mirror", { body:{ ticket_id:Number(ticketId), action:"add_comment", comment:text, public:true, status:"pending" } });
+      if (sendError || data?.error) {
+        setReplyNotice(sendError?.message || data?.error || "Reply failed. Nothing was cleared from the composer.");
+        return;
+      }
+
+      setConfirmReply(false);
+      setReply("");
+      setReplyNotice("Reply sent through Zendesk. Ticket moved to pending.");
+      setMessages((current) => current.map((item) => String(item.id) === String(selectedMessage?.id) ? { ...item, status:"in_progress" } : item));
+      if (selectedMessage) markRead(selectedMessage);
+      syncedRef.current.delete(ticketId);
+
+      const { data:refreshed, error:refreshError } = await resolveCaseContext(supabase, ticketId);
+      if (refreshError) {
+        setReplyNotice("Reply sent through Zendesk. The local conversation will refresh on the next sync.");
+        return;
+      }
+      if (refreshed) setCases((current) => [refreshed, ...current.filter((item) => String(item.zendesk_ticket_id) !== ticketId)]);
+    } catch (sendError) {
+      console.error("Zendesk public reply failed:", sendError);
+      setReplyNotice(sendError?.message || "Reply failed. Nothing was cleared from the composer.");
+    } finally {
+      setReplyBusy(false);
+    }
+  };
+
+  // Command Inbox layout shell (contained rewrite): this root is
+  // deliberately position:absolute + inset:0 rather than h-full/min-h-0.
+  // .opc-command-host (OPCockpit.jsx, already position:absolute + inset:0
+  // relative to .opc-center) is the nearest positioned ancestor — none of
+  // the layers in between (.ops-embedded, .flex-1, <main>, the embedded-
+  // view wrapper div) declare their own `position`, so this anchors
+  // directly to .opc-command-host's already-solid, correctly-bounded box.
+  // This intentionally removes Command Inbox from depending on percentage
+  // -height propagation through those five intermediate layers at all —
+  // that chain is what kept reintroducing competing scrollbars every time
+  // one layer had even a sub-pixel sizing quirk. Nothing about those
+  // layers changes for OTHER embedded views (SetSheet, Inventory, etc.),
+  // which still rely on normal-flow height propagation as before — this
+  // is a Command-Inbox-exclusive escape from that chain, not a change to
+  // the chain itself.
+  return <div className="absolute inset-0 overflow-hidden bg-slate-100 text-slate-900">
+    <style>{`@keyframes opDogRun{0%{transform:translateX(-14px) rotate(-2deg)}50%{transform:translateX(14px) rotate(2deg)}100%{transform:translateX(-14px) rotate(-2deg)}} .op-dog-run{display:inline-block;animation:opDogRun .8s ease-in-out infinite}`}</style>
+    {loading && messages.length === 0 && <div className="fixed left-1/2 top-20 z-[9998] -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-4 py-2 shadow-lg backdrop-blur"><div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600"><span className="op-dog-run text-lg">🐕</span><span>Fetching Zendesk cases…</span></div></div>}
+    {/* Command Inbox shell: two explicit, independently-scrolling panes.
+        Queue pane (fixed header + scroll body) | Conversation pane (fixed
+        case header + scroll body + fixed composer). Neither pane's
+        content can affect the other's height or this shell's height —
+        each scroll body is flex:1 + min-height:0 + overflow-y:auto within
+        a min-height:0 flex column, and this whole shell is now hard-
+        bounded via the absolute positioning above, not content size. */}
+    <div className="grid h-full min-h-0 grid-cols-[350px_minmax(0,1fr)]">
+      <section className="flex min-h-0 flex-col border-r border-slate-200 bg-white">
+        <div className="shrink-0 border-b border-slate-200 p-4">
+          <div className="flex items-center justify-between gap-3"><div><h1 className="text-lg font-bold">Command Inbox</h1><p className="mt-0.5 text-[11px] text-slate-500">Zendesk-backed · one-operator queue</p></div><button onClick={refresh} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">Refresh</button></div>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search customer, brand, ticket..." className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-slate-400" />
+          <div className="mt-2 grid grid-cols-3 gap-1.5">{filters.map((item) => <button key={item} onClick={() => setFilter(item)} className={`rounded-md border px-2 py-1.5 text-[9px] font-semibold ${filter === item ? "border-slate-800 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}><span>{item}</span><span className={`ml-1 ${filter === item ? "text-slate-300" : "text-slate-400"}`}>{filterCount(item)}</span></button>)}</div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {error && <div className="m-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</div>}
+          {!loading && !visibleMessages.length && <div className="p-5 text-center text-xs text-slate-400">No Zendesk cases match this view.</div>}
+          {!loading && visibleMessages.map((message) => {
+            const detail = messageDetails(message); const active = String(message.id) === String(selectedMessage?.id); const brand = brandMeta(detail.brand); const unread = isUnread(message); const status = statusInfo(message, detail); const stamp = message.last_message_at || message.updated_at || message.received_at || message.created_at;
+            return <button key={message.id} onClick={() => { setSelectedId(message.id); markRead(message); setReply(""); setReplyNotice(""); }} className={`block w-full border-b border-l-4 border-slate-100 px-3 py-3 text-left transition-colors ${brand.edge} ${active ? brand.tint : "bg-white hover:bg-slate-50"}`}>
+              <div className="flex items-center justify-between gap-2"><div className="min-w-0 flex items-center gap-2">{unread && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500 shadow-[0_0_0_2px_#dbeafe]"/>}<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[8px] font-bold text-slate-600">{getInitials(detail.customer)}</span><span className={`truncate text-[11px] text-slate-900 ${unread ? "font-extrabold" : "font-semibold"}`}>{stripUsPrefix(detail.customer)}</span></div><span className="shrink-0 text-[9px] font-semibold text-slate-400">{relativeTime(stamp)}</span></div>
+              <div className="mt-1.5 flex min-w-0 items-center gap-1.5"><span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-extrabold ${brand.chip}`}>{brand.key}</span><span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${status.cls}`}>{status.label}</span><span className="ml-auto text-[8px] font-semibold text-slate-400">#{detail.ticketId || "—"}</span></div>
+              <p className={`mt-1.5 line-clamp-2 text-[10px] leading-relaxed ${unread ? "font-medium text-slate-700" : "text-slate-500"}`}>{detail.preview || detail.subject || "No preview available."}</p>
+            </button>;
+          })}
+        </div>
+      </section>
+
+      <section className="min-h-0 flex flex-col bg-slate-50">
+        {!selectedMessage ? <div className="grid h-full place-items-center text-sm text-slate-400">Select a Zendesk case.</div> : (() => { const brand = brandMeta(selected.brand); const unread = isUnread(selectedMessage); const status = statusInfo(selectedMessage, selected); return <>
+          <div className="shrink-0 p-4 pb-0">
+          <div className={`rounded-xl border border-slate-200 border-t-2 bg-white p-4 shadow-sm ${brand.edge.replace("border-l-", "border-t-")}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full border px-2 py-0.5 text-[9px] font-extrabold ${brand.chip}`}>{brand.key} · {brand.label}</span><span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${status.cls}`}>{status.label}</span><span className="text-[9px] font-semibold text-slate-400">Zendesk #{selected.ticketId || "—"}</span></div><div className="mt-2 flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-600">{getInitials(selected.customer)}</span><h2 className="truncate text-base font-bold text-slate-900">{stripUsPrefix(selected.customer)}</h2></div><p className="mt-0.5 truncate text-[11px] text-slate-500">{selected.subject}</p></div><div className="flex flex-wrap gap-2">{syncBusyId === selected.ticketId && <span className="rounded-lg bg-amber-50 px-2.5 py-2 text-[10px] font-semibold text-amber-700">Syncing…</span>}<button onClick={() => unread ? markRead(selectedMessage) : markUnread(selectedMessage)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">{unread ? "Mark read" : "Mark unread"}</button><button onClick={() => window.opDesktop?.openZendeskTicket?.(selected.ticketId || null)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50">Open full Zendesk</button></div></div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-[10px] text-slate-500"><span><strong className="text-slate-700">Priority:</strong> <span className="capitalize">{selected.matchedCase?.priority || selectedMessage.priority || "Normal"}</span></span><span><strong className="text-slate-700">Evidence:</strong> {selected.matchedCase?.comment_count || comments.length} comments · {selected.matchedCase?.image_count || 0} images</span>{orders[0]?.order_id && <span><strong className="text-slate-700">Order:</strong> {orders[0].order_id}</span>}</div>
+          </div>
+          </div>
+
+          <div className="mx-4 mt-3 flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 p-3"><div><div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Conversation</div><div className="mt-0.5 text-[10px] text-slate-500">Mirrored from Zendesk.</div></div><span className="text-[9px] font-semibold text-slate-400">{comments.length} messages</span></div>
+            <div ref={conversationScrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">{!comments.length && <div className="rounded-lg border border-dashed border-slate-200 p-5 text-center text-xs text-slate-400">Conversation is syncing from Zendesk.</div>}{comments.map((comment) => { const fromCustomer = String(comment.author_id || "") === requesterId; const internalNote = comment.is_public === false; return <div key={comment.id || comment.zendesk_comment_id} className={`rounded-xl border px-3 py-2.5 ${internalNote ? "mx-auto max-w-[94%] border-slate-200 bg-slate-100" : fromCustomer ? "mr-auto max-w-[88%] border-slate-200 bg-white" : "ml-auto max-w-[88%] border-blue-200 bg-blue-50"}`}><div className="flex items-center justify-between gap-2 text-[9px] font-semibold"><span className={internalNote ? "text-slate-500" : fromCustomer ? "text-slate-700" : "text-blue-700"}>{internalNote ? "Internal activity" : fromCustomer ? "Customer" : "Support"}</span><span className="text-slate-400">{comment.zendesk_created_at ? new Date(comment.zendesk_created_at).toLocaleString() : ""}</span></div><div className="mt-1 text-xs leading-relaxed text-slate-700">{renderZendeskCommentBody(comment.body)}</div></div>; })}</div>
+          </div>
+
+          <div className="mx-4 mb-4 mt-3 shrink-0 rounded-xl border border-blue-200 bg-white p-3 shadow-sm"><div className="flex items-center justify-between"><div className="text-[9px] font-bold uppercase tracking-wide text-blue-700">Reply</div><span className="text-[9px] text-slate-400">via Zendesk</span></div><textarea data-op-reply-box="true" value={reply} onChange={(e) => setReply(e.target.value)} rows="4" maxLength="64000" placeholder={`Reply to ${stripUsPrefix(selected.customer)}...`} className="mt-2 w-full rounded-lg border border-blue-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/><div className="mt-2 flex items-center justify-between gap-3"><span className="text-[9px] text-slate-400">{reply.length}/64000 · nothing sends automatically</span><button disabled={!reply.trim() || replyBusy || !selected.ticketId} onClick={() => setConfirmReply(true)} className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">{replyBusy ? "Sending..." : "Review & Send"}</button></div>{replyNotice && <div className="mt-2 text-xs font-semibold text-slate-600">{replyNotice}</div>}</div>
+        </>; })()}
+      </section>
+    </div>
+
+    {confirmReply && <div className="fixed inset-0 z-[9999] grid place-items-center bg-slate-950/35 p-4"><div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"><h3 className="text-base font-bold text-slate-900">Send this reply to the customer?</h3><p className="mt-1 text-xs text-slate-500">This will be a public Zendesk reply and the customer will receive it.</p><div className="mt-4 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">{reply}</div><div className="mt-4 flex justify-end gap-2"><button disabled={replyBusy} onClick={() => setConfirmReply(false)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Cancel</button><button disabled={replyBusy} onClick={sendReply} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{replyBusy ? "Sending..." : "Send Public Reply"}</button></div></div></div>}
+  </div>;
+};
+
+function JonnyOpsCommandCenter({ embedded = false, embeddedView = null } = {}) {
   const [activeView, setActiveViewRaw] = useState(() => {
     const VALID_VIEWS = new Set(["dashboard","inbox","replacements","studio","pricecheck","sets","weekly","data"]);
     try {
@@ -10291,6 +12977,14 @@ export default function JonnyOpsCommandCenter() {
     setActiveViewRaw(v);
     try { localStorage.setItem("ops_active_view", v); } catch {}
   };
+
+  useEffect(() => {
+    if (!embedded || !embeddedView) return;
+    const valid = new Set(["dashboard","inbox","zendesk-hybrid","actions","daily","tickets","browser","cs","replacements","studio","pricecheck","shipping-scanner","sets","weekly","data"]);
+    if (valid.has(embeddedView) && embeddedView !== activeView) {
+      setActiveViewRaw(embeddedView);
+    }
+  }, [embedded, embeddedView, activeView]);
   const [tickets, setTickets] = useState([]);
   const [replacements, setReplacements] = useState([]);
   const [studios, setStudios] = useState(() => {
@@ -10318,8 +13012,61 @@ export default function JonnyOpsCommandCenter() {
     return false;
   });
   const [sidekickToast, setSidekickToast] = useState(false);
+  const [authSession, setAuthSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
 
-  // â”€â”€ Inbox state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  useEffect(() => {
+    let active = true;
+    if (!supabase?.auth) {
+      setAuthError("Supabase authentication is unavailable.");
+      setAuthReady(true);
+      return undefined;
+    }
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) setAuthError(error.message);
+      setAuthSession(data?.session || null);
+      setAuthReady(true);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setAuthSession(session || null);
+      setAuthReady(true);
+    });
+
+    return () => {
+      active = false;
+      listener?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  const signInToOpsHub = async (event) => {
+    event.preventDefault();
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError("Enter your email and password.");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthError("");
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail.trim(),
+      password: authPassword,
+    });
+    setAuthBusy(false);
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+    setAuthPassword("");
+  };
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Inbox state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [inboundMessages, setInboundMessages] = useState([]);
   const [inboundLoading, setInboundLoading] = useState(false);
   const [inboundError, setInboundError] = useState("");
@@ -10342,7 +13089,7 @@ export default function JonnyOpsCommandCenter() {
     setLastInboxSyncAt(nowISO());
   };
 
-  // â”€â”€ Next Actions state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Next Actions state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [opsActions, setOpsActions] = useState([]);
   const [opsLoading, setOpsLoading] = useState(false);
   const [opsError, setOpsError]     = useState("");
@@ -10356,12 +13103,12 @@ export default function JonnyOpsCommandCenter() {
     setOpsActions(data);
   };
 
-  // â”€â”€ Automation Rules state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Automation Rules state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [automationRules, setAutomationRules]           = useState([]);
   const [automationRulesLoading, setAutomationRulesLoading] = useState(false);
   const [automationRulesError, setAutomationRulesError]     = useState("");
 
-  // â”€â”€ Replacements state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Replacements state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [replacementsLoading, setReplacementsLoading] = useState(false);
   const [replacementsError,   setReplacementsError]   = useState("");
   const [replacementFocus, setReplacementFocus] = useState(null);
@@ -10554,6 +13301,7 @@ export default function JonnyOpsCommandCenter() {
   const renderView = () => {
     const common = { tickets, setTickets, replacements, setReplacements, studios, setStudios, surpriseSets, setSurpriseSets, raiseScores, setRaiseScores, setInboundMessages };
     switch (activeView) {
+      case "zendesk-hybrid": return <ZendeskHybridView />;
       case "dashboard": return <DashboardView {...common} inboundMessages={inboundMessages} opsActions={opsActions} openCommandInbox={openCommandInbox} newMessageNoticeCount={recentNewMessageCount} />;
       case "inbox": return <CommandInboxView inboundMessages={inboundMessages} setInboundMessages={setInboundMessages} inboundLoading={inboundLoading} inboundError={inboundError} onRefresh={refreshInbox} setTickets={setTickets} replacements={replacements} setReplacements={setReplacements} setActiveView={setActiveView} setReplacementFocus={setReplacementFocus} inboxFilter={inboxFilter} onClearInboxFilter={() => setInboxFilter(null)} opsActions={opsActions} setOpsActions={setOpsActions} automationRules={automationRules} automationRulesLoading={automationRulesLoading} />;
       case "actions": return <NextActionQueueView opsActions={opsActions} setOpsActions={setOpsActions} opsLoading={opsLoading} opsError={opsError} onRefresh={refreshOpsActions} setActiveView={setActiveView} />;
@@ -10588,17 +13336,15 @@ export default function JonnyOpsCommandCenter() {
     setMobileNavOpen(false);
   };
 
-  const lockWorkspace = () => {
-    try {
-      localStorage.removeItem(SHELL_UNLOCK_STORAGE_KEY);
-      localStorage.setItem("ops_command_hub_locked", "true");
-    } catch {}
-    setAppLocked(true);
-    const root = document.getElementById("root");
-    const passwordScreen = document.getElementById("password-screen");
-    if (root) root.style.display = "none";
-    if (passwordScreen) passwordScreen.style.display = "flex";
-    window.location.reload();
+  const lockWorkspace = async () => {
+    setAuthError("");
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      showOpsToast(`Sign out failed: ${error.message}`, "error");
+      return;
+    }
+    setAuthSession(null);
+    setAuthPassword("");
   };
 
   const requestWorkspaceLock = () => {
@@ -10630,8 +13376,36 @@ export default function JonnyOpsCommandCenter() {
     </>
   );
 
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+        <div className="text-sm font-semibold text-slate-600">Securing Ops Command Hub...</div>
+      </div>
+    );
+  }
+
+  if (!authSession) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+        <form onSubmit={signInToOpsHub} className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="mb-6">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-800 text-sm font-black text-white">JV</div>
+            <h1 className="text-xl font-bold text-slate-900">Ops Command Hub</h1>
+            <p className="mt-1 text-sm text-slate-500">Sign in to your private operations workspace.</p>
+          </div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">Email</label>
+          <input type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-200" />
+          <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-slate-500">Password</label>
+          <input type="password" autoComplete="current-password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-200" />
+          {authError && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{authError}</div>}
+          <button type="submit" disabled={authBusy} className="mt-5 w-full rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-900 disabled:cursor-wait disabled:opacity-60">{authBusy ? "Signing in..." : "Sign In"}</button>
+        </form>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "#f3f4f6", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+    <div className={`flex h-screen overflow-hidden ${embedded ? "ops-embedded" : ""}`} style={{ background: "#f3f4f6", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
       <OpsToastStack toasts={opsToasts} onDismiss={id => setOpsToasts(prev => prev.filter(item => item.id !== id))} />
       <OpsConfirmModal config={confirmConfig} onCancel={handleConfirmCancel} onConfirm={handleConfirmRun} busy={confirmBusy} />
 
@@ -10660,7 +13434,7 @@ export default function JonnyOpsCommandCenter() {
         </div>
       )}
 
-      {/* â”€â”€ MOBILE DRAWER BACKDROP â”€â”€ */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE DRAWER BACKDROP Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {mobileNavOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 md:hidden"
@@ -10668,7 +13442,7 @@ export default function JonnyOpsCommandCenter() {
         />
       )}
 
-      {/* â”€â”€ MOBILE SLIDE-OUT DRAWER â”€â”€ */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE SLIDE-OUT DRAWER Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className={`fixed inset-y-0 left-0 z-50 w-72 bg-white flex flex-col shadow-xl transition-transform duration-200 md:hidden ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}>
         {/* Drawer header */}
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100 flex-shrink-0">
@@ -10681,7 +13455,7 @@ export default function JonnyOpsCommandCenter() {
         <NavContent showLabels={true} />
       </div>
 
-      {/* â”€â”€ DESKTOP SIDEBAR (hidden on mobile) â”€â”€ */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ DESKTOP SIDEBAR (hidden on mobile) Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <aside
         style={{ width: sidebar ? 224 : 56, transition: "width .2s" }}
         className="hidden md:flex flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden"
@@ -10710,10 +13484,10 @@ export default function JonnyOpsCommandCenter() {
         </nav>
       </aside>
 
-      {/* â”€â”€ MAIN CONTENT â”€â”€ */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ MAIN CONTENT Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-        {/* â”€â”€ MOBILE TOP BAR (hidden on desktop) â”€â”€ */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE TOP BAR (hidden on desktop) Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <div className="flex md:hidden items-center justify-between bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             {/* Hamburger */}
@@ -10767,7 +13541,7 @@ export default function JonnyOpsCommandCenter() {
           </div>
         </div>
 
-        {/* â”€â”€ DESKTOP TOP BAR (hidden on mobile) â”€â”€ */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ DESKTOP TOP BAR (hidden on mobile) Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <header className="hidden md:flex bg-white border-b border-gray-200 px-6 py-3 items-center justify-between flex-shrink-0">
           <p className="text-sm font-bold text-gray-900">Ops Command Hub v3.0</p>
           <div className="flex items-center gap-3">
@@ -10803,12 +13577,12 @@ export default function JonnyOpsCommandCenter() {
           </div>
         </header>
 
-        {/* â”€â”€ PAGE CONTENT â”€â”€ */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ PAGE CONTENT Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0" style={{ background: "#f3f4f6" }}>
           <div className="mx-auto max-w-[1440px] px-3 py-4 md:px-6 md:py-6">{renderView()}</div>
         </main>
 
-        {/* â”€â”€ MOBILE BOTTOM QUICK NAV â”€â”€ */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE BOTTOM QUICK NAV Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <nav className="flex md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 safe-area-inset-bottom">
           {[
             { id: "dashboard",    label: "Home",         badge: 0,
@@ -10847,10 +13621,10 @@ export default function JonnyOpsCommandCenter() {
   );
 }
 
-
-
-
-
-
-
-
+export default function OPSoftwareSafeRoot(props) {
+  return (
+    <OPWorkspaceErrorBoundary>
+      <JonnyOpsCommandCenter {...props} />
+    </OPWorkspaceErrorBoundary>
+  );
+}
